@@ -1,0 +1,1880 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cotizador SGI – Letras y Anuncios</title>
+<style>
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  --azul:    #1a2b4a;
+  --azul-deep:#13203a;
+  --azul2:   #2d5986;
+  --naranja: #e87c2a;
+  --naranja-deep:#d56c1b;
+  --gris:    #eceff4;
+  --borde:   #d6dde8;
+  --texto:   #1f2a3d;
+  --ok:      #1f9d57;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--sans); background: var(--gris); color: var(--texto); font-size: 14px; -webkit-font-smoothing: antialiased; }
+::selection { background: var(--naranja); color: #fff; }
+
+/* ── LAYOUT ── */
+.app { display: flex; height: 100vh; overflow: hidden; }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: 376px; min-width: 376px;
+  background: linear-gradient(180deg,#15243f,#1a2b4a);
+  color: #eef3fb;
+  display: flex; flex-direction: column; overflow-y: auto;
+  border-right: 1px solid rgba(255,255,255,.06);
+  scrollbar-width: thin; scrollbar-color: #2a3f63 transparent;
+}
+.sidebar::-webkit-scrollbar { width: 9px; }
+.sidebar::-webkit-scrollbar-thumb { background: #2a3f63; border-radius: 9px; border: 2px solid #1a2b4a; }
+
+.sidebar-header {
+  padding: 18px 20px 15px; border-bottom: 1px solid rgba(255,255,255,.08);
+  background: rgba(0,0,0,.14); position: sticky; top: 0; z-index: 5;
+}
+.sidebar-header h1 { font-size: 15px; font-weight: 700; letter-spacing: .01em; line-height: 1.2; }
+.sidebar-header p  { font-family: var(--mono); font-size: 10.5px; color: var(--naranja);
+                     margin-top: 5px; letter-spacing: .05em; text-transform: uppercase; opacity: .92; }
+
+.panel { padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,.07); }
+.panel h3 { font-size: 10.5px; text-transform: uppercase; letter-spacing: .11em;
+            color: #9fb0cb; margin-bottom: 11px; font-weight: 600;
+            display: flex; align-items: center; gap: 8px; }
+.panel h3::before { content: ""; width: 3px; height: 11px; background: var(--naranja); border-radius: 2px; }
+
+label { font-size: 11px; color: #aebcd4; display: block; margin-bottom: 5px; margin-top: 11px; font-weight: 500; }
+label:first-of-type { margin-top: 0; }
+
+select {
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a94a6' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px !important; cursor: pointer;
+}
+input[type=number] { -moz-appearance: textfield; }
+input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+.sidebar input, .sidebar select, .sidebar textarea {
+  width: 100%; height: 36px; padding: 0 11px;
+  background-color: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14);
+  border-radius: 5px; color: #eef3fb; font-size: 13px; font-family: var(--mono); transition: .14s;
+}
+.sidebar textarea { height: auto; padding: 8px 11px; font-family: var(--sans); }
+.sidebar input::placeholder { color: #6b7d9c; }
+.sidebar input:focus, .sidebar select:focus, .sidebar textarea:focus {
+  outline: none; border-color: var(--naranja); box-shadow: 0 0 0 3px rgba(232,124,42,.16); background-color: rgba(0,0,0,.18);
+}
+.sidebar select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23aebcd4' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+.sidebar select option { background: #1a2b4a; color: #eef3fb; }
+
+/* tipo selector */
+.tipo-btns { display: flex; gap: 7px; }
+.tipo-btn {
+  flex: 1; padding: 11px 4px; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04);
+  color: #cdd8ea; font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: .15s;
+}
+.tipo-btn:hover { border-color: rgba(255,255,255,.32); color: #fff; }
+.tipo-btn.active { border-color: var(--naranja); background: rgba(232,124,42,.16); color: #fff; box-shadow: inset 0 0 0 1px rgba(232,124,42,.4); }
+
+/* drop zone */
+.drop-zone {
+  border: 1.5px dashed rgba(255,255,255,.22); border-radius: 8px;
+  padding: 22px 16px; text-align: center; cursor: pointer; transition: .18s; background: rgba(0,0,0,.12);
+}
+.drop-zone:hover, .drop-zone.drag-over { border-color: var(--naranja); background: rgba(232,124,42,.1); }
+.drop-zone .icon { font-size: 26px; margin-bottom: 7px; opacity: .85; }
+.drop-zone p { font-size: 12px; color: #aebcd4; line-height: 1.5; }
+.drop-zone.ok { border-color: var(--ok); border-style: solid; background: rgba(31,157,87,.12); }
+.drop-zone.ok p { color: #5fd99b; }
+
+/* asesor */
+#panel-asesor { background: rgba(0,0,0,.16); }
+.asesor-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px;
+              padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.07); }
+.asesor-row:last-child { border: none; }
+.asesor-label { color: #9fb0cb; }
+.asesor-val { font-weight: 700; color: var(--naranja); font-family: var(--mono); }
+.asesor-val.ok { color: #5fd99b; }
+.led-compat-item { font-size: 11px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+.led-compat-item:last-child { border: none; }
+.led-compat-name { font-weight: 600; font-size: 11.5px; color: #dde6f3; }
+.led-compat-spec { color: #7e90af; font-size: 10.5px; margin-top: 2px; font-family: var(--mono); }
+
+.info-tag {
+  display: inline-block; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 5px; padding: 4px 9px; font-size: 11px; margin-top: 7px; color: #cdd8ea; line-height: 1.4;
+}
+
+/* btn calcular (sticky) */
+.btn-calc {
+  position: sticky; bottom: 0; margin: 0; padding: 15px;
+  background: linear-gradient(180deg,var(--naranja),var(--naranja-deep));
+  color: #fff; border: none; font-size: 14px; font-weight: 700; letter-spacing: .05em;
+  cursor: pointer; width: 100%; transition: .15s; z-index: 6;
+  box-shadow: 0 -8px 18px -8px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.2);
+}
+.btn-calc:disabled { opacity: .4; cursor: default; filter: grayscale(.35); }
+.btn-calc:hover:not(:disabled) { filter: brightness(1.06); }
+
+.spinner { display: none; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,.3);
+           border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── MAIN ── */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--gris); }
+.tabs { display: flex; border-bottom: 1px solid var(--borde); background: #fff; padding: 0 18px; }
+.tab { padding: 14px 18px; font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent;
+       margin-bottom: -1px; color: #8a94a6; font-weight: 600; transition: .15s; }
+.tab:hover { color: var(--azul); }
+.tab.active { color: var(--azul); border-color: var(--naranja); }
+.tab-content { flex: 1; overflow-y: auto; padding: 22px 24px; display: none; }
+.tab-content.active { display: block; }
+
+/* svg preview — mesa de dibujo */
+#svg-preview-box {
+  background-color: #fbfcfe;
+  background-image:
+    linear-gradient(#dde6f2 1px,transparent 1px), linear-gradient(90deg,#dde6f2 1px,transparent 1px),
+    linear-gradient(#eef2f8 1px,transparent 1px), linear-gradient(90deg,#eef2f8 1px,transparent 1px);
+  background-size: 50px 50px, 50px 50px, 10px 10px, 10px 10px;
+  border: 1px solid var(--borde); border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 340px; position: relative; overflow: hidden; box-shadow: inset 0 1px 3px rgba(20,40,80,.04);
+}
+#svg-preview-box svg { max-width: 100%; max-height: 500px; }
+.svg-empty { text-align: center; color: #aab4c4; padding: 40px; }
+.svg-empty .icon { font-size: 44px; opacity: .55; }
+
+/* path cards */
+.paths-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px,1fr)); gap: 11px; margin-top: 14px; }
+.path-card { background: #fff; border: 1px solid var(--borde); border-radius: 8px; padding: 11px 13px;
+             font-size: 12px; box-shadow: 0 1px 2px rgba(20,40,80,.04); }
+.path-card .name { font-weight: 700; color: var(--azul); margin-bottom: 5px; }
+.path-card .row { display: flex; justify-content: space-between; color: #74808f; padding: 1px 0; }
+.path-card .row span:last-child { color: var(--texto); font-weight: 600; font-family: var(--mono); }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 700; }
+.badge.closed { background: #e3f3ea; color: #1f7a45; }
+.badge.open   { background: #fdeede; color: #b5611a; }
+
+/* stat cards */
+.result-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 20px; }
+@media (max-width: 900px) { .result-grid { grid-template-columns: 1fr 1fr; } }
+.stat-card { background: #fff; border: 1px solid var(--borde); border-radius: 10px; padding: 15px 17px;
+             position: relative; overflow: hidden;
+             box-shadow: 0 1px 2px rgba(20,40,80,.05), 0 10px 24px -16px rgba(20,40,80,.2); }
+.stat-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--borde); }
+.stat-card.highlight::before { background: var(--naranja); }
+.stat-card .label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: #8a94a6; margin-bottom: 7px; font-weight: 600; }
+.stat-card .value { font-size: 23px; font-weight: 700; color: var(--azul); font-family: var(--mono); letter-spacing: -.01em; }
+.stat-card.highlight .value { color: var(--naranja); }
+.stat-card .sub { font-size: 11px; color: #9aa3b2; margin-top: 3px; }
+
+/* desglose */
+.desglose-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff;
+                  border-radius: 10px; overflow: hidden; box-shadow: 0 1px 2px rgba(20,40,80,.05); }
+.desglose-table th { background: var(--azul); color: #fff; padding: 10px 13px; text-align: left;
+                     font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.desglose-table td { padding: 9px 13px; border-bottom: 1px solid var(--borde); }
+.desglose-table tr:nth-child(even) td { background: #f7f9fc; }
+.desglose-table .total-row td { font-weight: 700; font-size: 14px; border-top: 2px solid var(--azul); }
+.desglose-table .venta-row td { color: var(--naranja); font-weight: 700; font-size: 15px; }
+.amount { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+
+/* rec cards */
+.rec-card { background: #fff; border: 1px solid var(--borde); border-left: 4px solid var(--naranja);
+            border-radius: 0 8px 8px 0; padding: 13px 16px; margin-bottom: 11px; box-shadow: 0 1px 2px rgba(20,40,80,.04); }
+.rec-card h4 { font-size: 12px; text-transform: uppercase; color: var(--azul); letter-spacing: .05em; margin-bottom: 5px; }
+.rec-card p { font-size: 13px; color: var(--texto); line-height: 1.55; }
+
+/* btn pdf */
+.btn-pdf { background: var(--azul); color: #fff; padding: 11px 20px; border: none; border-radius: 7px;
+           font-size: 13.5px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center;
+           gap: 8px; text-decoration: none; transition: .15s; box-shadow: 0 3px 10px -4px rgba(26,43,74,.5); }
+.btn-pdf:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
+/* inputs en area clara */
+.main input, .main select, .main textarea {
+  background-color: #fff; color: var(--texto); border: 1px solid var(--borde); border-radius: 6px; font-family: var(--sans);
+}
+.main input[type=number] { font-family: var(--mono); }
+.main input:focus, .main select:focus, .main textarea:focus {
+  outline: none; border-color: var(--naranja); box-shadow: 0 0 0 3px rgba(232,124,42,.14);
+}
+
+/* toast */
+.toast { position: fixed; bottom: 24px; right: 24px; padding: 13px 20px; border-radius: 8px;
+         font-size: 13px; font-weight: 600; display: none; z-index: 999; box-shadow: 0 8px 28px rgba(0,0,0,.22); }
+.toast.ok  { background: var(--ok); color: #fff; }
+.toast.err { background: #d4513e; color: #fff; }
+
+/* field groups */
+.field-group { display: none; }
+.field-group.visible { display: block; }
+
+/* ── CATÁLOGO ── */
+.cat-subnav { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 18px; }
+.cat-subbtn { padding: 7px 15px; border-radius: 7px; border: 1px solid var(--borde); background: #fff;
+              cursor: pointer; font-size: 12px; font-weight: 600; color: #74808f; transition: .16s; }
+.cat-subbtn:hover { border-color: var(--azul2); color: var(--azul); }
+.cat-subbtn.active { border-color: var(--naranja); background: var(--naranja); color: #fff; }
+.cat-section { display: none; }
+.cat-section.active { display: block; }
+.cat-section-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.cat-section-hdr p { font-size: 12px; color: #8a94a6; }
+.btn-add { padding: 7px 15px; border-radius: 6px; background: var(--azul2); color: #fff; border: none;
+           font-size: 12px; font-weight: 700; cursor: pointer; transition: .15s; }
+.btn-add:hover { filter: brightness(1.08); }
+.btn-save-cat { padding: 9px 20px; border-radius: 7px; background: var(--ok); color: #fff; border: none;
+                font-size: 13px; font-weight: 700; cursor: pointer; transition: .15s; }
+.btn-save-cat:hover { filter: brightness(1.06); }
+.cat-table { width: 100%; border-collapse: collapse; font-size: 12.5px; background: #fff;
+             border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(20,40,80,.04); }
+.cat-table th { background: var(--azul); color: #fff; padding: 9px 10px; text-align: left; font-weight: 600;
+                font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.cat-table td { padding: 8px 10px; border-bottom: 1px solid var(--borde); vertical-align: middle; }
+.cat-table tr:hover td { background: #f7f9fc; }
+.cat-table code { font-family: var(--mono); font-size: 11.5px; background: var(--gris); padding: 1px 6px; border-radius: 4px; color: var(--azul2); }
+.cat-table .actions { white-space: nowrap; }
+.btn-edit, .btn-del { padding: 4px 10px; border-radius: 5px; border: none; cursor: pointer;
+                      font-size: 11px; font-weight: 700; margin-right: 4px; transition: .15s; }
+.btn-edit { background: var(--azul2); color: #fff; }
+.btn-del  { background: #d4513e; color: #fff; }
+.btn-edit:hover, .btn-del:hover { filter: brightness(1.1); }
+.price-cell { font-weight: 700; color: var(--azul); font-family: var(--mono); }
+
+/* ── MODAL ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(13,24,40,.55); display: none;
+                 align-items: center; justify-content: center; z-index: 1000; }
+.modal-overlay.open { display: flex; }
+.modal-box { background: #fff; border-radius: 12px; padding: 26px 28px; width: 480px; max-width: 95vw;
+             max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+.modal-box h3 { font-size: 15px; color: var(--azul); margin-bottom: 18px; }
+.modal-field { margin-bottom: 13px; }
+.modal-field label { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+                     letter-spacing: .05em; color: #74808f; margin-bottom: 5px; margin-top: 0; }
+.modal-field input, .modal-field select { width: 100%; padding: 8px 10px; border: 1px solid var(--borde);
+                     border-radius: 6px; font-size: 13px; color: var(--texto); background-color: #fff; font-family: var(--sans); }
+.modal-field input[type=number] { font-family: var(--mono); }
+.modal-field input:focus, .modal-field select:focus { outline: none; border-color: var(--naranja); box-shadow: 0 0 0 3px rgba(232,124,42,.14); }
+.modal-field input[readonly] { background: var(--gris); color: #8a94a6; }
+.modal-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+.modal-actions button { padding: 9px 20px; border-radius: 7px; border: none; font-size: 13px; font-weight: 700; cursor: pointer; transition: .15s; }
+.btn-modal-ok  { background: var(--naranja); color: #fff; }
+.btn-modal-can { background: var(--gris); color: var(--texto); }
+.btn-modal-ok:hover, .btn-modal-can:hover { filter: brightness(.97); }
+
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ══════════════════ SIDEBAR ══════════════════ -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h1>⬡ SGI Cotizador</h1>
+      <p>Letras 3D · Cajas de Luz · Anuncios</p>
+    </div>
+
+    <!-- Tipo de anuncio -->
+    <div class="panel">
+      <h3>Tipo de anuncio</h3>
+      <div class="tipo-btns">
+        <button class="tipo-btn active" data-tipo="letras" onclick="setTipo('letras',this)">🔡 3D</button>
+        <button class="tipo-btn" data-tipo="planas" onclick="setTipo('planas',this)">🔲 Planas</button>
+        <button class="tipo-btn" data-tipo="caja" onclick="setTipo('caja',this)">💡 Caja</button>
+      </div>
+    </div>
+
+    <!-- Subir SVG -->
+    <div class="panel">
+      <h3>Diseño SVG</h3>
+      <div class="drop-zone" id="drop-zone"
+           onclick="document.getElementById('svg-input').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handleDrop(event)">
+        <div class="icon">📐</div>
+        <p id="drop-label">Arrastra tu SVG aquí<br>o haz clic para seleccionar</p>
+      </div>
+      <input type="file" id="svg-input" accept=".svg" style="display:none" onchange="handleFile(event)">
+    </div>
+
+    <!-- Asesor automático -->
+    <div class="panel" id="panel-asesor" style="display:none">
+      <h3>Asesor automático</h3>
+      <div id="asesor-content"></div>
+    </div>
+
+    <!-- Datos generales -->
+    <div class="panel">
+      <h3>Datos generales</h3>
+      <label>Ancho real del diseño (cm)</label>
+      <input type="number" id="ancho-real" value="60" min="1" step="1">
+      <label>Uso</label>
+      <select id="uso">
+        <option value="exterior">Exterior</option>
+        <option value="interior">Interior</option>
+      </select>
+    </div>
+
+    <!-- Parámetros LETRAS -->
+    <div class="panel field-group visible" id="params-letras">
+      <h3>Parámetros — Letras 3D</h3>
+      <label>Tipo de construcción</label>
+      <select id="tipo-construccion" onchange="onTipoConstruccionChange()">
+        <option value="cajon_luz">🔡 Cajón con luz</option>
+        <option value="retro_halo">✨ Retroiluminada / Halo</option>
+        <option value="sin_luz">⬛ Sin luz (cajón)</option>
+        <option value="abierta_luz">💡 Abierta con luz</option>
+      </select>
+      <div class="info-tag" id="construccion-desc-tag" style="margin-bottom:8px">Cara acrílico · cercha aluminio · fondo PVC · LEDs adelante</div>
+      <div class="info-tag" id="distanciadores-note" style="display:none;background:rgba(232,124,42,0.2);margin-bottom:4px">⚠ Requiere distanciadores de montaje</div>
+      <label>Altura de la letra (cm)</label>
+      <input type="number" id="altura-letra" value="15" min="1" step="1">
+      <div class="info-tag" id="cercha-auto-tag">Cercha automática: 5 cm</div>
+      <label>Cercha manual (0 = automático)</label>
+      <input type="number" id="cercha-manual" value="0" min="0" step="0.5">
+      <label>Material de la cara</label>
+      <select id="mat-cara">
+        <option value="auto">Automático según altura</option>
+        <option value="acrilico_3mm">Acrílico 3mm</option>
+        <option value="acrilico_6mm">Acrílico 6mm</option>
+        <option value="aluminio_cal20">Aluminio Calibre 20</option>
+      </select>
+      <label>Material de la cercha</label>
+      <select id="mat-cercha">
+        <option value="auto">Automático según altura</option>
+        <option value="aluminio_cal22">Aluminio Calibre 22</option>
+        <option value="aluminio_cal20">Aluminio Calibre 20</option>
+        <option value="aluminio_cal18">Aluminio Calibre 18</option>
+        <option value="alucobon_3mm">Alucobon / Dibond 3mm</option>
+      </select>
+      <label>Tipo de fabricación</label>
+      <select id="tipo-multiplicador">
+        <option value="aluminio_sin_luz">Aluminio sin luz  ×2.0</option>
+        <option value="aluminio_con_luz">Aluminio con luz  ×2.5</option>
+        <option value="aluminio_acrilico_con_luz">Aluminio + acrílico con luz  ×3.5</option>
+        <option value="acrilico_con_luz_std">Acrílico con luz estándar  ×4.5</option>
+        <option value="acrilico_con_luz_premium">Acrílico con luz premium  ×5.5</option>
+      </select>
+      <div id="formula-preview" class="info-tag" style="display:none;background:#e8f5e9;color:#1b5e20;font-weight:700;font-size:13px;margin-top:4px"></div>
+      <label>Ajuste de precio % <span style="font-size:10px;opacity:.55">(+ sube, − baja)</span></label>
+      <input type="number" id="ajuste-pct" value="0" min="-50" max="200" step="1">
+      <div id="led-fields-group">
+        <label>Espaciado entre módulos LED (cm)</label>
+        <input type="number" id="espaciado-led" value="6" min="3" max="15" step="1">
+      </div>
+    </div>
+
+    <!-- Parámetros CAJA -->
+    <div class="panel field-group" id="params-caja">
+      <h3>Parámetros — Caja de Luz</h3>
+      <label>Profundidad del cajón (cm)</label>
+      <input type="number" id="profundidad" value="15" min="5" step="1">
+      <label>Tipo de cara</label>
+      <select id="tipo-cara-caja">
+        <option value="lona">Lona impresa</option>
+        <option value="acrilico">Acrílico</option>
+        <option value="acrilico_2vistas">Acrílico 2 vistas</option>
+      </select>
+      <label>Número de vistas</label>
+      <select id="vistas">
+        <option value="1">1 vista</option>
+        <option value="2">2 vistas</option>
+      </select>
+    </div>
+
+    <!-- Parámetros PLANAS -->
+    <div class="panel field-group" id="params-planas">
+      <h3>Parámetros — Letras Planas</h3>
+      <label>Material de corte</label>
+      <select id="mat-plana">
+        <option value="acrilico_3mm">Acrílico 3mm</option>
+        <option value="acrilico_6mm">Acrílico 6mm</option>
+        <option value="aluminio_cal18">Aluminio cal 18</option>
+        <option value="aluminio_cal20">Aluminio cal 20</option>
+        <option value="pvc_3mm">PVC 3mm</option>
+        <option value="pvc_6mm">PVC 6mm</option>
+        <option value="alucobon_3mm">Alucobon / Dibond 3mm</option>
+      </select>
+    </div>
+
+    <!-- Margen -->
+    <div class="panel">
+      <h3>Margen de ganancia</h3>
+      <label>Margen (%)</label>
+      <input type="number" id="margen" value="35" min="0" max="80" step="5">
+    </div>
+
+    <!-- Mano de obra -->
+    <div class="panel">
+      <h3>Mano de obra</h3>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1">
+          <label>Horas</label>
+          <input type="number" id="mo-horas" value="0" min="0" step="0.5" oninput="calcMO()">
+        </div>
+        <div style="flex:1">
+          <label>$/hora</label>
+          <input type="number" id="mo-tarifa" value="150" min="0" step="10" oninput="calcMO()">
+        </div>
+      </div>
+      <div class="info-tag" id="mo-tag" style="margin-top:6px">Total MO: $0</div>
+    </div>
+
+    <!-- Instalación -->
+    <div class="panel">
+      <h3>Instalación</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <span style="font-size:12px;opacity:.85">¿Incluye instalación?</span>
+        <div style="position:relative;width:44px;height:24px;cursor:pointer" onclick="toggleInst()">
+          <div id="inst-bg" style="position:absolute;inset:0;background:rgba(255,255,255,.2);border-radius:24px;transition:.3s"></div>
+          <div id="inst-dot" style="position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;left:3px;top:3px;transition:.3s"></div>
+          <input type="checkbox" id="inst-activa" style="display:none">
+        </div>
+      </div>
+      <div id="inst-fields" style="display:none">
+        <label>Lugar de instalación</label>
+        <input type="text" id="inst-lugar" placeholder="Ciudad / dirección">
+        <label>Viáticos ($)</label>
+        <input type="number" id="inst-viaticos" value="0" min="0" step="50" oninput="calcInst()">
+        <label>Equipo de acceso</label>
+        <select id="inst-grua" onchange="calcInst()">
+          <option value="ninguna">Sin equipo / acceso propio</option>
+        </select>
+        <label>Días de equipo</label>
+        <input type="number" id="inst-dias" value="1" min="1" step="1" oninput="calcInst()">
+        <label>Otros extras ($)</label>
+        <input type="number" id="inst-extras" value="0" min="0" step="50" oninput="calcInst()">
+        <div class="info-tag" id="inst-tag" style="margin-top:6px;background:rgba(232,124,42,.15)">Total instalación: $0</div>
+      </div>
+    </div>
+
+    <button class="btn-calc" id="btn-calc" onclick="calcular()" disabled>
+      <span id="btn-label">⚡ Calcular cotización</span>
+      <div class="spinner" id="spinner"></div>
+    </button>
+  </aside>
+
+  <!-- ══════════════════ CONTENIDO PRINCIPAL ══════════════════ -->
+  <main class="main">
+    <nav class="tabs">
+      <div class="tab active" onclick="switchTab('svg')">Vista SVG</div>
+      <div class="tab" onclick="switchTab('result')">Cotización</div>
+      <div class="tab" onclick="switchTab('rec')">Recomendaciones</div>
+      <div class="tab" onclick="switchTab('catalog'); loadCatalog()">📦 Catálogo</div>
+    </nav>
+
+    <!-- TAB: SVG -->
+    <div class="tab-content active" id="tab-svg">
+      <div id="svg-preview-box">
+        <div class="svg-empty">
+          <div class="icon">🎨</div>
+          <p>Sube un archivo SVG para visualizarlo aquí</p>
+        </div>
+      </div>
+      <div class="paths-grid" id="paths-grid"></div>
+    </div>
+
+    <!-- TAB: RESULTADO -->
+    <div class="tab-content" id="tab-result">
+      <div id="result-content">
+        <div class="svg-empty" style="margin-top:80px">
+          <div class="icon">📊</div>
+          <p>Completa el formulario y presiona <strong>Calcular cotización</strong></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: RECOMENDACIONES -->
+    <div class="tab-content" id="tab-rec">
+      <div id="rec-content">
+        <div class="svg-empty" style="margin-top:80px">
+          <div class="icon">💡</div>
+          <p>Las recomendaciones aparecerán después de calcular</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: CATÁLOGO -->
+    <div class="tab-content" id="tab-catalog">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div>
+          <h2 style="color:var(--azul);font-size:17px">Catálogo de materiales y precios</h2>
+          <p style="font-size:12px;color:#888">Los cambios se aplican inmediatamente y persisten entre sesiones</p>
+        </div>
+        <button class="btn-save-cat" id="btn-save-cat" onclick="saveCatalog()">💾 Guardar cambios</button>
+      </div>
+
+      <!-- Sub-navegación del catálogo -->
+      <div class="cat-subnav">
+        <button class="cat-subbtn active" onclick="showCatSection('laminas',this)">🪣 Láminas</button>
+        <button class="cat-subbtn" onclick="showCatSection('leds_canal',this)">💡 LEDs Canal</button>
+        <button class="cat-subbtn" onclick="showCatSection('leds_caja',this)">📦 LEDs Caja</button>
+        <button class="cat-subbtn" onclick="showCatSection('fuentes',this)">⚡ Fuentes</button>
+        <button class="cat-subbtn" onclick="showCatSection('pegamentos',this)">🔩 Pegamentos</button>
+        <button class="cat-subbtn" onclick="showCatSection('precios_base',this)">💰 Precios Base</button>
+      </div>
+
+      <!-- LÁMINAS -->
+      <div class="cat-section active" id="cat-laminas">
+        <div class="cat-section-hdr">
+          <p>Materiales por lámina (122 × 244 cm)</p>
+          <button class="btn-add" onclick="openAddModal('lamina')">+ Agregar lámina</button>
+        </div>
+        <div id="tbl-laminas-wrap"></div>
+      </div>
+
+      <!-- LEDs CANAL -->
+      <div class="cat-section" id="cat-leds_canal">
+        <div class="cat-section-hdr">
+          <p>Módulos LED para letras de canal 3D</p>
+          <button class="btn-add" onclick="openAddModal('led_canal')">+ Agregar LED canal</button>
+        </div>
+        <div id="tbl-leds-canal-wrap"></div>
+      </div>
+
+      <!-- LEDs CAJA -->
+      <div class="cat-section" id="cat-leds_caja">
+        <div class="cat-section-hdr">
+          <p>Barras / módulos LED para cajas de luz</p>
+          <button class="btn-add" onclick="openAddModal('led_caja')">+ Agregar LED caja</button>
+        </div>
+        <p style="font-size:12px;font-weight:700;color:var(--azul2);margin:0 0 8px">Interior</p>
+        <div id="tbl-leds-caja-int-wrap"></div>
+        <p style="font-size:12px;font-weight:700;color:var(--naranja);margin:14px 0 8px">Exterior</p>
+        <div id="tbl-leds-caja-ext-wrap"></div>
+      </div>
+
+      <!-- FUENTES -->
+      <div class="cat-section" id="cat-fuentes">
+        <div class="cat-section-hdr">
+          <p>Fuentes de poder / drivers</p>
+          <button class="btn-add" onclick="openAddModal('fuente')">+ Agregar fuente</button>
+        </div>
+        <div id="tbl-fuentes-wrap"></div>
+      </div>
+
+      <!-- PEGAMENTOS -->
+      <div class="cat-section" id="cat-pegamentos">
+        <div class="cat-section-hdr">
+          <p>Pegamentos y adhesivos por combinación de materiales</p>
+          <button class="btn-add" onclick="openAddModal('pegamento')">+ Agregar pegamento</button>
+        </div>
+        <div id="tbl-pegamentos-wrap"></div>
+      </div>
+
+      <!-- PRECIOS BASE -->
+      <div class="cat-section" id="cat-precios_base">
+        <div class="cat-section-hdr">
+          <p>Fórmula: altura_cm × precio_cm × multiplicador (todo incluido — materiales, mano de obra, instalación)</p>
+        </div>
+        <div id="tbl-precios-base-wrap"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ══════════════════ MODAL EDICIÓN ══════════════════ -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-box">
+    <h3 id="modal-title">Editar elemento</h3>
+    <div id="modal-body"></div>
+    <div class="modal-actions">
+      <button class="btn-modal-can" onclick="closeModal()">Cancelar</button>
+      <button class="btn-modal-ok"  onclick="saveModal()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── ESTADO ──────────────────────────────────────────────────────────────────
+let sessionId        = null;
+let tipoActual       = "letras";
+let quoteId          = null;
+let svgMaxHeightPx   = 0;
+let svgViewboxW      = 0;
+let svgArtboardWCm   = 0;    // >0 si SVG de Illustrator (ancho artboard en cm)
+let svgPathsRaw      = [];   // paths con px, para recalcular en cm
+
+// ─── TIPOS DE CONSTRUCCIÓN (JS) ──────────────────────────────────────────────
+const TIPOS_CONSTRUCCION_JS = {
+  cajon_luz:   { nombre: "Cajón con luz", descripcion: "Cara acrílico · cercha aluminio · fondo PVC · LEDs adelante", multiplicador_default: "acrilico_con_luz_std", leds: true, fondo_pvc: true, distanciadores: false, altura_min_rec: 8 },
+  retro_halo:  { nombre: "Retroiluminada / Halo", descripcion: "Cara aluminio · cercha aluminio · sin fondo PVC · LEDs atrás · distanciadores", multiplicador_default: "aluminio_con_luz", leds: true, fondo_pvc: false, distanciadores: true, altura_min_rec: 0 },
+  sin_luz:     { nombre: "Sin luz (cajón)", descripcion: "Cara aluminio · cercha aluminio · fondo PVC · sin iluminación", multiplicador_default: "aluminio_sin_luz", leds: false, fondo_pvc: true, distanciadores: false, altura_min_rec: 0 },
+  abierta_luz: { nombre: "Abierta con luz", descripcion: "Sin cara frontal · cercha aluminio · fondo PVC · LEDs expuestos", multiplicador_default: "aluminio_con_luz", leds: true, fondo_pvc: true, distanciadores: false, altura_min_rec: 30 },
+};
+
+// ─── TIPO DE ANUNCIO ─────────────────────────────────────────────────────────
+function setTipo(tipo, btn) {
+  tipoActual = tipo;
+  document.querySelectorAll(".tipo-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById("params-letras").classList.toggle("visible", tipo === "letras");
+  document.getElementById("params-planas").classList.toggle("visible", tipo === "planas");
+  document.getElementById("params-caja").classList.toggle("visible",   tipo === "caja");
+  const btnCalc = document.getElementById("btn-calc");
+  if (btnCalc) btnCalc.disabled = !sessionId;
+}
+
+// ─── TIPO DE CONSTRUCCIÓN ────────────────────────────────────────────────────
+function onTipoConstruccionChange() {
+  const tipo = document.getElementById("tipo-construccion").value;
+  const cfg = (catalog?.tipos_construccion || TIPOS_CONSTRUCCION_JS)[tipo] || TIPOS_CONSTRUCCION_JS.cajon_luz;
+  document.getElementById("construccion-desc-tag").textContent = cfg.descripcion || "";
+  const dn = document.getElementById("distanciadores-note");
+  if (dn) dn.style.display = cfg.distanciadores ? "block" : "none";
+  const ledGrp = document.getElementById("led-fields-group");
+  if (ledGrp) ledGrp.style.display = cfg.leds ? "block" : "none";
+  if (cfg.multiplicador_default) {
+    document.getElementById("tipo-multiplicador").value = cfg.multiplicador_default;
+  }
+  actualizarAsesor();
+}
+
+// ─── SUBIR SVG ───────────────────────────────────────────────────────────────
+function handleDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file) uploadSVG(file);
+}
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (file) uploadSVG(file);
+}
+
+async function uploadSVG(file) {
+  if (!file.name.endsWith(".svg")) { showToast("Solo se aceptan archivos .svg", "err"); return; }
+
+  const dz = document.getElementById("drop-zone");
+  dz.classList.remove("ok");
+  document.getElementById("drop-label").textContent = "Cargando...";
+
+  const form = new FormData();
+  form.append("file", file);
+
+  try {
+    const res  = await fetch("/api/parse-svg", { method: "POST", body: form });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Error");
+
+    sessionId      = data.session_id;
+    svgMaxHeightPx = data.max_letter_height_px || 0;
+    svgViewboxW    = data.viewbox_w || 0;
+    svgArtboardWCm = data.artboard_w_cm || 0;
+    svgPathsRaw    = data.paths || [];
+
+    // SVG de Illustrator: auto-llenar el ancho real con el ancho del artboard
+    if (svgArtboardWCm > 0) {
+      document.getElementById("ancho-real").value = svgArtboardWCm.toFixed(1);
+      showToast(`Illustrator detectado — artboard ${svgArtboardWCm.toFixed(1)} cm`, "ok");
+    }
+
+    // Mostrar SVG
+    const box = document.getElementById("svg-preview-box");
+    box.innerHTML = data.svg_text;
+    const svgEl = box.querySelector("svg");
+    if (svgEl) {
+      svgEl.style.maxWidth = "100%";
+      svgEl.style.maxHeight = "520px";
+      colorizePaths(svgEl);
+    }
+
+    // Cards: sin escala todavía, se actualizan en actualizarAsesor
+    renderPathCards(svgPathsRaw, 0, 0);
+
+    dz.classList.add("ok");
+    document.getElementById("drop-label").textContent = `✓ ${file.name}  (${data.paths.length} paths)`;
+    document.getElementById("btn-calc").disabled = false;
+
+    actualizarAsesor(true);   // true = auto-rellenar altura inicial
+    switchTab("svg");
+    showToast(`SVG cargado: ${data.paths.length} paths detectados`, "ok");
+  } catch (err) {
+    showToast("Error al cargar SVG: " + err.message, "err");
+    document.getElementById("drop-label").textContent = "Error — intenta de nuevo";
+  }
+}
+
+// Colorear paths: cerrados = azul, abiertos = naranja
+function colorizePaths(svgEl) {
+  svgEl.querySelectorAll("path").forEach((p, i) => {
+    const d = p.getAttribute("d") || "";
+    const closed = d.trim().toUpperCase().endsWith("Z");
+    p.style.fill   = closed ? "rgba(45,89,134,0.25)" : "none";
+    p.style.stroke = closed ? "#2d5986" : "#e87c2a";
+    p.style.strokeWidth = "1.5";
+  });
+}
+
+function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
+  const grid = document.getElementById("paths-grid");
+  if (!paths.length) { grid.innerHTML = ""; return; }
+
+  const hasCm    = scaleFactor > 0;
+  const hasCercha = hasCm && cerchaAlturaCm > 0;
+
+  const header = hasCm
+    ? `<div style="grid-column:1/-1;font-size:12px;color:#666;margin-bottom:4px">
+         Medidas en <strong>cm</strong> · cercha ${cerchaAlturaCm} cm
+         &nbsp;·&nbsp;<span style="color:#2d5986">■</span> Cerrado
+         &nbsp;<span style="color:#e87c2a">■</span> Abierto
+       </div>`
+    : `<div style="grid-column:1/-1;font-size:12px;color:#aaa;margin-bottom:4px">
+         Ingresa el ancho real o la altura para ver medidas en cm
+       </div>`;
+
+  const cards = paths.map(p => {
+    const perim_cm  = hasCm ? (p.perimeter_px * scaleFactor).toFixed(1) : "—";
+    const area_cm2  = hasCm ? (p.area_px * scaleFactor * scaleFactor).toFixed(1) : "—";
+    const ancho_cm  = hasCm ? ((p.bbox?.w || 0) * scaleFactor).toFixed(1) : "—";
+    const alto_cm   = hasCm ? ((p.bbox?.h || 0) * scaleFactor).toFixed(1) : "—";
+    const tira_neta = hasCercha ? (p.perimeter_px * scaleFactor).toFixed(1) : "—";
+    const tira_mas  = hasCercha ? (p.perimeter_px * scaleFactor * 1.10).toFixed(1) : "—";
+
+    return `<div class="path-card">
+      <div class="name">${p.id}</div>
+      <div style="margin-bottom:5px">
+        <span class="badge ${p.is_closed ? 'closed' : 'open'}">
+          ${p.is_closed ? '✓ Cerrado' : '→ Abierto'}
+        </span>
+      </div>
+      <div class="row"><span>Ancho</span><span>${ancho_cm} cm</span></div>
+      <div class="row"><span>Alto</span><span>${alto_cm} cm</span></div>
+      <div class="row"><span>Perímetro</span><span>${perim_cm} cm</span></div>
+      <div class="row"><span>Área cara</span><span>${area_cm2} cm²</span></div>
+      ${hasCercha ? `
+      <div style="margin-top:5px;padding-top:5px;border-top:1px solid #eee">
+        <div class="row" style="color:#e87c2a">
+          <span>Cercha neta</span><span>${tira_neta} cm</span>
+        </div>
+        <div class="row" style="color:#2d5986;font-weight:700">
+          <span>Cercha +10%</span><span>${tira_mas} cm</span>
+        </div>
+      </div>` : ""}
+    </div>`;
+  });
+
+  grid.innerHTML = header + cards.join("");
+}
+
+// ─── CALCULAR ────────────────────────────────────────────────────────────────
+async function calcular() {
+  if (!sessionId) { showToast("Primero sube un SVG", "err"); return; }
+
+  const btn = document.getElementById("btn-calc");
+  btn.disabled = true;
+  document.getElementById("btn-label").style.display = "none";
+  document.getElementById("spinner").style.display = "block";
+
+  try {
+    const anchoReal  = parseFloat(document.getElementById("ancho-real").value)  || 60;
+    const uso        = document.getElementById("uso").value;
+    const margen     = parseFloat(document.getElementById("margen").value) / 100 || 0.35;
+    const cliente    = "";
+
+    let url, body;
+
+    if (tipoActual === "letras") {
+      url  = "/api/cotizar/letras";
+      body = {
+        session_id:      sessionId,
+        real_width_cm:   anchoReal,
+        altura_letra_cm: parseFloat(document.getElementById("altura-letra").value) || 15,
+        uso,
+        tipo_cara:       document.getElementById("mat-cara").value,
+        tipo_cercha:     document.getElementById("mat-cercha").value,
+        tipo_construccion: document.getElementById("tipo-construccion").value,
+        cercha_cm:          parseFloat(document.getElementById("cercha-manual").value) || 0,
+        espaciado_led_cm:   parseFloat(document.getElementById("espaciado-led").value) || 6,
+        margen_ganancia:    margen,
+        tipo_multiplicador: document.getElementById("tipo-multiplicador").value,
+        ajuste_pct:         parseFloat(document.getElementById("ajuste-pct").value) || 0,
+        cliente,
+        ..._instBody(),
+      };
+    } else if (tipoActual === "planas") {
+      url  = "/api/cotizar/planas";
+      body = {
+        session_id:      sessionId,
+        real_width_cm:   anchoReal,
+        material_id:     document.getElementById("mat-plana").value,
+        margen_ganancia: margen,
+        tipo_multiplicador: document.getElementById("tipo-multiplicador").value,
+        ajuste_pct:      parseFloat(document.getElementById("ajuste-pct").value) || 0,
+        cliente,
+        ..._instBody(),
+      };
+    } else {
+      url  = "/api/cotizar/caja";
+      body = {
+        session_id:     sessionId,
+        real_width_cm:  anchoReal,
+        profundidad_cm: parseFloat(document.getElementById("profundidad").value) || 15,
+        tipo_cara:      document.getElementById("tipo-cara-caja").value,
+        uso,
+        vistas:         parseInt(document.getElementById("vistas").value) || 1,
+        margen_ganancia: margen,
+        cliente,
+        ..._instBody(),
+      };
+    }
+
+    const res  = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Error en cálculo");
+
+    quoteId = data.quote_id;
+    renderResult(data);
+    await renderRecomendaciones(data);
+    switchTab("result");
+    showToast("Cotización lista", "ok");
+
+  } catch (err) {
+    showToast("Error: " + err.message, "err");
+  } finally {
+    btn.disabled = false;
+    document.getElementById("btn-label").style.display = "block";
+    document.getElementById("spinner").style.display = "none";
+  }
+}
+
+// ─── RENDERIZAR RESULTADO ────────────────────────────────────────────────────
+function renderResult(d) {
+  const m      = d.medidas;
+  const costos = d.costos;
+  const il     = d.iluminacion;
+  const mats   = d.materiales;
+  const esLetras  = d.tipo === 'letras_3d';
+  const esPlanas  = d.tipo === 'letras_planas';
+
+  const MULT_LABELS = {
+    aluminio_sin_luz:           "Aluminio sin luz ×2.0",
+    aluminio_con_luz:           "Aluminio con luz ×2.5",
+    aluminio_acrilico_con_luz:  "Aluminio + acrílico con luz ×3.5",
+    acrilico_con_luz_std:       "Acrílico con luz estándar ×4.5",
+    acrilico_con_luz_premium:   "Acrílico con luz premium ×5.5",
+  };
+
+  const precioFinal = costos.precio_final || costos.precio_venta_sugerido;
+  const costoTotal  = costos.total + (costos.mo_total || 0);
+  const pct = (precioFinal > 0 && costos.precio_venta_costo > 0)
+    ? (((precioFinal - costoTotal) / precioFinal) * 100).toFixed(1)
+    : null;
+
+  let tipoLabel = 'Caja de Luz';
+  if (esLetras) tipoLabel = 'Letras 3D';
+  if (esPlanas) tipoLabel = 'Letras Planas';
+
+  document.getElementById("result-content").innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+      <div>
+        <h2 style="color:var(--azul);font-size:17px">Cotización — ${tipoLabel}</h2>
+        <p style="font-size:12px;color:#888">Folio: ${d.folio} · ${m.paths_detectados} elementos detectados</p>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+          <input id="pdf-cliente" type="text" placeholder="Cliente (opcional)"
+            style="font-size:12px;padding:4px 8px;border:1px solid #ccc;border-radius:6px;width:150px">
+          <a class="btn-pdf" id="btn-pdf-link" href="${d.pdf_url}" target="_blank"
+            onclick="return actualizarPdfUrl('${d.quote_id}')"
+            title="Cotización formal">📄 Cotización</a>
+          <a class="btn-pdf" id="btn-ot-link" href="/api/ot/${d.quote_id}" target="_blank"
+            onclick="return actualizarDocUrl('ot','${d.quote_id}')"
+            style="background:#2d5986"
+            title="Orden de trabajo (para autorizar con anticipo)">📋 Orden de Trabajo</a>
+          <a class="btn-pdf" id="btn-ent-link" href="/api/entrega/${d.quote_id}" target="_blank"
+            onclick="return actualizarDocUrl('entrega','${d.quote_id}')"
+            style="background:#2e7d32"
+            title="Acta de entrega y garantía (al terminar el trabajo)">✅ Acta de Entrega</a>
+        </div>
+        <input id="pdf-notas" type="text" placeholder="Notas para los documentos (opcional)"
+          style="font-size:11px;padding:3px 8px;border:1px solid #ddd;border-radius:6px;width:100%;color:#666;margin-top:4px">
+      </div>
+    </div>
+
+    ${(esLetras || esPlanas) && d.desglose_letras && d.desglose_letras.length ? `
+    <!-- ── COTIZACIÓN POR LETRA (fórmula Excel) ── -->
+    <h3 style="color:var(--azul);margin:0 0 8px;font-size:14px">
+      Cotización por letra
+      <span style="font-weight:400;color:#888;font-size:12px">
+        — ${MULT_LABELS[costos.tipo_multiplicador] || costos.tipo_multiplicador}
+      </span>
+    </h3>
+    <p style="font-size:11px;color:#999;margin:0 0 6px">
+      Fórmula: altura × $${(catalog?.precios_base?.precio_cm || 10)}/cm × ${costos.multiplicador_valor}
+      ${costos.ajuste_pct !== 0 ? `
+        <span style="margin-left:8px;font-weight:700;color:${costos.ajuste_pct>0?'#2e7d32':'#c62828'}">
+          ${costos.ajuste_pct > 0 ? '+' : ''}${costos.ajuste_pct}% ajuste
+        </span>
+        <span style="margin-left:6px;color:#aaa">
+          (base: $${(costos.precio_sin_ajuste||0).toLocaleString('es-MX',{minimumFractionDigits:2})})
+        </span>` : ''}
+    </p>
+    <table class="desglose-table" style="margin-bottom:20px">
+      <thead><tr>
+        <th>Letra</th>
+        <th class="amount">Alto</th>
+        <th class="amount">Ancho</th>
+        <th class="amount">Cara (A×A)</th>
+        ${!esPlanas ? `<th class="amount">Cercha (P×P)</th>` : ''}
+        <th class="amount" style="color:#555">Costo mat.</th>
+        <th class="amount" style="color:#e87c2a">Precio venta</th>
+      </tr></thead>
+      <tbody>
+        ${d.desglose_letras.map(l => `<tr>
+          <td><strong>${l.id}</strong></td>
+          <td class="amount">${l.alto_cm} cm</td>
+          <td class="amount">${l.ancho_cm} cm</td>
+          <td class="amount">${(l.area_bbox_cm2||0).toFixed(0)} cm²</td>
+          ${!esPlanas ? `<td class="amount">${(l.cercha_area_cm2||0).toFixed(0)} cm²</td>` : ''}
+          <td class="amount" style="color:#555;font-size:12px">
+            $${(l.costo_mat||0).toLocaleString('es-MX',{minimumFractionDigits:2})}
+          </td>
+          <td class="amount" style="font-weight:700;color:var(--naranja)">
+            $${l.precio_letra.toLocaleString('es-MX',{minimumFractionDigits:2})}
+          </td>
+        </tr>`).join("")}
+        <tr style="background:#fff8f0;font-weight:700;font-size:14px">
+          <td>TOTAL (${d.desglose_letras.length} letras)</td>
+          <td class="amount">—</td>
+          <td class="amount">—</td>
+          <td class="amount">${d.desglose_letras.reduce((s,l)=>s+(l.area_bbox_cm2||0),0).toFixed(0)} cm²</td>
+          ${!esPlanas ? `<td class="amount">${d.desglose_letras.reduce((s,l)=>s+(l.cercha_area_cm2||0),0).toFixed(0)} cm²</td>` : ''}
+          <td class="amount" style="color:#555">
+            $${d.desglose_letras.reduce((s,l)=>s+(l.costo_mat||0),0).toLocaleString('es-MX',{minimumFractionDigits:2})}
+          </td>
+          <td class="amount" style="color:var(--naranja);font-size:16px">
+            $${costos.precio_venta_sugerido.toLocaleString('es-MX',{minimumFractionDigits:2})}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ── REFERENCIA: precio por costo ── -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
+      <div class="stat-card highlight">
+        <div class="label">Total al cliente</div>
+        <div class="value">$${precioFinal.toLocaleString('es-MX',{minimumFractionDigits:2})}</div>
+        <div class="sub">Fabricación${costos.mo_total>0?' + MO':''}${d.instalacion?.activa?' + instalación':''}</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Precio mínimo (por costo)</div>
+        <div class="value" style="font-size:17px">$${costos.precio_venta_costo.toLocaleString('es-MX',{minimumFractionDigits:2})}</div>
+        <div class="sub">Costo + IVA + margen</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Margen real</div>
+        <div class="value" style="color:#2e7d32">${pct !== null ? pct+'%' : '—'}</div>
+        <div class="sub">${precioFinal > costoTotal
+          ? '✓ Precio cubre costos' : '⚠ Precio bajo costos'}</div>
+      </div>
+    </div>` : ""}
+
+    <!-- ── STATS: iluminación y materiales ── -->
+    <div class="result-grid" style="margin-bottom:20px">
+      ${stat("Área cara total", (m.area_cara_cm2/10000).toFixed(4)+" m²", m.area_cara_cm2.toFixed(0)+" cm²")}
+      ${stat("Cercha total", (m.perimetro_total_cm/100).toFixed(2)+" m", "prof. "+m.cercha_altura_cm+" cm")}
+      ${stat("Módulos LED", il.modulos+" uds", il.led)}
+      ${stat("Watts", il.watts_total+" W", il.fuente)}
+      ${stat("Material cara", mats.cara.nombre, mats.cara.laminas+" lám.")}
+      ${stat("Material cercha", mats.cercha.nombre, mats.cercha.laminas+" lám.")}
+    </div>
+
+    <!-- ── DESGLOSE DE COSTOS ── -->
+    <h3 style="color:var(--azul);margin:0 0 10px;font-size:14px">Desglose de costos (referencia interna)</h3>
+    <table class="desglose-table">
+      <thead><tr><th>Concepto</th><th class="amount">Costo</th></tr></thead>
+      <tbody>
+        ${d.desglose.map(r=>`<tr>
+          <td>${r.concepto}</td>
+          <td class="amount">$${r.costo.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+        </tr>`).join("")}
+        <tr class="total-row">
+          <td>Subtotal</td>
+          <td class="amount">$${costos.subtotal.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+        </tr>
+        <tr class="total-row">
+          <td>IVA 16%</td>
+          <td class="amount">$${costos.iva.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+        </tr>
+        <tr class="total-row">
+          <td>Total costo con IVA</td>
+          <td class="amount">$${costos.total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+        </tr>
+        <tr class="venta-row">
+          <td>Precio fabricación (fórmula)</td>
+          <td class="amount">$${costos.precio_venta_sugerido.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+        </tr>
+        ${costos.mo_total > 0 ? `
+        <tr style="background:#e8f5e9">
+          <td>🔧 Mano de obra</td>
+          <td class="amount">$${costos.mo_total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+        </tr>` : ''}
+        ${d.instalacion?.activa ? `
+        <tr style="background:#fff3e0">
+          <td colspan="2" style="font-weight:700;font-size:12px;color:#e65100;padding-top:8px">
+            📍 Instalación — ${d.instalacion.lugar || 'sin lugar especificado'}
+          </td>
+        </tr>
+        ${d.instalacion.viaticos > 0 ? `<tr style="background:#fff3e0">
+          <td style="padding-left:20px">Viáticos</td>
+          <td class="amount">$${d.instalacion.viaticos.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+        </tr>` : ''}
+        ${d.instalacion.costo_grua > 0 ? `<tr style="background:#fff3e0">
+          <td style="padding-left:20px">Equipo (${d.instalacion.grua})</td>
+          <td class="amount">$${d.instalacion.costo_grua.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+        </tr>` : ''}
+        ${d.instalacion.extras > 0 ? `<tr style="background:#fff3e0">
+          <td style="padding-left:20px">Extras instalación</td>
+          <td class="amount">$${d.instalacion.extras.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+        </tr>` : ''}
+        <tr style="background:#ffe0b2;font-weight:700">
+          <td>Total instalación</td>
+          <td class="amount">$${d.instalacion.total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+        </tr>` : ''}
+        <tr style="background:#1a237e;color:#fff;font-size:15px;font-weight:700">
+          <td>💰 TOTAL AL CLIENTE</td>
+          <td class="amount">$${precioFinal.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+        </tr>
+      </tbody>
+    </table>
+  `;
+}
+
+function stat(label, value, sub, highlight=false) {
+  return `<div class="stat-card${highlight?' highlight':''}">
+    <div class="label">${label}</div>
+    <div class="value">${value}</div>
+    ${sub?`<div class="sub">${sub}</div>`:''}
+  </div>`;
+}
+
+// ─── RECOMENDACIONES ─────────────────────────────────────────────────────────
+async function renderRecomendaciones(d) {
+  // Aseguramos catálogo cargado para mostrar LEDs compatibles
+  if (!catLoaded) await loadCatalog();
+
+  const cercha_cm   = d.medidas.cercha_altura_cm;
+  const altura_cm   = d.medidas.altura_letra_cm || 0;
+  const uso         = document.getElementById("uso").value;
+
+  const compatibles = (catalog?.leds_canal || []).filter(
+    l => l.profundidad_min <= cercha_cm && cercha_cm <= l.profundidad_max
+  );
+
+  // Separar el LED seleccionado del resto
+  const ledSeleccionado = d.iluminacion.led;
+  const otrosLeds = compatibles.filter(l => l.nombre !== ledSeleccionado);
+
+  const ledsTabla = compatibles.map(l => {
+    const esSeleccionado = l.nombre === ledSeleccionado;
+    const aptoExt = parseInt(l.ip.replace(/\D/g,"")) >= 65;
+    const alertaExt = uso === "exterior" && !aptoExt
+      ? `<span style="color:#e74c3c;font-size:10px;font-weight:700"> ⚠ No apto exterior</span>` : "";
+    return `<tr style="${esSeleccionado ? 'background:#fff8f0' : ''}">
+      <td>${esSeleccionado ? "<strong>" : ""}${l.nombre}${esSeleccionado ? "</strong> ✓" : ""}${alertaExt}</td>
+      <td>${l.ip}</td>
+      <td style="text-align:right">${l.watts_modulo} W</td>
+      <td style="text-align:right">${l.lumenes || "—"}</td>
+      <td style="text-align:right;font-weight:700;color:var(--azul)">$${(l.precio_modulo||0).toFixed(2)}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="5" style="color:#aaa;font-size:12px">Sin LEDs en catálogo para cercha ${cercha_cm} cm</td></tr>`;
+
+  document.getElementById("rec-content").innerHTML = `
+    <h2 style="color:var(--azul);margin-bottom:16px;font-size:17px">Recomendaciones técnicas</h2>
+
+    ${altura_cm > 0 ? `
+    <div class="rec-card" style="border-color:var(--azul2)">
+      <h4>📐 Medidas de la letra</h4>
+      <p>Altura detectada: <strong>${altura_cm} cm</strong><br>
+         Cercha calculada: <strong>${cercha_cm} cm</strong><br>
+         Perímetro total de cercha: <strong>${d.medidas.perimetro_total_cm.toFixed(1)} cm (${(d.medidas.perimetro_total_cm/100).toFixed(2)} m)</strong></p>
+    </div>` : ""}
+
+    <div class="rec-card">
+      <h4>💡 LED seleccionado automáticamente</h4>
+      <p><strong>${d.iluminacion.led}</strong><br>
+         ${d.iluminacion.modulos} módulos · ${d.iluminacion.watts_total} W totales<br>
+         Fuente: ${d.iluminacion.fuente}</p>
+    </div>
+
+    <div class="rec-card" style="border-color:#3ecf8e">
+      <h4>💡 Todos los LEDs compatibles con cercha ${cercha_cm} cm</h4>
+      <table style="width:100%;font-size:12px;border-collapse:collapse">
+        <thead>
+          <tr style="background:#f5f7fa">
+            <th style="text-align:left;padding:5px 6px;font-size:11px">Modelo</th>
+            <th style="padding:5px 6px;font-size:11px">IP</th>
+            <th style="text-align:right;padding:5px 6px;font-size:11px">Watts</th>
+            <th style="text-align:right;padding:5px 6px;font-size:11px">Lúmenes</th>
+            <th style="text-align:right;padding:5px 6px;font-size:11px">$/mod</th>
+          </tr>
+        </thead>
+        <tbody>${ledsTabla}</tbody>
+      </table>
+      <p style="font-size:10.5px;color:#999;margin-top:6px">✓ = LED usado en esta cotización</p>
+    </div>
+
+    <div class="rec-card">
+      <h4>🧱 Material de cara</h4>
+      <p>${d.materiales.cara.nombre} · ${d.materiales.cara.laminas} lámina(s) necesaria(s)</p>
+    </div>
+
+    <div class="rec-card">
+      <h4>🔧 Material de cercha / estructura</h4>
+      <p>${d.materiales.cercha.nombre} · ${d.materiales.cercha.laminas} lámina(s)</p>
+    </div>
+
+    <div class="rec-card">
+      <h4>🪣 Fondo</h4>
+      <p>${d.materiales.fondo.nombre} · ${d.materiales.fondo.laminas} lámina(s)</p>
+    </div>
+
+    <div class="rec-card">
+      <h4>🔩 Pegamento / adhesivo</h4>
+      <p>${d.pegamento.nombre}</p>
+    </div>
+
+    <div class="rec-card" style="border-color:#3ecf8e">
+      <h4>⚠️ Consideraciones de instalación</h4>
+      <p>
+        • Lijar con lija de agua No. 80, dos pasadas ligeras antes de pegar<br>
+        • Para instalación exterior: verificar IP del LED (${(d.iluminacion.led||"").includes("IP6") ? "✓ IP65+ adecuado" : "⚠ revisar protección IP"})<br>
+        • Contemplar altura de instalación para materiales y mano de obra<br>
+        • Si es instalación nocturna: verificar fuente con capacidad suficiente
+      </p>
+    </div>
+  `;
+}
+
+// ─── HELPERS UI ──────────────────────────────────────────────────────────────
+function switchTab(name) {
+  const names = ["svg","result","rec","catalog"];
+  document.querySelectorAll(".tab").forEach((t,i) => t.classList.toggle("active", names[i] === name));
+  document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+  document.getElementById("tab-"+name).classList.add("active");
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast " + type;
+  t.style.display = "block";
+  setTimeout(() => t.style.display = "none", 3200);
+}
+
+// ─── CATÁLOGO ────────────────────────────────────────────────────────────────
+let catalog = null;
+let catLoaded = false;
+let modalCtx = {};   // {type, key, isNew}
+
+async function loadCatalog(force=false) {
+  if (catLoaded && !force) return;
+  try {
+    const r = await fetch("/api/catalog");
+    catalog = await r.json();
+    catLoaded = true;
+    renderAllCatalog();
+    populateGruas();
+  } catch(e) {
+    showToast("Error cargando catálogo", "err");
+  }
+}
+
+async function saveCatalog() {
+  if (!catalog) return;
+  collectPreciosBase();
+  const btn = document.getElementById("btn-save-cat");
+  btn.textContent = "Guardando..."; btn.disabled = true;
+  try {
+    const r = await fetch("/api/catalog", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(catalog),
+    });
+    if (!r.ok) throw new Error();
+    showToast("Catálogo guardado correctamente", "ok");
+    updateMultiplicadoresSelect();
+  } catch(e) {
+    showToast("Error al guardar catálogo", "err");
+  } finally {
+    btn.textContent = "💾 Guardar cambios"; btn.disabled = false;
+  }
+}
+
+function showCatSection(sec, btn) {
+  document.querySelectorAll(".cat-subbtn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  document.querySelectorAll(".cat-section").forEach(s => s.classList.remove("active"));
+  document.getElementById("cat-"+sec).classList.add("active");
+}
+
+function renderAllCatalog() {
+  if (!catalog) return;
+  renderLaminas(); renderLedsCanal(); renderLedsCaja();
+  renderFuentes(); renderPegamentos(); renderPreciosBase();
+  updateMultiplicadoresSelect();
+}
+
+// ── LÁMINAS ──────────────────────────────────────────────────────────────────
+function renderLaminas() {
+  const entries = Object.entries(catalog.laminas || {});
+  let html = `<table class="cat-table"><thead><tr>
+    <th>ID</th><th>Nombre</th><th>Precio/lám</th><th>Ancho cm</th><th>Alto cm</th><th>Grosor mm</th><th></th>
+  </tr></thead><tbody>`;
+  for (const [id, m] of entries) {
+    html += `<tr>
+      <td><code>${id}</code></td>
+      <td>${m.nombre}</td>
+      <td class="price-cell">$${m.precio.toLocaleString('es-MX')}</td>
+      <td>${m.ancho_cm}</td><td>${m.alto_cm}</td><td>${m.grosor_mm}</td>
+      <td class="actions">
+        <button class="btn-edit" onclick="openEditModal('lamina','${id}')">Editar</button>
+        <button class="btn-del"  onclick="deleteItem('lamina','${id}')">✕</button>
+      </td>
+    </tr>`;
+  }
+  html += "</tbody></table>";
+  document.getElementById("tbl-laminas-wrap").innerHTML = html;
+}
+
+// ── LEDs CANAL ───────────────────────────────────────────────────────────────
+function renderLedsCanal() {
+  const rows = catalog.leds_canal || [];
+  const grupos = [
+    { key: "pequena",  label: "Letras Pequeñas",  color: "#2d5986", sub: "cercha 2–8 cm · hasta ~20 cm de letra" },
+    { key: "mediana",  label: "Letras Medianas",   color: "#e87c2a", sub: "cercha 8–15 cm · 20–40 cm de letra" },
+    { key: "grande",   label: "Letras Grandes",    color: "#2e7d32", sub: "cercha 8–15 cm · más de 40 cm de letra" },
+  ];
+
+  let html = "";
+  grupos.forEach(g => {
+    const items = rows.filter(l => l.tamano === g.key);
+    html += `<p style="font-size:12px;font-weight:700;color:${g.color};margin:14px 0 4px">
+      ${g.label}
+      <span style="font-weight:400;color:#999;font-size:11px"> — ${g.sub}</span>
+    </p>`;
+    if (!items.length) {
+      html += `<p style="font-size:12px;color:#aaa;margin:0 0 8px">Sin productos</p>`;
+    } else {
+      html += `<table class="cat-table" style="margin-bottom:6px"><thead><tr>
+        <th>#</th><th>Nombre</th><th>Precio/mod</th><th>Watts</th><th>Lúmenes</th><th>IP</th>
+        <th>Prof min</th><th>Prof max</th><th>Voltaje</th><th></th>
+      </tr></thead><tbody>`;
+      items.forEach(l => {
+        const i = rows.indexOf(l);
+        html += `<tr>
+          <td>${i+1}</td><td>${l.nombre}${l.color ? ` <span style="font-size:10px;color:#888">(${l.color})</span>` : ""}</td>
+          <td class="price-cell">$${(l.precio_modulo||0).toFixed(2)}</td>
+          <td>${l.watts_modulo}</td><td>${l.lumenes||"—"}</td><td>${l.ip}</td>
+          <td>${l.profundidad_min} cm</td><td>${l.profundidad_max} cm</td><td>${l.voltaje}V</td>
+          <td class="actions">
+            <button class="btn-edit" onclick="openEditModal('led_canal',${i})">Editar</button>
+            <button class="btn-del"  onclick="deleteItem('led_canal',${i})">✕</button>
+          </td>
+        </tr>`;
+      });
+      html += "</tbody></table>";
+    }
+  });
+
+  // LEDs sin categoría
+  const sinCat = rows.filter(l => !["pequena","mediana","grande"].includes(l.tamano));
+  if (sinCat.length) {
+    html += `<p style="font-size:12px;font-weight:700;color:#888;margin:14px 0 4px">Sin categoría</p>
+    <table class="cat-table"><thead><tr>
+      <th>#</th><th>Nombre</th><th>Precio/mod</th><th>Watts</th><th>IP</th><th>Prof min</th><th>Prof max</th><th></th>
+    </tr></thead><tbody>`;
+    sinCat.forEach(l => {
+      const i = rows.indexOf(l);
+      html += `<tr>
+        <td>${i+1}</td><td>${l.nombre}</td>
+        <td class="price-cell">$${(l.precio_modulo||0).toFixed(2)}</td>
+        <td>${l.watts_modulo}</td><td>${l.ip}</td>
+        <td>${l.profundidad_min} cm</td><td>${l.profundidad_max} cm</td>
+        <td class="actions">
+          <button class="btn-edit" onclick="openEditModal('led_canal',${i})">Editar</button>
+          <button class="btn-del"  onclick="deleteItem('led_canal',${i})">✕</button>
+        </td>
+      </tr>`;
+    });
+    html += "</tbody></table>";
+  }
+
+  document.getElementById("tbl-leds-canal-wrap").innerHTML = html;
+}
+
+// ── LEDs CAJA ────────────────────────────────────────────────────────────────
+function renderLedsCaja() {
+  ["interior","exterior"].forEach(side => {
+    const rows = (catalog.leds_caja||{})[side] || [];
+    let html = `<table class="cat-table"><thead><tr>
+      <th>#</th><th>Nombre</th><th>Precio</th><th>Watts</th><th>IP</th><th>Prof min</th><th>Prof max</th><th>Vistas</th><th></th>
+    </tr></thead><tbody>`;
+    rows.forEach((l, i) => {
+      html += `<tr>
+        <td>${i+1}</td><td>${l.nombre}</td>
+        <td class="price-cell">$${(l.precio||0).toFixed(2)}</td>
+        <td>${l.watts}</td><td>${l.ip}</td>
+        <td>${l.profundidad_min} cm</td><td>${l.profundidad_max} cm</td>
+        <td>${l.vistas||1}</td>
+        <td class="actions">
+          <button class="btn-edit" onclick="openEditModal('led_caja_${side}',${i})">Editar</button>
+          <button class="btn-del"  onclick="deleteItem('led_caja_${side}',${i})">✕</button>
+        </td>
+      </tr>`;
+    });
+    html += "</tbody></table>";
+    document.getElementById(`tbl-leds-caja-${side==="interior"?"int":"ext"}-wrap`).innerHTML = html;
+  });
+}
+
+// ── FUENTES ───────────────────────────────────────────────────────────────────
+function renderFuentes() {
+  const rows = catalog.fuentes || [];
+  let html = `<table class="cat-table"><thead><tr>
+    <th>#</th><th>Nombre</th><th>Watts</th><th>Precio</th><th>IP</th><th>Uso</th><th>Voltaje</th><th></th>
+  </tr></thead><tbody>`;
+  rows.forEach((f, i) => {
+    html += `<tr>
+      <td>${i+1}</td><td>${f.nombre}</td><td>${f.watts}W</td>
+      <td class="price-cell">$${(f.precio||0).toLocaleString('es-MX')}</td>
+      <td>${f.ip}</td><td>${f.uso}</td><td>${f.voltaje}V</td>
+      <td class="actions">
+        <button class="btn-edit" onclick="openEditModal('fuente',${i})">Editar</button>
+        <button class="btn-del"  onclick="deleteItem('fuente',${i})">✕</button>
+      </td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("tbl-fuentes-wrap").innerHTML = html;
+}
+
+// ── PEGAMENTOS ────────────────────────────────────────────────────────────────
+function renderPegamentos() {
+  const entries = Object.entries(catalog.pegamentos || {});
+  let html = `<table class="cat-table"><thead><tr>
+    <th>Cercha / Estructura</th><th>Cara / Fondo</th><th>Adhesivo</th><th>Precio aprox</th><th></th>
+  </tr></thead><tbody>`;
+  for (const [key, p] of entries) {
+    const [m1, m2] = key.split("|");
+    html += `<tr>
+      <td>${m1}</td><td>${m2}</td>
+      <td>${p.nombre}</td>
+      <td class="price-cell">$${p.precio_aprox}</td>
+      <td class="actions">
+        <button class="btn-edit" onclick="openEditModal('pegamento','${key}')">Editar</button>
+        <button class="btn-del"  onclick="deleteItem('pegamento','${key}')">✕</button>
+      </td>
+    </tr>`;
+  }
+  html += "</tbody></table>";
+  document.getElementById("tbl-pegamentos-wrap").innerHTML = html;
+}
+
+// ── PRECIOS BASE ──────────────────────────────────────────────────────────────
+const _MULT_LABELS = {
+  aluminio_sin_luz:           "Aluminio sin luz",
+  aluminio_con_luz:           "Aluminio con luz",
+  aluminio_acrilico_con_luz:  "Aluminio + acrílico con luz",
+  acrilico_con_luz_std:       "Acrílico con luz estándar",
+  acrilico_con_luz_premium:   "Acrílico con luz premium",
+};
+
+function renderPreciosBase() {
+  const pb = catalog.precios_base || { precio_cm: 10, multiplicadores: {} };
+  const mults = pb.multiplicadores || {};
+
+  const rows = Object.entries(mults).map(([key, val]) => `
+    <tr>
+      <td>${_MULT_LABELS[key] || key}</td>
+      <td>
+        <input type="number" id="pb-mult-${key}" value="${val}"
+               step="0.1" min="0.1"
+               style="width:80px;padding:5px 8px;border:1.5px solid var(--borde);border-radius:5px;font-size:13px;font-weight:700;color:var(--azul)">
+      </td>
+      <td style="font-size:11px;color:#999">
+        Ej: 20 cm × $${pb.precio_cm||10}/cm × ${val} = <strong>$${(20*(pb.precio_cm||10)*val).toFixed(0)}</strong>
+      </td>
+    </tr>`).join("");
+
+  document.getElementById("tbl-precios-base-wrap").innerHTML = `
+    <div style="max-width:560px">
+      <div style="background:#fff8f0;border:1.5px solid var(--naranja);border-radius:8px;padding:16px 20px;margin-bottom:20px">
+        <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--azul);display:block;margin-bottom:8px">
+          Precio base por cm de altura ($/cm)
+        </label>
+        <div style="display:flex;align-items:center;gap:14px">
+          <input type="number" id="pb-precio-cm" value="${pb.precio_cm||10}"
+                 step="0.5" min="1"
+                 style="width:100px;padding:8px 10px;border:1.5px solid var(--naranja);border-radius:6px;font-size:18px;font-weight:700;color:var(--naranja)">
+          <span style="font-size:12px;color:#888">pesos por centímetro de altura</span>
+        </div>
+      </div>
+
+      <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--azul);display:block;margin-bottom:8px">
+        Multiplicadores por tipo de fabricación
+      </label>
+      <p style="font-size:11px;color:#888;margin-bottom:10px">
+        El precio de cada letra = alto_cm × precio_cm × multiplicador. Este valor ya incluye
+        materiales, cercha, LEDs, mano de obra e instalación.
+      </p>
+      <table class="cat-table">
+        <thead><tr>
+          <th>Tipo de fabricación</th>
+          <th style="width:100px">Multiplicador</th>
+          <th style="width:220px">Ejemplo (letra 20 cm)</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p style="font-size:11px;color:#aaa;margin-top:10px">
+        Haz clic en <strong>💾 Guardar cambios</strong> para persistir los valores.
+      </p>
+    </div>
+  `;
+}
+
+function collectPreciosBase() {
+  if (!catalog) return;
+  if (!catalog.precios_base) catalog.precios_base = { precio_cm: 10, multiplicadores: {} };
+  const pcEl = document.getElementById("pb-precio-cm");
+  if (pcEl) catalog.precios_base.precio_cm = parseFloat(pcEl.value) || 10;
+  Object.keys(_MULT_LABELS).forEach(key => {
+    const el = document.getElementById("pb-mult-" + key);
+    if (el) catalog.precios_base.multiplicadores[key] = parseFloat(el.value) || 1;
+  });
+}
+
+function updateMultiplicadoresSelect() {
+  const mults = catalog?.precios_base?.multiplicadores || {};
+  const sel = document.getElementById("tipo-multiplicador");
+  if (!sel || !Object.keys(mults).length) return;
+  const current = sel.value;
+  sel.innerHTML = Object.entries(mults).map(([key, val]) =>
+    `<option value="${key}"${key === current ? ' selected' : ''}>${_MULT_LABELS[key] || key}  ×${val}</option>`
+  ).join("");
+}
+
+// ── MODAL ─────────────────────────────────────────────────────────────────────
+function openEditModal(type, key) {
+  let item, title;
+  if (type === "lamina") {
+    item = {...catalog.laminas[key]}; title = "Editar lámina: "+key;
+    modalCtx = {type, key, isNew:false};
+    showModal(title, lamineFields(item, key, true));
+  } else if (type === "led_canal") {
+    item = {...catalog.leds_canal[key]}; title = "Editar LED canal #"+(key+1);
+    modalCtx = {type, key, isNew:false};
+    showModal(title, ledCanalFields(item));
+  } else if (type.startsWith("led_caja_")) {
+    const side = type.replace("led_caja_","");
+    item = {...catalog.leds_caja[side][key]}; title = "Editar LED caja ("+side+") #"+(key+1);
+    modalCtx = {type, key, isNew:false};
+    showModal(title, ledCajaFields(item));
+  } else if (type === "fuente") {
+    item = {...catalog.fuentes[key]}; title = "Editar fuente #"+(key+1);
+    modalCtx = {type, key, isNew:false};
+    showModal(title, fuenteFields(item));
+  } else if (type === "pegamento") {
+    item = {...catalog.pegamentos[key]}; title = "Editar pegamento";
+    const [m1,m2] = key.split("|");
+    modalCtx = {type, key, isNew:false};
+    showModal(title, pegamentoFields(item, m1, m2, true));
+  }
+}
+
+function openAddModal(type) {
+  modalCtx = {type, key:null, isNew:true};
+  const defs = {
+    lamina: {nombre:"", precio:0, ancho_cm:122, alto_cm:244, grosor_mm:3},
+    led_canal: {nombre:"", precio_modulo:0, watts_modulo:0, lumenes:0, ip:"IP65", profundidad_min:3, profundidad_max:15, voltaje:12, conectividad_serie:20},
+    led_caja: {nombre:"", precio:0, watts:0, ip:"IP65", profundidad_min:6, profundidad_max:40, vistas:1, uso:"exterior"},
+    fuente: {nombre:"", watts:60, precio:0, ip:"IP68", uso:"exterior", voltaje:12},
+    pegamento: {nombre:"", precio_aprox:90},
+  };
+  const baseType = type.replace("_int","").replace("_ext","");
+  const item = defs[baseType] || {};
+  if (type==="lamina") showModal("Nueva lámina", lamineFields(item, "", false));
+  else if (type==="led_canal") showModal("Nuevo LED Canal", ledCanalFields(item));
+  else if (type==="led_caja") showModal("Nuevo LED Caja", ledCajaFields({...item, uso:"exterior"}));
+  else if (type==="fuente") showModal("Nueva fuente de poder", fuenteFields(item));
+  else if (type==="pegamento") showModal("Nuevo pegamento", pegamentoFields(item,"","",false));
+}
+
+function showModal(title, bodyHtml) {
+  document.getElementById("modal-title").textContent = title;
+  document.getElementById("modal-body").innerHTML = bodyHtml;
+  document.getElementById("modal-overlay").classList.add("open");
+}
+function closeModal() {
+  document.getElementById("modal-overlay").classList.remove("open");
+}
+
+function fld(id, label, val, type="text", step="1", options=null, readonly=false) {
+  if (options) {
+    const opts = options.map(([v,l])=>`<option value="${v}"${v==val?" selected":""}>${l}</option>`).join("");
+    return `<div class="modal-field"><label>${label}</label><select id="mf-${id}">${opts}</select></div>`;
+  }
+  return `<div class="modal-field"><label>${label}</label>
+    <input id="mf-${id}" type="${type}" value="${val||""}" step="${step}" ${readonly?"readonly":""}>
+  </div>`;
+}
+
+function lamineFields(m, id, idReadonly) {
+  return `<div class="modal-grid2">
+    ${fld("id","ID / Clave", id, "text","1",[],idReadonly)}
+    ${fld("nombre","Nombre", m.nombre)}
+    ${fld("precio","Precio / lámina ($)", m.precio,"number","1")}
+    ${fld("ancho_cm","Ancho cm", m.ancho_cm,"number","1")}
+    ${fld("alto_cm","Alto cm", m.alto_cm,"number","1")}
+    ${fld("grosor_mm","Grosor mm", m.grosor_mm,"number","0.01")}
+  </div>`;
+}
+
+function ledCanalFields(m) {
+  return `<div class="modal-grid2">
+    ${fld("nombre","Nombre", m.nombre)}
+    ${fld("tamano","Tamaño de letra", m.tamano||"mediana","text","1",[["pequena","Pequeña (≤20 cm)"],["mediana","Mediana (20–40 cm)"],["grande","Grande (>40 cm)"]])}
+    ${fld("precio_modulo","Precio / módulo ($)", m.precio_modulo,"number","0.01")}
+    ${fld("watts_modulo","Watts / módulo", m.watts_modulo,"number","0.01")}
+    ${fld("lumenes","Lúmenes", m.lumenes,"number","1")}
+    ${fld("ip","Protección IP", m.ip)}
+    ${fld("voltaje","Voltaje (V)", m.voltaje,"number","1")}
+    ${fld("profundidad_min","Prof. mín (cm)", m.profundidad_min,"number","1")}
+    ${fld("profundidad_max","Prof. máx (cm)", m.profundidad_max,"number","1")}
+    ${fld("conectividad_serie","Conexión en serie", m.conectividad_serie,"number","1")}
+  </div>`;
+}
+
+function ledCajaFields(m) {
+  return `<div class="modal-grid2">
+    ${fld("nombre","Nombre", m.nombre)}
+    ${fld("precio","Precio", m.precio,"number","0.01")}
+    ${fld("watts","Watts", m.watts,"number","0.01")}
+    ${fld("ip","Protección IP", m.ip)}
+    ${fld("uso","Uso", m.uso,"text","1",[["interior","Interior"],["exterior","Exterior"]])}
+    ${fld("vistas","Vistas", m.vistas||1,"number","1")}
+    ${fld("profundidad_min","Prof. mín (cm)", m.profundidad_min,"number","1")}
+    ${fld("profundidad_max","Prof. máx (cm)", m.profundidad_max,"number","1")}
+  </div>`;
+}
+
+function fuenteFields(m) {
+  return `<div class="modal-grid2">
+    ${fld("nombre","Nombre", m.nombre)}
+    ${fld("watts","Watts", m.watts,"number","1")}
+    ${fld("precio","Precio ($)", m.precio,"number","0.01")}
+    ${fld("ip","Protección IP", m.ip)}
+    ${fld("uso","Uso", m.uso,"text","1",[["exterior","Exterior"],["interior","Interior"],["ambos","Ambos"]])}
+    ${fld("voltaje","Voltaje (V)", m.voltaje)}
+  </div>`;
+}
+
+const MATS = [["aluminio","aluminio"],["acrilico","acrílico"],["alucobon","alucobon"],["pvc","PVC"]];
+function pegamentoFields(m, m1, m2, readonly) {
+  return `<div class="modal-grid2">
+    ${fld("mat1","Material cercha/estructura", m1,"text","1",MATS,readonly)}
+    ${fld("mat2","Material cara/fondo", m2,"text","1",MATS,readonly)}
+    ${fld("nombre","Adhesivo", m.nombre)}
+    ${fld("precio_aprox","Precio aprox ($)", m.precio_aprox,"number","1")}
+  </div>`;
+}
+
+function getModalValues(fields) {
+  const obj = {};
+  fields.forEach(f => {
+    const el = document.getElementById("mf-"+f);
+    if (!el) return;
+    const v = el.value;
+    obj[f] = (el.type==="number") ? parseFloat(v)||0 : v;
+  });
+  return obj;
+}
+
+function saveModal() {
+  const {type, key, isNew} = modalCtx;
+  if (type === "lamina") {
+    const vals = getModalValues(["id","nombre","precio","ancho_cm","alto_cm","grosor_mm"]);
+    const id = vals.id.trim();
+    if (!id) { alert("El ID es obligatorio"); return; }
+    delete vals.id;
+    catalog.laminas[id] = vals;
+    renderLaminas();
+  } else if (type === "led_canal") {
+    const vals = getModalValues(["nombre","tamano","precio_modulo","watts_modulo","lumenes","ip","voltaje","profundidad_min","profundidad_max","conectividad_serie"]);
+    if (isNew) catalog.leds_canal.push(vals);
+    else catalog.leds_canal[key] = {...catalog.leds_canal[key], ...vals};
+    renderLedsCanal();
+  } else if (type.startsWith("led_caja_")) {
+    const side = type.replace("led_caja_","");
+    const vals = getModalValues(["nombre","precio","watts","ip","uso","vistas","profundidad_min","profundidad_max"]);
+    if (isNew) { vals.uso = vals.uso||"exterior"; catalog.leds_caja[vals.uso].push(vals); }
+    else catalog.leds_caja[side][key] = vals;
+    renderLedsCaja();
+  } else if (type === "led_caja") {
+    const vals = getModalValues(["nombre","precio","watts","ip","uso","vistas","profundidad_min","profundidad_max"]);
+    const side = vals.uso || "exterior";
+    catalog.leds_caja[side].push(vals);
+    renderLedsCaja();
+  } else if (type === "fuente") {
+    const vals = getModalValues(["nombre","watts","precio","ip","uso","voltaje"]);
+    if (isNew) catalog.fuentes.push(vals);
+    else catalog.fuentes[key] = vals;
+    renderFuentes();
+  } else if (type === "pegamento") {
+    const vals = getModalValues(["mat1","mat2","nombre","precio_aprox"]);
+    const newKey = `${vals.mat1}|${vals.mat2}`;
+    if (!isNew) delete catalog.pegamentos[key];
+    catalog.pegamentos[newKey] = {nombre: vals.nombre, precio_aprox: vals.precio_aprox};
+    renderPegamentos();
+  }
+  closeModal();
+  showToast("Elemento actualizado — recuerda guardar", "ok");
+}
+
+function deleteItem(type, key) {
+  if (!confirm("¿Eliminar este elemento?")) return;
+  if (type === "lamina") { delete catalog.laminas[key]; renderLaminas(); }
+  else if (type === "led_canal") { catalog.leds_canal.splice(key,1); renderLedsCanal(); }
+  else if (type === "fuente") { catalog.fuentes.splice(key,1); renderFuentes(); }
+  else if (type === "pegamento") { delete catalog.pegamentos[key]; renderPegamentos(); }
+  else if (type.startsWith("led_caja_")) {
+    const side = type.replace("led_caja_","");
+    catalog.leds_caja[side].splice(key,1); renderLedsCaja();
+  }
+  showToast("Elemento eliminado — recuerda guardar", "ok");
+}
+
+// Cerrar modal con Escape
+document.addEventListener("keydown", e => {
+  if (e.key==="Escape") closeModal();
+});
+
+// ─── MANO DE OBRA / INSTALACIÓN ──────────────────────────────────────────────
+
+function calcMO() {
+  const h = parseFloat(document.getElementById("mo-horas").value) || 0;
+  const t = parseFloat(document.getElementById("mo-tarifa").value) || 0;
+  document.getElementById("mo-tag").textContent =
+    `Total MO: $${(h * t).toLocaleString('es-MX', {minimumFractionDigits: 0})}`;
+}
+
+function toggleInst() {
+  const cb  = document.getElementById("inst-activa");
+  cb.checked = !cb.checked;
+  const on  = cb.checked;
+  document.getElementById("inst-fields").style.display = on ? "block" : "none";
+  document.getElementById("inst-bg").style.background  = on ? "var(--naranja)" : "rgba(255,255,255,.2)";
+  document.getElementById("inst-dot").style.transform  = on ? "translateX(20px)" : "none";
+  calcInst();
+}
+
+function calcInst() {
+  if (!document.getElementById("inst-activa").checked) return;
+  const v   = parseFloat(document.getElementById("inst-viaticos").value) || 0;
+  const d   = parseInt(document.getElementById("inst-dias").value)       || 1;
+  const gId = document.getElementById("inst-grua").value;
+  const g   = (catalog?.gruas || []).find(x => x.id === gId) || {precio_dia: 0};
+  const cg  = g.precio_dia * d;
+  const e   = parseFloat(document.getElementById("inst-extras").value) || 0;
+  const tot = v + cg + e;
+  document.getElementById("inst-tag").textContent =
+    `Total instalación: $${tot.toLocaleString('es-MX', {minimumFractionDigits: 0})}`;
+}
+
+function populateGruas() {
+  const sel = document.getElementById("inst-grua");
+  if (!sel || !catalog?.gruas) return;
+  sel.innerHTML = catalog.gruas.map(g =>
+    `<option value="${g.id}">${g.nombre}${g.precio_dia > 0 ? ` — $${g.precio_dia.toLocaleString('es-MX')}/día` : ''}</option>`
+  ).join('');
+}
+
+function _instBody() {
+  const activa = document.getElementById("inst-activa").checked;
+  return {
+    mo_horas:      parseFloat(document.getElementById("mo-horas").value)    || 0,
+    mo_tarifa:     parseFloat(document.getElementById("mo-tarifa").value)   || 150,
+    inst_activa:   activa,
+    inst_lugar:    document.getElementById("inst-lugar").value              || "",
+    inst_viaticos: parseFloat(document.getElementById("inst-viaticos").value) || 0,
+    inst_grua_id:  document.getElementById("inst-grua").value               || "ninguna",
+    inst_dias_grua: parseInt(document.getElementById("inst-dias").value)    || 1,
+    inst_extras:   parseFloat(document.getElementById("inst-extras").value) || 0,
+  };
+}
+
+// ─── ASESOR AUTOMÁTICO ───────────────────────────────────────────────────────
+
+function cerchaParaAltura(h) {
+  if (h <= 10) return 3;
+  if (h <= 20) return 5;
+  if (h <= 35) return 8;
+  if (h <= 60) return 12;
+  return 15;
+}
+
+// Devuelve el factor de escala correcto:
+//   - Si el usuario puso una altura conocida → escala por altura (ignora márgenes del artboard)
+//   - Si no → escala por ancho del viewbox
+function getScaleFactor() {
+  const alturaInput = parseFloat(document.getElementById("altura-letra").value) || 0;
+  const anchoReal   = parseFloat(document.getElementById("ancho-real").value)   || 0;
+  if (alturaInput > 0 && svgMaxHeightPx > 0)
+    return alturaInput / svgMaxHeightPx;
+  if (anchoReal > 0 && svgViewboxW > 0)
+    return anchoReal / svgViewboxW;
+  return 0;
+}
+
+function actualizarAsesor(autoFillAltura = false) {
+  const anchoReal    = parseFloat(document.getElementById("ancho-real").value) || 0;
+  const cerchaManual = parseFloat(document.getElementById("cercha-manual").value) || 0;
+
+  // ── 1. Auto-detectar altura inicial (solo cuando SVG recién se carga) ──────
+  if (autoFillAltura && svgMaxHeightPx > 0 && svgViewboxW > 0 && anchoReal > 0) {
+    const sfAncho         = anchoReal / svgViewboxW;
+    const alturaEstimada  = svgMaxHeightPx * sfAncho;
+    document.getElementById("altura-letra").value = alturaEstimada.toFixed(1);
+  }
+
+  // ── 2. Calcular escala definitiva (usa altura si está definida) ───────────
+  const sf           = getScaleFactor();
+  const alturaActual = parseFloat(document.getElementById("altura-letra").value) || 0;
+
+  // Auto-recomendar tipo de construcción
+  if (autoFillAltura && alturaActual > 0) {
+    const tipoRec = alturaActual < 8 ? "retro_halo" : "cajon_luz";
+    const sel = document.getElementById("tipo-construccion");
+    if (sel) { sel.value = tipoRec; onTipoConstruccionChange(); }
+  }
+  const cercha       = cerchaManual > 0 ? cerchaManual : cerchaParaAltura(alturaActual);
+
+  // Actualizar tag cercha
+  document.getElementById("cercha-auto-tag").textContent =
+    cerchaManual > 0 ? `Cercha manual: ${cerchaManual} cm` : `Cercha automática: ${cercha} cm`;
+
+  // ── 3. Actualizar path cards con medidas en cm ────────────────────────────
+  if (svgPathsRaw.length > 0) {
+    renderPathCards(svgPathsRaw, sf, cercha);
+  }
+
+  if (!svgMaxHeightPx || alturaActual <= 0) return;
+
+  // ── 4. Panel asesor ───────────────────────────────────────────────────────
+  let categoria;
+  if (alturaActual <= 20) categoria = "Pequeñas";
+  else if (alturaActual <= 40) categoria = "Medianas";
+  else categoria = "Grandes";
+
+  const compatibles = (catalog?.leds_canal || []).filter(
+    l => l.profundidad_min <= cercha && cercha <= l.profundidad_max
+  );
+
+  const ledsHtml = compatibles.length
+    ? compatibles.map(l => `
+        <div class="led-compat-item">
+          <div class="led-compat-name">${l.nombre}</div>
+          <div class="led-compat-spec">
+            ${l.ip} &nbsp;·&nbsp; ${l.watts_modulo} W/mod
+            ${l.lumenes ? `&nbsp;·&nbsp; ${l.lumenes} lm` : ""}
+            &nbsp;·&nbsp; $${(l.precio_modulo||0).toFixed(2)}/mod
+          </div>
+        </div>`).join("")
+    : `<div style="font-size:11px;opacity:.5">Abre el tab Catálogo para cargar LEDs</div>`;
+
+  document.getElementById("panel-asesor").style.display = "block";
+  document.getElementById("asesor-content").innerHTML = `
+    <div class="asesor-row">
+      <span class="asesor-label">Altura letra</span>
+      <span class="asesor-val">${alturaActual.toFixed(1)} cm</span>
+    </div>
+    <div class="asesor-row">
+      <span class="asesor-label">Cercha recomendada</span>
+      <span class="asesor-val ok">${cercha} cm</span>
+    </div>
+    <div class="asesor-row">
+      <span class="asesor-label">Categoría</span>
+      <span style="font-size:11px;font-weight:600">Letras ${categoria}</span>
+    </div>
+    <div style="margin-top:10px;font-size:10px;opacity:.5;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">
+      LEDs compatibles — cercha ${cercha} cm
+    </div>
+    ${ledsHtml}
+  `;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("altura-letra").addEventListener("input",  () => { actualizarAsesor(); _updateFormulaPreview(); });
+  document.getElementById("cercha-manual").addEventListener("input", () => actualizarAsesor());
+  document.getElementById("ancho-real").addEventListener("input",    () => { actualizarAsesor(); _updateFormulaPreview(); });
+  document.getElementById("tipo-multiplicador").addEventListener("change", _updateFormulaPreview);
+  // Sincronizar multiplicador con el tipo de construcción por defecto al cargar
+  onTipoConstruccionChange();
+});
+
+// ─── PREVIEW FÓRMULA EN TIEMPO REAL ──────────────────────────────────────────
+function _updateFormulaPreview() {
+  const el = document.getElementById("formula-preview");
+  if (!el) return;
+  const h  = parseFloat(document.getElementById("altura-letra").value) || 0;
+  const m  = catalog?.precios_base?.precio_cm || 10;
+  const selMult = document.getElementById("tipo-multiplicador");
+  const multVal = parseFloat(selMult?.options[selMult?.selectedIndex]?.text?.match(/×([\d.]+)/)?.[1]) || 1;
+  if (h > 0) {
+    el.textContent = `${h} cm × $${m}/cm × ×${multVal} = $${(h * m * multVal).toFixed(2)}`;
+    el.style.display = "block";
+  } else {
+    el.style.display = "none";
+  }
+}
+
+// ─── PDF / DOCUMENTOS CON CLIENTE/NOTAS OPCIONALES ──────────────────────────
+function _pdfParams() {
+  const cliente = (document.getElementById("pdf-cliente")?.value || "").trim();
+  const notas   = (document.getElementById("pdf-notas")?.value   || "").trim();
+  const p = new URLSearchParams();
+  if (cliente) p.set("cliente", cliente);
+  if (notas)   p.set("notas",   notas);
+  return p.toString();
+}
+
+function actualizarPdfUrl(quoteId) {
+  const qs  = _pdfParams();
+  const url = `/api/pdf/${quoteId}` + (qs ? `?${qs}` : "");
+  document.getElementById("btn-pdf-link").href = url;
+  return true;
+}
+
+function actualizarDocUrl(tipo, quoteId) {
+  const qs  = _pdfParams();
+  const url = `/api/${tipo}/${quoteId}` + (qs ? `?${qs}` : "");
+  document.getElementById(`btn-${tipo === "entrega" ? "ent" : tipo}-link`).href = url;
+  return true;
+}
+</script>
+</body>
+</html>

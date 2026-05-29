@@ -1,0 +1,476 @@
+{
+  "laminas": {
+    "acrilico_3mm": {
+      "nombre": "Acrílico 3mm",
+      "precio": 1200,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 3,
+      "uso": [
+        "cara_letra_pequena",
+        "cara_letra_mediana",
+        "cara_caja"
+      ]
+    },
+    "acrilico_6mm": {
+      "nombre": "Acrílico 6mm",
+      "precio": 1450,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 6,
+      "uso": [
+        "cara_letra_grande",
+        "cara_caja_premium"
+      ]
+    },
+    "pvc_3mm": {
+      "nombre": "PVC Espumado 3mm",
+      "precio": 380,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 3,
+      "uso": [
+        "fondo_letra_interior",
+        "señaletica"
+      ]
+    },
+    "pvc_6mm": {
+      "nombre": "PVC Espumado 6mm",
+      "precio": 520,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 6,
+      "uso": [
+        "fondo_letra_exterior",
+        "fondo_caja"
+      ]
+    },
+    "aluminio_cal22": {
+      "nombre": "Aluminio Calibre 22 (0.76mm)",
+      "precio": 650,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 0.76,
+      "uso": [
+        "cercha_letra_pequena"
+      ]
+    },
+    "aluminio_cal20": {
+      "nombre": "Aluminio Calibre 20 (0.9mm)",
+      "precio": 780,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 0.9,
+      "uso": [
+        "cercha_letra_mediana"
+      ]
+    },
+    "aluminio_cal18": {
+      "nombre": "Aluminio Calibre 18 (1.0mm)",
+      "precio": 950,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 1.0,
+      "uso": [
+        "cercha_letra_grande",
+        "estructura_caja"
+      ]
+    },
+    "alucobon_3mm": {
+      "nombre": "Alucobon / Dibond 3mm",
+      "precio": 1800,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 3,
+      "uso": [
+        "fondo_premium",
+        "cara_caja_exterior"
+      ]
+    }
+  },
+  "leds_canal": [
+    {
+      "id": "micro_sign",
+      "nombre": "Módulo LED Micro Sign",
+      "precio_tira_20": 396.72,
+      "precio_modulo": 9.92,
+      "watts_modulo": 0.24,
+      "lumenes": 25,
+      "ip": "IP65",
+      "profundidad_min": 2,
+      "profundidad_max": 6,
+      "tamano": "pequena",
+      "voltaje": 12,
+      "conectividad_serie": 40
+    },
+    {
+      "id": "mini_sign",
+      "nombre": "Módulo LED Mini Sign",
+      "precio_tira_20": 231.07,
+      "precio_modulo": 11.55,
+      "watts_modulo": 0.32,
+      "lumenes": 20,
+      "ip": "IP65",
+      "profundidad_min": 2,
+      "profundidad_max": 6,
+      "tamano": "pequena",
+      "voltaje": 12,
+      "conectividad_serie": 20
+    },
+    {
+      "id": "sign_03_rgb",
+      "nombre": "Módulo LED Sign 03 RGB",
+      "precio_tira_20": 423.17,
+      "precio_modulo": 21.16,
+      "watts_modulo": 0.65,
+      "lumenes": 20,
+      "ip": "IP65",
+      "profundidad_min": 3,
+      "profundidad_max": 8,
+      "tamano": "pequena",
+      "voltaje": 12,
+      "conectividad_serie": 20,
+      "color": "RGB"
+    },
+    {
+      "id": "signaflex_zigzag",
+      "nombre": "Tira LED Signaflex ZIG-ZAG",
+      "precio_tira_5m": 445.96,
+      "precio_modulo": 4.46,
+      "watts_modulo": 0.5,
+      "lumenes": 0,
+      "ip": "IP20",
+      "profundidad_min": 3,
+      "profundidad_max": 8,
+      "tamano": "pequena",
+      "voltaje": 24,
+      "conectividad_serie": 100,
+      "nota": "Solo interior. Tira 5 m / 500 cm. Corte cada 5 cm. Módulo = 5 cm."
+    },
+    {
+      "id": "sign_03",
+      "nombre": "Módulo LED Sign 03",
+      "precio_tira_20": 198.36,
+      "precio_modulo": 9.92,
+      "watts_modulo": 0.72,
+      "lumenes": 75,
+      "ip": "IP65",
+      "profundidad_min": 8,
+      "profundidad_max": 15,
+      "tamano": "mediana",
+      "voltaje": 12,
+      "conectividad_serie": 20
+    },
+    {
+      "id": "sign_02_high",
+      "nombre": "Módulo LED Sign 02 HIGH",
+      "precio_tira_20": 290.93,
+      "precio_modulo": 14.55,
+      "watts_modulo": 0.72,
+      "lumenes": 110,
+      "ip": "IP67",
+      "profundidad_min": 8,
+      "profundidad_max": 15,
+      "tamano": "mediana",
+      "voltaje": 12,
+      "conectividad_serie": 20
+    },
+    {
+      "id": "sign_03_green",
+      "nombre": "Módulo LED 12v Sign 03 Verde",
+      "precio_tira_20": 214.6,
+      "precio_modulo": 10.73,
+      "watts_modulo": 0.72,
+      "lumenes": 35,
+      "ip": "IP65",
+      "profundidad_min": 8,
+      "profundidad_max": 15,
+      "tamano": "mediana",
+      "voltaje": 12,
+      "conectividad_serie": 20,
+      "color": "Verde"
+    },
+    {
+      "id": "sign_03_red",
+      "nombre": "Módulo LED 12v Sign 03 Rojo",
+      "precio_tira_20": 214.6,
+      "precio_modulo": 10.73,
+      "watts_modulo": 0.72,
+      "lumenes": 15,
+      "ip": "IP65",
+      "profundidad_min": 8,
+      "profundidad_max": 15,
+      "tamano": "mediana",
+      "voltaje": 12,
+      "conectividad_serie": 20,
+      "color": "Rojo"
+    },
+    {
+      "id": "sign_03_blue",
+      "nombre": "Módulo LED 12v Sign 03 Azul",
+      "precio_tira_20": 214.6,
+      "precio_modulo": 10.73,
+      "watts_modulo": 0.72,
+      "lumenes": 10,
+      "ip": "IP65",
+      "profundidad_min": 8,
+      "profundidad_max": 15,
+      "tamano": "mediana",
+      "voltaje": 12,
+      "conectividad_serie": 20,
+      "color": "Azul"
+    },
+    {
+      "id": "sign_03_high",
+      "nombre": "Módulo LED Sign 03 HIGH",
+      "precio_tira_20": 370.04,
+      "precio_modulo": 18.51,
+      "watts_modulo": 1.08,
+      "lumenes": 165,
+      "ip": "IP66",
+      "profundidad_min": 8,
+      "profundidad_max": 15,
+      "tamano": "grande",
+      "voltaje": 12,
+      "conectividad_serie": 20
+    },
+    {
+      "id": "sign_03_pro",
+      "nombre": "Módulo LED Sign 03 PRO",
+      "precio_tira_20": 214.6,
+      "precio_modulo": 10.73,
+      "watts_modulo": 1.32,
+      "lumenes": 128,
+      "ip": "IP65",
+      "profundidad_min": 8,
+      "profundidad_max": 15,
+      "tamano": "grande",
+      "voltaje": 12,
+      "conectividad_serie": 20
+    },
+    {
+      "id": "sign_03_ac",
+      "nombre": "Módulo LED 110v Sign 03 AC",
+      "precio_tira_20": 713.4,
+      "precio_modulo": 35.67,
+      "watts_modulo": 2.0,
+      "lumenes": 150,
+      "ip": "IP65",
+      "profundidad_min": 6,
+      "profundidad_max": 15,
+      "tamano": "grande",
+      "voltaje": 110,
+      "conectividad_serie": 50
+    }
+  ],
+  "leds_caja": {
+    "interior": [
+      {
+        "id": "backlite_rgb",
+        "nombre": "Barra LED Backlite RGB",
+        "precio": 93.52,
+        "watts": 6,
+        "lumenes": null,
+        "ip": "IP20",
+        "profundidad_min": 6,
+        "profundidad_max": 18,
+        "vistas": 1
+      },
+      {
+        "id": "backlite",
+        "nombre": "Barra LED Backlite",
+        "precio_serie_10": 551.0,
+        "precio": 55.1,
+        "watts": 5,
+        "lumenes": 600,
+        "ip": "IP33",
+        "profundidad_min": 6,
+        "profundidad_max": 20,
+        "vistas": 1
+      },
+      {
+        "id": "signaflex_cct",
+        "nombre": "Tira LED Signaflex CCT",
+        "precio_tira_5m": 662.36,
+        "precio": 662.36,
+        "watts": 50,
+        "lumenes": 5000,
+        "ip": "IP20",
+        "profundidad_min": 6,
+        "profundidad_max": 20,
+        "vistas": 1,
+        "voltaje": 24,
+        "nota": "Solo interior. Tira 5 m. CCT 2700-13000 K ajustable."
+      },
+      {
+        "id": "edgelite_42",
+        "nombre": "Barra LED Edgelite Osram 42",
+        "precio": 375.93,
+        "watts": 0.15,
+        "lumenes": 1650,
+        "ip": "IP33",
+        "profundidad_min": 10,
+        "profundidad_max": 40,
+        "vistas": 1
+      },
+      {
+        "id": "edgelite_21",
+        "nombre": "Barra LED Edgelite Osram 21",
+        "precio": 250.62,
+        "watts": 7.5,
+        "lumenes": 750,
+        "ip": "IP33",
+        "profundidad_min": 10,
+        "profundidad_max": 40,
+        "vistas": 1
+      }
+    ],
+    "exterior": [
+      {
+        "id": "eco_edgelite_56",
+        "nombre": "Barra LED Eco Edgelite 56",
+        "precio": 399.9,
+        "watts": 14,
+        "lumenes": 1260,
+        "ip": "IP65",
+        "profundidad_min": 12,
+        "profundidad_max": 40,
+        "vistas": 2
+      },
+      {
+        "id": "eco_edgelite_24",
+        "nombre": "Barra LED Eco Edgelite 24",
+        "precio": 196.25,
+        "watts": 6,
+        "lumenes": 540,
+        "ip": "IP65",
+        "profundidad_min": 12,
+        "profundidad_max": 20,
+        "vistas": 1
+      },
+      {
+        "id": "sign_edge_01",
+        "nombre": "Módulo LED Sign Edge 01",
+        "precio": 330.6,
+        "precio_modulo": 16.53,
+        "watts": 1.32,
+        "lumenes": 125,
+        "ip": "IP67",
+        "profundidad_min": 8,
+        "profundidad_max": 15,
+        "vistas": 1
+      }
+    ]
+  },
+  "fuentes": [
+    {
+      "nombre": "Fuente Exterior 60W",
+      "watts": 60,
+      "precio": 273.1,
+      "ip": "IP68",
+      "uso": "exterior",
+      "voltaje": 12
+    },
+    {
+      "nombre": "Fuente Exterior 100W",
+      "watts": 100,
+      "precio": 438.82,
+      "ip": "IP68",
+      "uso": "exterior",
+      "voltaje": 12
+    },
+    {
+      "nombre": "Fuente Exterior 150W",
+      "watts": 150,
+      "precio": 507.08,
+      "ip": "IP68",
+      "uso": "exterior",
+      "voltaje": 12
+    },
+    {
+      "nombre": "Fuente UL 60W",
+      "watts": 60,
+      "precio": 722.52,
+      "ip": "IP67",
+      "uso": "ambos",
+      "voltaje": 12
+    },
+    {
+      "nombre": "Fuente UL 100W",
+      "watts": 100,
+      "precio": 828.58,
+      "ip": "IP67",
+      "uso": "ambos",
+      "voltaje": 12
+    },
+    {
+      "nombre": "Fuente UL 150W",
+      "watts": 150,
+      "precio": 921.38,
+      "ip": "IP67",
+      "uso": "ambos",
+      "voltaje": 12
+    },
+    {
+      "nombre": "Fuente SLIM Interior 60W",
+      "watts": 60,
+      "precio": 689.38,
+      "ip": "IP20",
+      "uso": "interior",
+      "voltaje": "12/24"
+    },
+    {
+      "nombre": "Fuente SLIM Interior 100W",
+      "watts": 100,
+      "precio": 775.54,
+      "ip": "IP20",
+      "uso": "interior",
+      "voltaje": "12/24"
+    },
+    {
+      "nombre": "Fuente SLIM Interior 200W",
+      "watts": 200,
+      "precio": 1073.82,
+      "ip": "IP20",
+      "uso": "interior",
+      "voltaje": "12/24"
+    }
+  ],
+  "pegamentos": {
+    "aluminio|aluminio": {
+      "nombre": "Soudaflex 40FC",
+      "precio_aprox": 180,
+      "metros_por_envase": 3
+    },
+    "aluminio|acrilico": {
+      "nombre": "Silicón Transparente Arquitectónico",
+      "precio_aprox": 90,
+      "metros_por_envase": 5
+    },
+    "acrilico|acrilico": {
+      "nombre": "Cloruro de Metileno",
+      "precio_aprox": 60,
+      "metros_por_envase": 8
+    },
+    "acrilico|alucobon": {
+      "nombre": "Silicón Transparente Arquitectónico",
+      "precio_aprox": 90,
+      "metros_por_envase": 5
+    },
+    "alucobon|alucobon": {
+      "nombre": "Soudaflex 40FC",
+      "precio_aprox": 180,
+      "metros_por_envase": 3
+    },
+    "aluminio|pvc": {
+      "nombre": "Silicón Transparente Arquitectónico",
+      "precio_aprox": 90,
+      "metros_por_envase": 5
+    },
+    "acrilico|pvc": {
+      "nombre": "Silicón Transparente Arquitectónico",
+      "precio_aprox": 90,
+      "metros_por_envase": 5
+    }
+  }
+}

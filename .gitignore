@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Archivos temporales generados por la app
+tmp/
+server.log
+
+# IDE
+.vs/
+.vscode/
+*.suo
+*.user
+
+# Imágenes de referencia (no forman parte del código)
+img1.png
+img2.png
+img3.png
+
+# Excel original (datos ya migrados a catalog_data.py)
+CATALOGO LETRAS.xlsx
