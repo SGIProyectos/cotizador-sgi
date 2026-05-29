@@ -691,6 +691,7 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
         <button class="cat-subbtn" onclick="showCatSection('fuentes',this)">⚡ Fuentes</button>
         <button class="cat-subbtn" onclick="showCatSection('pegamentos',this)">🔩 Pegamentos</button>
         <button class="cat-subbtn" onclick="showCatSection('precios_base',this)">💰 Precios Base</button>
+        <button class="cat-subbtn" onclick="showCatSection('silvatrim',this)">🔲 Silvatrim</button>
         <button class="cat-subbtn" onclick="showCatSection('vinilos',this)">🎨 Vinilos</button>
       </div>
 
@@ -740,6 +741,15 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
           <button class="btn-add" onclick="openAddModal('pegamento')">+ Agregar pegamento</button>
         </div>
         <div id="tbl-pegamentos-wrap"></div>
+      </div>
+
+      <!-- SILVATRIM -->
+      <div class="cat-section" id="cat-silvatrim">
+        <div class="cat-section-hdr">
+          <p>Moldura de acabado para letras de canal — precio por metro lineal</p>
+          <button class="btn-add" onclick="openAddModal('silvatrim')">+ Agregar Silvatrim</button>
+        </div>
+        <div id="tbl-silvatrim-wrap"></div>
       </div>
 
       <!-- VINILOS -->
@@ -1605,6 +1615,30 @@ function showCatSection(sec, btn) {
   document.getElementById("cat-"+sec).classList.add("active");
 }
 
+function renderSilvatrim() {
+  const rows = catalog.silvatrim || [];
+  let html = `<table class="cat-table"><thead><tr>
+    <th>#</th><th>Nombre</th><th>Ancho</th><th>$/ml</th><th>Rollo</th><th>$/rollo</th><th>Uso recomendado</th><th></th>
+  </tr></thead><tbody>`;
+  rows.forEach((sv, i) => {
+    html += `<tr>
+      <td>${i+1}</td>
+      <td><strong>${sv.nombre}</strong></td>
+      <td>${sv.ancho_mm || '—'} mm (${sv.ancho_pulg || '?'}")</td>
+      <td class="price-cell">$${(sv.precio_ml||0).toFixed(2)}</td>
+      <td>${sv.metros_rollo||45.7} m</td>
+      <td class="price-cell">$${(sv.precio_rollo||0).toFixed(0)}</td>
+      <td style="font-size:11px;color:#8a94a6">${sv.uso_recomendado||''}</td>
+      <td class="actions">
+        <button class="btn-edit" onclick="openEditModal('silvatrim',${i})">Editar</button>
+        <button class="btn-del"  onclick="deleteItem('silvatrim',${i})">✕</button>
+      </td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("tbl-silvatrim-wrap").innerHTML = html;
+}
+
 function renderVinilos() {
   const rows = (catalog.vinilos || []);
   let html = `<table class="cat-table"><thead><tr>
@@ -1634,7 +1668,7 @@ function renderVinilos() {
 function renderAllCatalog() {
   if (!catalog) return;
   renderLaminas(); renderLedsCanal(); renderLedsCaja();
-  renderFuentes(); renderPegamentos(); renderPreciosBase(); renderVinilos();
+  renderFuentes(); renderPegamentos(); renderPreciosBase(); renderSilvatrim(); renderVinilos();
   updateMultiplicadoresSelect();
 }
 
@@ -1908,6 +1942,10 @@ function openEditModal(type, key) {
     const [m1,m2] = key.split("|");
     modalCtx = {type, key, isNew:false};
     showModal(title, pegamentoFields(item, m1, m2, true));
+  } else if (type === "silvatrim") {
+    item = {...(catalog.silvatrim||[])[key]}; title = "Editar Silvatrim #"+(key+1);
+    modalCtx = {type, key, isNew:false};
+    showModal(title, silvatrimFields(item));
   } else if (type === "vinil") {
     item = {...(catalog.vinilos||[])[key]}; title = "Editar vinil #"+(key+1);
     modalCtx = {type, key, isNew:false};
@@ -1923,6 +1961,7 @@ function openAddModal(type) {
     led_caja: {nombre:"", precio:0, watts:0, ip:"IP65", profundidad_min:6, profundidad_max:40, vistas:1, uso:"exterior"},
     fuente: {nombre:"", watts:60, precio:0, ip:"IP68", uso:"exterior", voltaje:12},
     pegamento: {nombre:"", precio_aprox:90},
+    silvatrim: {id:"", nombre:"", ancho_pulg:0.75, ancho_mm:19, precio_rollo:1900, metros_rollo:45.7, precio_ml:41.58},
     vinil: {id:"", nombre:"", precio_ml:58, ancho_rollo_m:1.22, acabado:"opaco", colores:[]},
   };
   const baseType = type.replace("_int","").replace("_ext","");
@@ -1932,6 +1971,7 @@ function openAddModal(type) {
   else if (type==="led_caja") showModal("Nuevo LED Caja", ledCajaFields({...item, uso:"exterior"}));
   else if (type==="fuente") showModal("Nueva fuente de poder", fuenteFields(item));
   else if (type==="pegamento") showModal("Nuevo pegamento", pegamentoFields(item,"","",false));
+  else if (type==="silvatrim") showModal("Nuevo Silvatrim", silvatrimFields(item));
   else if (type==="vinil") showModal("Nuevo grupo de vinil", vinilFields(item));
 }
 
@@ -2016,6 +2056,18 @@ function pegamentoFields(m, m1, m2, readonly) {
   </div>`;
 }
 
+function silvatrimFields(m) {
+  return `<div class="modal-grid2">
+    ${fld("id","ID único", m.id||"")}
+    ${fld("nombre","Nombre", m.nombre||"")}
+    ${fld("ancho_pulg","Ancho (pulgadas)", m.ancho_pulg||'3/4')}
+    ${fld("ancho_mm","Ancho (mm)", m.ancho_mm||19,"number","1")}
+    ${fld("precio_rollo","Precio por rollo ($)", m.precio_rollo||1900,"number","0.01")}
+    ${fld("metros_rollo","Metros por rollo", m.metros_rollo||45.7,"number","0.1")}
+    ${fld("precio_ml","Precio por metro lineal ($)", m.precio_ml||41.58,"number","0.01")}
+  </div>`;
+}
+
 function vinilFields(m) {
   const coloresStr = (m.colores || []).join(", ");
   return `<div class="modal-grid2">
@@ -2078,6 +2130,13 @@ function saveModal() {
     if (!isNew) delete catalog.pegamentos[key];
     catalog.pegamentos[newKey] = {nombre: vals.nombre, precio_aprox: vals.precio_aprox};
     renderPegamentos();
+  } else if (type === "silvatrim") {
+    const vals = getModalValues(["id","nombre","ancho_pulg","ancho_mm","precio_rollo","metros_rollo","precio_ml"]);
+    vals.precio_ml = parseFloat(vals.precio_ml) || parseFloat((vals.precio_rollo / vals.metros_rollo).toFixed(2));
+    if (!catalog.silvatrim) catalog.silvatrim = [];
+    if (isNew) catalog.silvatrim.push(vals);
+    else catalog.silvatrim[key] = {...catalog.silvatrim[key], ...vals};
+    renderSilvatrim();
   } else if (type === "vinil") {
     const vals = getModalValues(["id","nombre","precio_ml","ancho_rollo_m","acabado"]);
     const coloresRaw = document.getElementById("f-colores")?.value || "";
@@ -2099,6 +2158,7 @@ function deleteItem(type, key) {
   else if (type === "led_canal") { catalog.leds_canal.splice(key,1); renderLedsCanal(); }
   else if (type === "fuente") { catalog.fuentes.splice(key,1); renderFuentes(); }
   else if (type === "pegamento") { delete catalog.pegamentos[key]; renderPegamentos(); }
+  else if (type === "silvatrim") { (catalog.silvatrim||[]).splice(key,1); renderSilvatrim(); }
   else if (type === "vinil") { (catalog.vinilos||[]).splice(key,1); renderVinilos(); }
   else if (type.startsWith("led_caja_")) {
     const side = type.replace("led_caja_","");

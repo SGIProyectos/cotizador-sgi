@@ -445,6 +445,67 @@ NEON_FLEX = {
     },
 }
 
+# ─── SILVATRIM (moldura de acabado para letras de canal) ─────────────────────
+# precio_ml: precio por metro lineal   |   metros_rollo: longitud del rollo
+# Ancho = cara visible del trim (la que tapa el canto de la cercha)
+SILVATRIM = [
+    {
+        "id": "silvatrim_34",
+        "nombre": "Silvatrim Gemini 3/4\"",
+        "ancho_pulg": 0.75,
+        "ancho_mm": 19,
+        "precio_rollo": 1900,
+        "metros_rollo": 45.7,
+        "precio_ml": 41.58,
+        "colores": ["Blanco", "Negro", "Rojo", "Azul", "Plata Metálico", "Plata Cepillado", "Dorado"],
+        "uso_recomendado": "Letras con cercha hasta 5 cm de profundidad",
+    },
+    {
+        "id": "silvatrim_1",
+        "nombre": "Silvatrim Gemini 1\"",
+        "ancho_pulg": 1.0,
+        "ancho_mm": 25,
+        "precio_rollo": 2089,
+        "metros_rollo": 45.7,
+        "precio_ml": 45.71,
+        "colores": ["Blanco", "Negro", "Rojo", "Azul", "Plata Metálico", "Plata Cepillado", "Dorado"],
+        "uso_recomendado": "Letras con cercha de 5–12 cm de profundidad",
+    },
+    {
+        "id": "silvatrim_2",
+        "nombre": "Silvatrim Gemini 2\"",
+        "ancho_pulg": 2.0,
+        "ancho_mm": 50,
+        "precio_rollo": 2800,
+        "metros_rollo": 45.7,
+        "precio_ml": 61.27,
+        "colores": ["Blanco", "Negro", "Plata Metálico"],
+        "uso_recomendado": "Letras grandes con cercha mayor a 12 cm",
+    },
+    {
+        "id": "silvatrim_gen",
+        "nombre": "Silvatrim Genérico 1\"",
+        "ancho_pulg": 1.0,
+        "ancho_mm": 25,
+        "precio_rollo": 1056,
+        "metros_rollo": 33.0,
+        "precio_ml": 32.0,
+        "colores": ["Blanco", "Negro"],
+        "uso_recomendado": "Uso interior o presupuesto ajustado",
+    },
+]
+
+
+def silvatrim_recomendado(cercha_cm: float) -> dict:
+    """Selecciona el ancho de Silvatrim según profundidad de cercha."""
+    if cercha_cm <= 5:
+        return next(s for s in SILVATRIM if s["id"] == "silvatrim_34")
+    elif cercha_cm <= 12:
+        return next(s for s in SILVATRIM if s["id"] == "silvatrim_1")
+    else:
+        return next(s for s in SILVATRIM if s["id"] == "silvatrim_2")
+
+
 # ─── FUENTES DE PODER ────────────────────────────────────────────────────────
 FUENTES = [
     {"nombre": "Fuente Exterior 60W",   "watts": 60,  "precio": 273.10,  "ip": "IP68", "uso": "exterior", "voltaje": 12},
@@ -700,6 +761,7 @@ def catalog_to_dict() -> dict:
             "multiplicadores": dict(PRECIOS_BASE["multiplicadores"]),
         },
         "precios_caja_m2": dict(PRECIOS_CAJA_M2),
+        "silvatrim": SILVATRIM,
         "vinilos": VINILOS,
         "tipos_construccion": TIPOS_CONSTRUCCION,
         "gruas": GRUAS,
@@ -745,6 +807,9 @@ def catalog_apply(raw: dict):
     if "precios_caja_m2" in raw:
         PRECIOS_CAJA_M2.clear()
         PRECIOS_CAJA_M2.update({k: float(v) for k, v in raw["precios_caja_m2"].items()})
+    if "silvatrim" in raw:
+        SILVATRIM.clear()
+        SILVATRIM.extend(raw["silvatrim"])
     if "vinilos" in raw:
         VINILOS.clear()
         VINILOS.extend(raw["vinilos"])
@@ -801,6 +866,15 @@ def _catalog_merge(raw: dict):
             PRECIOS_BASE["multiplicadores"].update(pb["multiplicadores"])
     if "precios_caja_m2" in raw:
         PRECIOS_CAJA_M2.update({k: float(v) for k, v in raw["precios_caja_m2"].items()})
+    if "silvatrim" in raw:
+        raw_by_id = {s["id"]: s for s in raw["silvatrim"] if "id" in s}
+        for sv in SILVATRIM:
+            if sv.get("id") in raw_by_id:
+                sv.update(raw_by_id[sv["id"]])
+        existing = {s.get("id") for s in SILVATRIM}
+        for sv in raw["silvatrim"]:
+            if sv.get("id") not in existing:
+                SILVATRIM.append(sv)
     if "vinilos" in raw:
         raw_by_id = {v["id"]: v for v in raw["vinilos"] if "id" in v}
         for vinyl in VINILOS:

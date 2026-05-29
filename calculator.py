@@ -9,11 +9,11 @@ from svgpathtools import parse_path, svg2paths2
 
 from catalog_data import (
     LAMINAS, LEDS_CANAL, LEDS_CAJA, FUENTES, PEGAMENTOS,
-    PRECIOS_BASE, PRECIOS_CAJA_M2,
+    PRECIOS_BASE, PRECIOS_CAJA_M2, SILVATRIM,
     TIPOS_CONSTRUCCION, DISTANCIADORES,
     cercha_recomendada_cm, led_recomendado,
     material_cercha, material_cara, fuente_optima,
-    recomendar_tipo_construccion,
+    recomendar_tipo_construccion, silvatrim_recomendado,
 )
 
 
@@ -88,6 +88,10 @@ class QuoteResult:
     precio_sin_ajuste: float = 0.0      # precio fórmula antes del ajuste %
     ajuste_pct: float = 0.0             # % de ajuste aplicado
     tipo_construccion: str = "cajon_luz"
+    # Silvatrim
+    silvatrim: dict = field(default_factory=dict)
+    metros_silvatrim: float = 0.0
+    costo_silvatrim: float = 0.0
     # Mano de obra e instalación
     mo_total: float = 0.0
     inst_activa: bool = False
@@ -397,8 +401,14 @@ def cotizar_letras(
     envases   = max(0.15, metros_peg / pegamento.get("metros_por_envase", 5))
     c_peg     = round(envases * pegamento["precio_aprox"], 2)
 
+    # ── SILVATRIM ─────────────────────────────────────────────────────────────
+    sv         = silvatrim_recomendado(cercha_cm)
+    metros_sv  = round(perimetro_total / 100, 2)   # cm → metros
+    c_silvatrim = round(metros_sv * sv["precio_ml"], 2)
+    desglose_sv = f"Silvatrim {sv['nombre']} · {metros_sv:.1f} m × ${sv['precio_ml']:.2f}/m"
+
     # ── TOTALES ───────────────────────────────────────────────────────────────
-    subtotal = c_cara + c_cercha + c_fondo + c_led + c_fuente + c_dist + c_peg
+    subtotal = c_cara + c_cercha + c_fondo + c_led + c_fuente + c_dist + c_peg + c_silvatrim
     iva      = subtotal * 0.16
     total    = subtotal + iva
     venta    = total / (1 - margen_ganancia)
@@ -424,6 +434,7 @@ def cotizar_letras(
     if config["distanciadores"]:
         desglose.append({"concepto": f"{DISTANCIADORES['nombre']} × {n_letras_dist} letras", "costo": c_dist})
     desglose.append({"concepto": f"Pegamento {pegamento['nombre']} · {metros_peg:.1f}m ({envases:.2f} env.)", "costo": c_peg})
+    desglose.append({"concepto": desglose_sv, "costo": c_silvatrim})
 
     # ── Lógica de cotización (hoja COTIZANDO del Excel) ─────────────────────────
     # precio_letra = altura_real_cm × precio_cm × multiplicador
@@ -503,6 +514,9 @@ def cotizar_letras(
         precio_sin_ajuste=precio_formula_total,
         ajuste_pct=ajuste_pct,
         tipo_construccion=tipo_construccion,
+        silvatrim=sv,
+        metros_silvatrim=metros_sv,
+        costo_silvatrim=c_silvatrim,
         desglose=desglose,
         desglose_letras=desglose_letras,
     )
