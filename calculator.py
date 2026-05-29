@@ -636,23 +636,28 @@ def cotizar_caja(
     svg_data: SVGData,
     real_width_cm: float,
     profundidad_cm: float,
-    tipo_cara: str = "lona",       # "lona" | "acrilico" | "acrilico_2vistas"
+    tipo_cara: str = "lona",       # "lona" | "acrilico" | "acrilico_2vistas" | "vinil_corte"
+    base_cara_vinil: str = "lona", # base cuando tipo_cara == "vinil_corte": "lona" | "acrilico"
     uso: str = "exterior",
     vistas: int = 1,
     margen_ganancia: float = 0.35,
 ) -> QuoteResult:
 
     svg_data = apply_scale(svg_data, real_width_cm)
+    sf = svg_data.scale_factor
 
     # El path más grande = contorno de la caja
     if svg_data.paths:
         paths_sorted = sorted(svg_data.paths, key=lambda p: p.area_cm2, reverse=True)
         caja = paths_sorted[0]
+        caja_w_cm = caja.bbox["w"] * sf
+        caja_h_cm = caja.bbox["h"] * sf
     else:
         # Si no hay paths, usar el viewBox completo
-        real_h = svg_data.viewbox_h * svg_data.scale_factor
-        caja_area = real_width_cm * real_h
-        caja_perim = 2 * (real_width_cm + real_h)
+        caja_w_cm = real_width_cm
+        caja_h_cm = svg_data.viewbox_h * sf
+        caja_area = caja_w_cm * caja_h_cm
+        caja_perim = 2 * (caja_w_cm + caja_h_cm)
 
         class _Fake:
             area_cm2 = caja_area
@@ -662,12 +667,20 @@ def cotizar_caja(
     area_m2    = caja.area_cm2 / 10000
     perimetro  = caja.perimeter_cm
 
-    # Precio por tipo de cara
-    precio_m2 = PRECIOS_CAJA_M2.get(
-        "acrilico_2vistas" if vistas == 2 else tipo_cara,
-        PRECIOS_CAJA_M2["lona"]
-    )
-    c_cara = area_m2 * precio_m2
+    # Costo de cara
+    if tipo_cara == "vinil_corte":
+        precio_base_m2 = PRECIOS_CAJA_M2.get(base_cara_vinil, PRECIOS_CAJA_M2["lona"])
+        c_cara_base = round(area_m2 * precio_base_m2, 2)
+        vinil_w_cm = max(122.0, caja_w_cm)          # mínimo un ancho de rollo (1.22 m)
+        vinil_area_m2 = round((vinil_w_cm * caja_h_cm) / 10000, 4)
+        c_vinil = round(vinil_area_m2 * PRECIOS_CAJA_M2["vinil_corte"], 2)
+        c_cara  = round(c_cara_base + c_vinil, 2)
+    else:
+        precio_m2 = PRECIOS_CAJA_M2.get(
+            "acrilico_2vistas" if vistas == 2 else tipo_cara,
+            PRECIOS_CAJA_M2["lona"]
+        )
+        c_cara = round(area_m2 * precio_m2, 2)
 
     # Estructura (aluminio cal 18 para el cajón)
     mat_struct = LAMINAS["aluminio_cal18"]
@@ -708,14 +721,28 @@ def cotizar_caja(
     total    = subtotal + iva
     venta    = total / (1 - margen_ganancia)
 
-    desglose = [
-        {"concepto": f"Cara ({tipo_cara}) {area_m2:.2f} m²", "costo": c_cara},
+    if tipo_cara == "vinil_corte":
+        desglose = [
+            {"concepto": f"Base cara ({base_cara_vinil}) {area_m2:.2f} m²", "costo": c_cara_base},
+            {"concepto": f"Vinil de corte {vinil_w_cm:.0f}×{caja_h_cm:.0f} cm ({vinil_area_m2:.2f} m²)", "costo": c_vinil},
+        ]
+    else:
+        desglose = [
+            {"concepto": f"Cara ({tipo_cara}) {area_m2:.2f} m²", "costo": c_cara},
+        ]
+
+    desglose += [
         {"concepto": f"Estructura cajón ({mat_struct['nombre']}) × {lam_struct} lám.", "costo": c_struct},
         {"concepto": f"Fondo ({mat_fondo['nombre']}) × {lam_fondo} lám.", "costo": c_fondo},
         {"concepto": f"{led['nombre']} × {tiras} tiras", "costo": c_led},
         {"concepto": fuente["nombre"], "costo": c_fuente},
         {"concepto": f"Pegamento: {pegamento['nombre']}", "costo": c_peg},
     ]
+
+    mat_cara_info = {"nombre": tipo_cara, "precio": c_cara}
+    if tipo_cara == "vinil_corte":
+        mat_cara_info["base"] = base_cara_vinil
+        mat_cara_info["vinil_area_m2"] = vinil_area_m2
 
     return QuoteResult(
         tipo="caja_luz",
@@ -724,7 +751,7 @@ def cotizar_caja(
         perimetro_total_cm=perimetro,
         cercha_altura_cm=profundidad_cm,
         cercha_area_cm2=area_struct,
-        material_cara={"nombre": tipo_cara, "precio": precio_m2},
+        material_cara=mat_cara_info,
         material_cercha=mat_struct,
         material_fondo=mat_fondo,
         laminas_cara=1,
