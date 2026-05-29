@@ -278,6 +278,132 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
 .btn-modal-can { background: var(--gris); color: var(--texto); }
 .btn-modal-ok:hover, .btn-modal-can:hover { filter: brightness(.97); }
 
+/* ── MODAL CONFIGURADOR ── */
+#cfg-overlay {
+  position: fixed; inset: 0; background: rgba(13,24,40,.62);
+  display: none; align-items: center; justify-content: center;
+  z-index: 1100; padding: 16px;
+}
+#cfg-overlay.open { display: flex; }
+.cfg-modal {
+  background: #fff; border-radius: 16px; width: 560px; max-width: 100%;
+  max-height: 92vh; overflow-y: auto;
+  box-shadow: 0 28px 80px rgba(0,0,0,.38);
+  display: flex; flex-direction: column;
+  scrollbar-width: thin;
+}
+.cfg-header {
+  padding: 20px 24px 14px; border-bottom: 1px solid var(--borde);
+  display: flex; justify-content: space-between; align-items: flex-start;
+  position: sticky; top: 0; background: #fff; z-index: 2;
+  border-radius: 16px 16px 0 0;
+}
+.cfg-header-title { font-size: 17px; font-weight: 700; color: var(--azul); }
+.cfg-header-sub { font-size: 11px; color: #8a94a6; margin-top: 3px; }
+.cfg-close {
+  width: 30px; height: 30px; border-radius: 50%; border: none;
+  background: var(--gris); color: #555; font-size: 15px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-left: 12px; transition: .15s;
+}
+.cfg-close:hover { background: #d9dfe8; }
+.cfg-body { padding: 20px 24px; flex: 1; }
+.cfg-step { margin-bottom: 22px; }
+.cfg-step-label {
+  font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--azul); margin-bottom: 11px;
+  display: flex; align-items: center; gap: 8px;
+}
+.cfg-step-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--naranja); color: #fff; font-size: 10px; font-weight: 800;
+  flex-shrink: 0;
+}
+.cfg-cards {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.cfg-cards-3 {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+}
+.cfg-card {
+  border: 2px solid var(--borde); border-radius: 10px; padding: 13px 11px 11px;
+  cursor: pointer; transition: .16s; background: #fff; text-align: center;
+  user-select: none;
+}
+.cfg-card:hover { border-color: #b0c4d8; background: #f8fafc; }
+.cfg-card.active {
+  border-color: var(--naranja); background: #fff8f2;
+  box-shadow: 0 0 0 3px rgba(232,124,42,.13);
+}
+.cfg-card-icon { font-size: 26px; margin-bottom: 5px; line-height: 1.1; }
+.cfg-card-name { font-size: 12.5px; font-weight: 700; color: var(--azul); margin-bottom: 3px; }
+.cfg-card-desc { font-size: 10.5px; color: #8a94a6; line-height: 1.4; }
+.cfg-rec-box {
+  background: linear-gradient(135deg,#eef5ff,#e4effd);
+  border: 1px solid #bcd4f5; border-radius: 9px;
+  padding: 11px 14px; margin-bottom: 11px;
+}
+.cfg-rec-title { font-weight: 700; color: var(--azul); font-size: 13px; }
+.cfg-rec-status { font-size: 12px; font-weight: 600; margin-top: 4px; }
+.cfg-slider-row {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 9px;
+}
+.cfg-slider-row input[type=range] {
+  flex: 1; accent-color: var(--naranja); cursor: pointer;
+}
+.cfg-slider-lbl { font-size: 11px; color: #9aa3b2; min-width: 30px; }
+.cfg-slider-val {
+  font-family: var(--mono); font-weight: 700; font-size: 19px;
+  color: var(--naranja); min-width: 54px; text-align: right;
+}
+.cfg-inline { display: flex; align-items: center; gap: 14px; }
+.cfg-inline label { font-size: 12px; color: #74808f; font-weight: 600; flex: 1; }
+.cfg-inline input[type=number] {
+  width: 88px; padding: 8px 10px; border: 2px solid var(--borde);
+  border-radius: 8px; font-size: 17px; font-weight: 700; font-family: var(--mono);
+  color: var(--azul); text-align: center; transition: .15s; -moz-appearance: textfield;
+}
+.cfg-inline input[type=number]::-webkit-outer-spin-button,
+.cfg-inline input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+.cfg-inline input:focus { outline: none; border-color: var(--naranja); box-shadow: 0 0 0 3px rgba(232,124,42,.14); }
+.cfg-led-list { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.cfg-led-item {
+  display: flex; align-items: center; gap: 9px; padding: 8px 10px;
+  border-radius: 8px; font-size: 12px; border: 1px solid var(--borde);
+  background: #f8fafc;
+}
+.cfg-led-item.best { background: #f0fdf4; border-color: #86efac; }
+.cfg-led-badge {
+  font-size: 9.5px; padding: 2px 7px; border-radius: 10px; font-weight: 800;
+  background: var(--azul); color: #fff; white-space: nowrap; flex-shrink: 0;
+}
+.cfg-led-item.best .cfg-led-badge { background: #16a34a; }
+.cfg-led-info { flex: 1; min-width: 0; }
+.cfg-led-name { font-weight: 700; color: var(--texto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cfg-led-spec { font-size: 10px; color: #8a94a6; font-family: var(--mono); margin-top: 1px; }
+.cfg-led-price { font-family: var(--mono); font-weight: 700; color: var(--azul); font-size: 12px; white-space: nowrap; }
+.cfg-divider { height: 1px; background: var(--borde); margin: 18px 0; }
+.cfg-footer {
+  padding: 14px 24px; border-top: 1px solid var(--borde);
+  display: flex; gap: 10px; justify-content: flex-end;
+  position: sticky; bottom: 0; background: #fff;
+  border-radius: 0 0 16px 16px;
+}
+.cfg-btn-cancel {
+  padding: 10px 18px; border-radius: 8px; border: none;
+  background: var(--gris); color: var(--texto); font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: .15s;
+}
+.cfg-btn-cancel:hover { background: #d9dfe8; }
+.cfg-btn-ok {
+  padding: 10px 22px; border-radius: 8px; border: none;
+  background: var(--naranja); color: #fff; font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: .15s;
+  box-shadow: 0 4px 14px -4px rgba(232,124,42,.55);
+}
+.cfg-btn-ok:hover { filter: brightness(1.07); }
+
 </style>
 </head>
 <body>
@@ -603,6 +729,202 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
   </div>
 </div>
 
+<!-- ══════════════════ MODAL CONFIGURADOR ══════════════════ -->
+<div id="cfg-overlay">
+  <div class="cfg-modal">
+    <div class="cfg-header">
+      <div>
+        <div class="cfg-header-title" id="cfg-title">Configurar anuncio</div>
+        <div class="cfg-header-sub" id="cfg-sub">Responde unas preguntas rápidas y el sistema calcula todo lo demás</div>
+      </div>
+      <button class="cfg-close" onclick="closeCfgModal()" title="Cerrar">✕</button>
+    </div>
+
+    <div class="cfg-body">
+
+      <!-- ══ SECCIÓN LETRAS 3D ══ -->
+      <div id="cfg-sec-letras">
+
+        <div class="cfg-step">
+          <div class="cfg-step-label"><span class="cfg-step-num">1</span>¿Cómo son las letras?</div>
+          <div class="cfg-cards" id="cfg-tipo-cards">
+            <div class="cfg-card active" data-val="cajon_luz" onclick="selectCfgCard(this,'cfg-tipo-cards');renderCfgCerchaRec()">
+              <div class="cfg-card-icon">🔡</div>
+              <div class="cfg-card-name">Cajón iluminado</div>
+              <div class="cfg-card-desc">Frente acrílico · luz sale por el frente · más común</div>
+            </div>
+            <div class="cfg-card" data-val="retro_halo" onclick="selectCfgCard(this,'cfg-tipo-cards');renderCfgCerchaRec()">
+              <div class="cfg-card-icon">✨</div>
+              <div class="cfg-card-name">Halo / Retroiluminada</div>
+              <div class="cfg-card-desc">Frente aluminio opaco · aureola de luz por detrás</div>
+            </div>
+            <div class="cfg-card" data-val="sin_luz" onclick="selectCfgCard(this,'cfg-tipo-cards');renderCfgCerchaRec()">
+              <div class="cfg-card-icon">⬛</div>
+              <div class="cfg-card-name">Sin luz</div>
+              <div class="cfg-card-desc">Letra sólida de aluminio · sin iluminación</div>
+            </div>
+            <div class="cfg-card" data-val="abierta_luz" onclick="selectCfgCard(this,'cfg-tipo-cards');renderCfgCerchaRec()">
+              <div class="cfg-card-icon">💡</div>
+              <div class="cfg-card-name">Estructura abierta</div>
+              <div class="cfg-card-desc">Sin frente · cercha visible · LEDs expuestos</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-step">
+          <div class="cfg-step-label"><span class="cfg-step-num">2</span>¿Cuánto mide la letra más alta?</div>
+          <div class="cfg-inline">
+            <label>Altura real de la letra (cm)</label>
+            <input type="number" id="cfg-altura" value="15" min="1" step="1" oninput="onCfgAlturaChange()">
+          </div>
+        </div>
+
+        <div class="cfg-step" id="cfg-step-cercha">
+          <div class="cfg-step-label"><span class="cfg-step-num">3</span>Profundidad de la cercha</div>
+          <div id="cfg-cercha-rec" class="cfg-rec-box">
+            <div class="cfg-rec-title">Cargando recomendación…</div>
+          </div>
+          <div class="cfg-slider-row">
+            <span class="cfg-slider-lbl">2 cm</span>
+            <input type="range" id="cfg-cercha-slider" min="2" max="20" value="8" oninput="onCfgCerchaChange()">
+            <span class="cfg-slider-lbl">20 cm</span>
+            <span class="cfg-slider-val" id="cfg-cercha-val">8 cm</span>
+          </div>
+          <div id="cfg-led-opts" class="cfg-led-list"></div>
+        </div>
+
+      </div><!-- /cfg-sec-letras -->
+
+      <!-- ══ SECCIÓN CAJA DE LUZ ══ -->
+      <div id="cfg-sec-caja" style="display:none">
+
+        <div class="cfg-step">
+          <div class="cfg-step-label"><span class="cfg-step-num">1</span>¿Dónde va instalada la caja?</div>
+          <div class="cfg-cards" id="cfg-caja-uso-cards">
+            <div class="cfg-card active" data-val="exterior" onclick="selectCfgCard(this,'cfg-caja-uso-cards');onCfgCajaChange()">
+              <div class="cfg-card-icon">☀️</div>
+              <div class="cfg-card-name">Exterior</div>
+              <div class="cfg-card-desc">Intemperie · IP65 o más · resistente a la lluvia</div>
+            </div>
+            <div class="cfg-card" data-val="interior" onclick="selectCfgCard(this,'cfg-caja-uso-cards');onCfgCajaChange()">
+              <div class="cfg-card-icon">🏢</div>
+              <div class="cfg-card-name">Interior</div>
+              <div class="cfg-card-desc">Local o centro comercial · sin exposición a lluvia</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-step">
+          <div class="cfg-step-label"><span class="cfg-step-num">2</span>¿Se ve de uno o dos lados?</div>
+          <div class="cfg-cards" id="cfg-caja-vistas-cards">
+            <div class="cfg-card active" data-val="1" onclick="selectCfgCard(this,'cfg-caja-vistas-cards');onCfgCajaChange()">
+              <div class="cfg-card-icon">👁️</div>
+              <div class="cfg-card-name">Una sola vista</div>
+              <div class="cfg-card-desc">El anuncio se ve de un lado únicamente</div>
+            </div>
+            <div class="cfg-card" data-val="2" onclick="selectCfgCard(this,'cfg-caja-vistas-cards');onCfgCajaChange()">
+              <div class="cfg-card-icon">👁️‍🗨️</div>
+              <div class="cfg-card-name">Dos vistas</div>
+              <div class="cfg-card-desc">Se ve de ambos lados (cuelga o está en centro)</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-step">
+          <div class="cfg-step-label"><span class="cfg-step-num">3</span>¿Qué cara lleva la caja?</div>
+          <div class="cfg-cards-3" id="cfg-caja-cara-cards">
+            <div class="cfg-card active" data-val="lona" onclick="selectCfgCard(this,'cfg-caja-cara-cards')">
+              <div class="cfg-card-icon">🖼️</div>
+              <div class="cfg-card-name">Lona impresa</div>
+              <div class="cfg-card-desc">Digital · económica · reemplazable</div>
+            </div>
+            <div class="cfg-card" data-val="acrilico" onclick="selectCfgCard(this,'cfg-caja-cara-cards')">
+              <div class="cfg-card-icon">💎</div>
+              <div class="cfg-card-name">Acrílico</div>
+              <div class="cfg-card-desc">Durable · translúcido · premium</div>
+            </div>
+            <div class="cfg-card" data-val="acrilico_2vistas" onclick="selectCfgCard(this,'cfg-caja-cara-cards')">
+              <div class="cfg-card-icon">💠</div>
+              <div class="cfg-card-name">Acrílico 2 vistas</div>
+              <div class="cfg-card-desc">Doble cara · mayor luminosidad</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-step">
+          <div class="cfg-step-label"><span class="cfg-step-num">4</span>Profundidad del cajón</div>
+          <div id="cfg-caja-led-rec" class="cfg-rec-box">
+            <div class="cfg-rec-title">Ajusta las opciones arriba para ver la recomendación</div>
+          </div>
+          <div class="cfg-slider-row">
+            <span class="cfg-slider-lbl">6 cm</span>
+            <input type="range" id="cfg-caja-prof-slider" min="6" max="40" value="15" oninput="onCfgCajaProfChange()">
+            <span class="cfg-slider-lbl">40 cm</span>
+            <span class="cfg-slider-val" id="cfg-caja-prof-val">15 cm</span>
+          </div>
+          <div id="cfg-caja-led-opts" class="cfg-led-list"></div>
+        </div>
+
+      </div><!-- /cfg-sec-caja -->
+
+      <!-- ══ SECCIÓN LETRAS PLANAS ══ -->
+      <div id="cfg-sec-planas" style="display:none">
+
+        <div class="cfg-step">
+          <div class="cfg-step-label"><span class="cfg-step-num">1</span>¿Cuánto mide la letra más alta?</div>
+          <div class="cfg-inline">
+            <label>Altura real de la letra (cm)</label>
+            <input type="number" id="cfg-altura-plana" value="15" min="1" step="1">
+          </div>
+        </div>
+
+        <div class="cfg-step">
+          <div class="cfg-step-label"><span class="cfg-step-num">2</span>¿De qué material son las letras?</div>
+          <div class="cfg-cards" id="cfg-plana-mat-cards">
+            <div class="cfg-card active" data-val="acrilico_3mm" onclick="selectCfgCard(this,'cfg-plana-mat-cards')">
+              <div class="cfg-card-icon">💎</div>
+              <div class="cfg-card-name">Acrílico 3mm</div>
+              <div class="cfg-card-desc">Letras chicas y medianas · translúcido</div>
+            </div>
+            <div class="cfg-card" data-val="acrilico_6mm" onclick="selectCfgCard(this,'cfg-plana-mat-cards')">
+              <div class="cfg-card-icon">💠</div>
+              <div class="cfg-card-name">Acrílico 6mm</div>
+              <div class="cfg-card-desc">Letras grandes · más grueso · resistente</div>
+            </div>
+            <div class="cfg-card" data-val="aluminio_cal18" onclick="selectCfgCard(this,'cfg-plana-mat-cards')">
+              <div class="cfg-card-icon">🔩</div>
+              <div class="cfg-card-name">Aluminio</div>
+              <div class="cfg-card-desc">Cal 18 · opaco · industrial · exterior</div>
+            </div>
+            <div class="cfg-card" data-val="alucobon_3mm" onclick="selectCfgCard(this,'cfg-plana-mat-cards')">
+              <div class="cfg-card-icon">⬡</div>
+              <div class="cfg-card-name">Alucobond</div>
+              <div class="cfg-card-desc">Compuesto premium · muy plano · exterior</div>
+            </div>
+            <div class="cfg-card" data-val="pvc_3mm" onclick="selectCfgCard(this,'cfg-plana-mat-cards')">
+              <div class="cfg-card-icon">🧩</div>
+              <div class="cfg-card-name">PVC 3mm</div>
+              <div class="cfg-card-desc">Señalética · económico · solo interior</div>
+            </div>
+            <div class="cfg-card" data-val="pvc_6mm" onclick="selectCfgCard(this,'cfg-plana-mat-cards')">
+              <div class="cfg-card-icon">🟦</div>
+              <div class="cfg-card-name">PVC 6mm</div>
+              <div class="cfg-card-desc">Señalética exterior · más resistente</div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /cfg-sec-planas -->
+
+    </div><!-- /cfg-body -->
+
+    <div class="cfg-footer">
+      <button class="cfg-btn-cancel" onclick="closeCfgModal()">Ahora no</button>
+      <button class="cfg-btn-ok" onclick="aplicarConfiguracion()">Aplicar y continuar →</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -706,9 +1028,10 @@ async function uploadSVG(file) {
     document.getElementById("drop-label").textContent = `✓ ${file.name}  (${data.paths.length} paths)`;
     document.getElementById("btn-calc").disabled = false;
 
-    actualizarAsesor(true);   // true = auto-rellenar altura inicial
+    actualizarAsesor(true);   // actualiza sidebar, path cards y asesor
     switchTab("svg");
     showToast(`SVG cargado: ${data.paths.length} paths detectados`, "ok");
+    openCfgModal();
   } catch (err) {
     showToast("Error al cargar SVG: " + err.message, "err");
     document.getElementById("drop-label").textContent = "Error — intenta de nuevo";
@@ -1332,15 +1655,21 @@ function renderLedsCaja() {
   ["interior","exterior"].forEach(side => {
     const rows = (catalog.leds_caja||{})[side] || [];
     let html = `<table class="cat-table"><thead><tr>
-      <th>#</th><th>Nombre</th><th>Precio</th><th>Watts</th><th>IP</th><th>Prof min</th><th>Prof max</th><th>Vistas</th><th></th>
+      <th>#</th><th>Nombre</th><th>Tipo</th><th>Precio</th><th>Watts</th><th>IP</th><th>Prof min</th><th>Prof max</th><th>Vistas</th><th>Cara máx</th><th></th>
     </tr></thead><tbody>`;
     rows.forEach((l, i) => {
+      const esEdge = l.tipo_led === "edgelite";
+      const tipoBadge = esEdge
+        ? `<span style="font-size:10px;font-weight:700;background:#dbeafe;color:#1d4ed8;padding:1px 7px;border-radius:10px">Perimetral</span>`
+        : `<span style="font-size:10px;font-weight:700;background:#f0fdf4;color:#15803d;padding:1px 7px;border-radius:10px">Área</span>`;
       html += `<tr>
         <td>${i+1}</td><td>${l.nombre}</td>
+        <td>${tipoBadge}</td>
         <td class="price-cell">$${(l.precio||0).toFixed(2)}</td>
         <td>${l.watts}</td><td>${l.ip}</td>
         <td>${l.profundidad_min} cm</td><td>${l.profundidad_max} cm</td>
         <td>${l.vistas||1}</td>
+        <td>${esEdge ? (l.max_cara_cm||'—')+' cm' : '—'}</td>
         <td class="actions">
           <button class="btn-edit" onclick="openEditModal('led_caja_${side}',${i})">Editar</button>
           <button class="btn-del"  onclick="deleteItem('led_caja_${side}',${i})">✕</button>
@@ -1572,11 +1901,13 @@ function ledCanalFields(m) {
 function ledCajaFields(m) {
   return `<div class="modal-grid2">
     ${fld("nombre","Nombre", m.nombre)}
+    ${fld("tipo_led","Tipo LED", m.tipo_led||"backlite","text","1",[["backlite","Backlite (área / base)"],["edgelite","Edgelite (perimetral)"]])}
     ${fld("precio","Precio", m.precio,"number","0.01")}
     ${fld("watts","Watts", m.watts,"number","0.01")}
     ${fld("ip","Protección IP", m.ip)}
     ${fld("uso","Uso", m.uso,"text","1",[["interior","Interior"],["exterior","Exterior"]])}
     ${fld("vistas","Vistas", m.vistas||1,"number","1")}
+    ${fld("max_cara_cm","Cara máx cm (edgelite)", m.max_cara_cm||0,"number","1")}
     ${fld("profundidad_min","Prof. mín (cm)", m.profundidad_min,"number","1")}
     ${fld("profundidad_max","Prof. máx (cm)", m.profundidad_max,"number","1")}
   </div>`;
@@ -1630,12 +1961,12 @@ function saveModal() {
     renderLedsCanal();
   } else if (type.startsWith("led_caja_")) {
     const side = type.replace("led_caja_","");
-    const vals = getModalValues(["nombre","precio","watts","ip","uso","vistas","profundidad_min","profundidad_max"]);
+    const vals = getModalValues(["nombre","tipo_led","precio","watts","ip","uso","vistas","max_cara_cm","profundidad_min","profundidad_max"]);
     if (isNew) { vals.uso = vals.uso||"exterior"; catalog.leds_caja[vals.uso].push(vals); }
-    else catalog.leds_caja[side][key] = vals;
+    else catalog.leds_caja[side][key] = {...catalog.leds_caja[side][key], ...vals};
     renderLedsCaja();
   } else if (type === "led_caja") {
-    const vals = getModalValues(["nombre","precio","watts","ip","uso","vistas","profundidad_min","profundidad_max"]);
+    const vals = getModalValues(["nombre","tipo_led","precio","watts","ip","uso","vistas","max_cara_cm","profundidad_min","profundidad_max"]);
     const side = vals.uso || "exterior";
     catalog.leds_caja[side].push(vals);
     renderLedsCaja();
@@ -1785,6 +2116,7 @@ function actualizarAsesor(autoFillAltura = false) {
   if (!svgMaxHeightPx || alturaActual <= 0) return;
 
   // ── 4. Panel asesor ───────────────────────────────────────────────────────
+
   let categoria;
   if (alturaActual <= 20) categoria = "Pequeñas";
   else if (alturaActual <= 40) categoria = "Medianas";
@@ -1874,6 +2206,235 @@ function actualizarDocUrl(tipo, quoteId) {
   const url = `/api/${tipo}/${quoteId}` + (qs ? `?${qs}` : "");
   document.getElementById(`btn-${tipo === "entrega" ? "ent" : tipo}-link`).href = url;
   return true;
+}
+
+// ─── MODAL CONFIGURADOR ───────────────────────────────────────────────────────
+
+function openCfgModal() {
+  const overlay = document.getElementById("cfg-overlay");
+  if (!overlay) return;
+
+  // Mostrar sección correcta según tipo activo
+  document.getElementById("cfg-sec-letras").style.display = tipoActual === "letras" ? "" : "none";
+  document.getElementById("cfg-sec-caja").style.display   = tipoActual === "caja"   ? "" : "none";
+  document.getElementById("cfg-sec-planas").style.display = tipoActual === "planas" ? "" : "none";
+
+  const titulos = {
+    letras: ["Configurar letras 3D", "Selecciona el tipo de construcción y la altura para recibir recomendaciones"],
+    caja:   ["Configurar caja de luz", "Indica las dimensiones y características para calcular los LEDs"],
+    planas: ["Configurar letras planas", "Elige la altura y material de corte"],
+  };
+  document.getElementById("cfg-title").textContent = titulos[tipoActual]?.[0] || "Configurar anuncio";
+  document.getElementById("cfg-sub").textContent   = titulos[tipoActual]?.[1] || "";
+
+  // Pre-popular altura desde el form principal
+  const alturaMain = parseFloat(document.getElementById("altura-letra")?.value) || 0;
+  if (alturaMain > 0) {
+    const cfgAltura = document.getElementById("cfg-altura");
+    if (cfgAltura) cfgAltura.value = alturaMain.toFixed(0);
+    const cfgAlturaPlana = document.getElementById("cfg-altura-plana");
+    if (cfgAlturaPlana) cfgAlturaPlana.value = alturaMain.toFixed(0);
+  }
+
+  // Pre-popular tipo de construcción
+  const tipoMain = document.getElementById("tipo-construccion")?.value;
+  if (tipoMain) {
+    const cards = document.querySelectorAll("#cfg-tipo-cards .cfg-card");
+    cards.forEach(c => c.classList.toggle("active", c.dataset.val === tipoMain));
+  }
+
+  // Pre-popular cercha
+  const cerchaMain = parseFloat(document.getElementById("cercha-manual")?.value) || 0;
+  const alturaParaCercha = alturaMain > 0 ? alturaMain : 15;
+  const cerchaRec = cerchaParaAltura(alturaParaCercha);
+  const slider = document.getElementById("cfg-cercha-slider");
+  if (slider) slider.value = cerchaMain > 0 ? cerchaMain : cerchaRec;
+
+  renderCfgCerchaRec();
+
+  // Profundidad caja
+  const profMain = parseFloat(document.getElementById("profundidad")?.value) || 15;
+  const sliderCaja = document.getElementById("cfg-caja-prof-slider");
+  if (sliderCaja) sliderCaja.value = profMain;
+  document.getElementById("cfg-caja-prof-val").textContent = `${Math.round(profMain)} cm`;
+  onCfgCajaChange();
+
+  overlay.classList.add("open");
+}
+
+function closeCfgModal() {
+  document.getElementById("cfg-overlay")?.classList.remove("open");
+}
+
+function selectCfgCard(el, groupId) {
+  document.querySelectorAll(`#${groupId} .cfg-card`).forEach(c => c.classList.remove("active"));
+  el.classList.add("active");
+}
+
+function _cfgCardVal(groupId) {
+  return document.querySelector(`#${groupId} .cfg-card.active`)?.dataset.val || null;
+}
+
+function renderCfgCerchaRec() {
+  const altura   = parseFloat(document.getElementById("cfg-altura")?.value) || 15;
+  const slider   = document.getElementById("cfg-cercha-slider");
+  const valLabel = document.getElementById("cfg-cercha-val");
+  const rec      = cerchaParaAltura(altura);
+  const actual   = parseInt(slider?.value || rec);
+
+  if (valLabel) valLabel.textContent = `${actual} cm`;
+
+  const recBox = document.getElementById("cfg-cercha-rec");
+  if (recBox) {
+    const diff = actual - rec;
+    let statusColor = "#16a34a", statusText = `✓ Profundidad recomendada para ${altura} cm de altura`;
+    if (Math.abs(diff) > 2) {
+      statusColor = diff > 0 ? "#d97706" : "#dc2626";
+      statusText  = diff > 0
+        ? `↑ ${actual} cm — más profunda de lo recomendado (${rec} cm)`
+        : `↓ ${actual} cm — más estrecha de lo recomendado (${rec} cm)`;
+    }
+    recBox.innerHTML = `
+      <div class="cfg-rec-title">Cercha recomendada: ${rec} cm</div>
+      <div class="cfg-rec-status" style="color:${statusColor}">${statusText}</div>`;
+  }
+
+  // LEDs compatibles con la profundidad seleccionada
+  const ledsContainer = document.getElementById("cfg-led-opts");
+  if (!ledsContainer) return;
+  const leds = (catalog?.leds_canal || []).filter(
+    l => l.profundidad_min <= actual && actual <= l.profundidad_max
+  );
+  if (!leds.length) {
+    ledsContainer.innerHTML = `<div style="font-size:11px;opacity:.5;padding:6px 0">Sin LEDs en catálogo para esta profundidad</div>`;
+    return;
+  }
+  ledsContainer.innerHTML = leds.map((l, i) => `
+    <div class="cfg-led-item${i === 0 ? " best" : ""}">
+      <span class="cfg-led-badge">${i === 0 ? "Mejor" : l.ip}</span>
+      <div class="cfg-led-info">
+        <div class="cfg-led-name">${l.nombre}</div>
+        <div class="cfg-led-spec">${l.ip} · ${l.watts_modulo} W/mod${l.lumenes ? ` · ${l.lumenes} lm` : ""} · cada ${actual} cm</div>
+      </div>
+      <div class="cfg-led-price">$${(l.precio_modulo||0).toFixed(2)}/mod</div>
+    </div>`).join("");
+}
+
+function onCfgAlturaChange() {
+  const altura = parseFloat(document.getElementById("cfg-altura")?.value) || 15;
+  const rec    = cerchaParaAltura(altura);
+  const slider = document.getElementById("cfg-cercha-slider");
+  if (slider) slider.value = rec;
+  renderCfgCerchaRec();
+}
+
+function onCfgCerchaChange() {
+  const slider   = document.getElementById("cfg-cercha-slider");
+  const valLabel = document.getElementById("cfg-cercha-val");
+  if (valLabel && slider) valLabel.textContent = `${slider.value} cm`;
+  renderCfgCerchaRec();
+}
+
+function onCfgCajaChange() {
+  const uso  = _cfgCardVal("cfg-caja-uso-cards") || "exterior";
+  const vistas = parseInt(_cfgCardVal("cfg-caja-vistas-cards") || "1");
+  const prof = parseInt(document.getElementById("cfg-caja-prof-slider")?.value || 15);
+
+  document.getElementById("cfg-caja-prof-val").textContent = `${prof} cm`;
+
+  const recBox = document.getElementById("cfg-caja-led-rec");
+  const ledsContainer = document.getElementById("cfg-caja-led-opts");
+
+  const pool = (catalog?.leds_caja?.[uso] || []).filter(
+    l => l.profundidad_min <= prof && prof <= l.profundidad_max
+  );
+  const candidatos = vistas >= 2
+    ? (pool.filter(l => (l.vistas || 1) >= 2).length ? pool.filter(l => (l.vistas || 1) >= 2) : pool)
+    : pool;
+
+  if (recBox) {
+    if (candidatos.length) {
+      const best = candidatos[0];
+      recBox.innerHTML = `<div class="cfg-rec-title">LED recomendado: ${best.nombre}</div>
+        <div class="cfg-rec-status" style="color:#16a34a">✓ Compatible con profundidad ${prof} cm · ${uso}</div>`;
+    } else {
+      recBox.innerHTML = `<div class="cfg-rec-title">Sin LEDs compatibles</div>
+        <div class="cfg-rec-status" style="color:#dc2626">Ajusta la profundidad o revisa el catálogo</div>`;
+    }
+  }
+
+  if (ledsContainer) {
+    if (!candidatos.length) {
+      ledsContainer.innerHTML = `<div style="font-size:11px;opacity:.5;padding:6px 0">Sin LEDs disponibles para esta configuración</div>`;
+      return;
+    }
+    ledsContainer.innerHTML = candidatos.map((l, i) => `
+      <div class="cfg-led-item${i === 0 ? " best" : ""}">
+        <span class="cfg-led-badge">${i === 0 ? "Mejor" : l.ip}</span>
+        <div class="cfg-led-info">
+          <div class="cfg-led-name">${l.nombre}</div>
+          <div class="cfg-led-spec">${l.ip} · ${l.watts} W${l.lumenes ? ` · ${l.lumenes} lm` : ""}</div>
+        </div>
+        <div class="cfg-led-price">$${(l.precio||0).toFixed(2)}</div>
+      </div>`).join("");
+  }
+}
+
+function onCfgCajaProfChange() {
+  const slider = document.getElementById("cfg-caja-prof-slider");
+  document.getElementById("cfg-caja-prof-val").textContent = `${slider?.value || 15} cm`;
+  onCfgCajaChange();
+}
+
+function aplicarConfiguracion() {
+  if (tipoActual === "letras") {
+    const tipo   = _cfgCardVal("cfg-tipo-cards") || "cajon_luz";
+    const altura = parseFloat(document.getElementById("cfg-altura")?.value) || 0;
+    const cercha = parseInt(document.getElementById("cfg-cercha-slider")?.value) || 0;
+
+    const selTipo = document.getElementById("tipo-construccion");
+    if (selTipo) { selTipo.value = tipo; onTipoConstruccionChange(); }
+
+    if (altura > 0) {
+      const inp = document.getElementById("altura-letra");
+      if (inp) inp.value = altura;
+    }
+    if (cercha > 0) {
+      const inp = document.getElementById("cercha-manual");
+      if (inp) inp.value = cercha;
+    }
+    actualizarAsesor();
+
+  } else if (tipoActual === "caja") {
+    const uso    = _cfgCardVal("cfg-caja-uso-cards") || "exterior";
+    const vistas = parseInt(_cfgCardVal("cfg-caja-vistas-cards") || "1");
+    const cara   = _cfgCardVal("cfg-caja-cara-cards") || "lona";
+    const prof   = parseInt(document.getElementById("cfg-caja-prof-slider")?.value || 15);
+
+    const selUso = document.getElementById("uso");
+    if (selUso) selUso.value = uso;
+    const selVistas = document.getElementById("vistas");
+    if (selVistas) selVistas.value = vistas;
+    const selCara = document.getElementById("tipo-cara-caja");
+    if (selCara) selCara.value = cara;
+    const inpProf = document.getElementById("profundidad");
+    if (inpProf) inpProf.value = prof;
+
+  } else if (tipoActual === "planas") {
+    const mat    = _cfgCardVal("cfg-plana-mat-cards") || "acrilico_3mm";
+    const altura = parseFloat(document.getElementById("cfg-altura-plana")?.value) || 0;
+
+    const selMat = document.getElementById("mat-plana");
+    if (selMat) selMat.value = mat;
+    if (altura > 0) {
+      const inp = document.getElementById("altura-letra");
+      if (inp) inp.value = altura;
+    }
+    actualizarAsesor();
+  }
+
+  closeCfgModal();
+  showToast("Configuración aplicada", "ok");
 }
 </script>
 </body>

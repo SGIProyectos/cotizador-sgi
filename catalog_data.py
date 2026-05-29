@@ -249,6 +249,7 @@ LEDS_CAJA = {
         {
             "id": "backlite_rgb",
             "nombre": "Barra LED Backlite RGB",
+            "tipo_led": "backlite",
             "precio": 93.52,
             "watts": 6,
             "lumenes": None,
@@ -259,6 +260,7 @@ LEDS_CAJA = {
         {
             "id": "backlite",
             "nombre": "Barra LED Backlite",
+            "tipo_led": "backlite",
             "precio_serie_10": 551.00,
             "precio": 55.10,
             "watts": 5,
@@ -270,6 +272,7 @@ LEDS_CAJA = {
         {
             "id": "signaflex_cct",
             "nombre": "Tira LED Signaflex CCT",
+            "tipo_led": "backlite",
             "precio_tira_5m": 662.36,
             "precio": 662.36,
             "watts": 50,
@@ -283,8 +286,10 @@ LEDS_CAJA = {
         {
             "id": "edgelite_42",
             "nombre": "Barra LED Edgelite Osram 42",
+            "tipo_led": "edgelite",
+            "max_cara_cm": 120,
             "precio": 375.93,
-            "watts": 0.15,
+            "watts": 15,
             "lumenes": 1650,
             "ip": "IP33",
             "profundidad_min": 10, "profundidad_max": 40,
@@ -293,6 +298,8 @@ LEDS_CAJA = {
         {
             "id": "edgelite_21",
             "nombre": "Barra LED Edgelite Osram 21",
+            "tipo_led": "edgelite",
+            "max_cara_cm": 90,
             "precio": 250.62,
             "watts": 7.5,
             "lumenes": 750,
@@ -305,6 +312,8 @@ LEDS_CAJA = {
         {
             "id": "eco_edgelite_56",
             "nombre": "Barra LED Eco Edgelite 56",
+            "tipo_led": "edgelite",
+            "max_cara_cm": 120,
             "precio": 399.90,
             "watts": 14,
             "lumenes": 1260,
@@ -315,6 +324,8 @@ LEDS_CAJA = {
         {
             "id": "eco_edgelite_24",
             "nombre": "Barra LED Eco Edgelite 24",
+            "tipo_led": "edgelite",
+            "max_cara_cm": 80,
             "precio": 196.25,
             "watts": 6,
             "lumenes": 540,
@@ -325,6 +336,8 @@ LEDS_CAJA = {
         {
             "id": "sign_edge_01",
             "nombre": "Módulo LED Sign Edge 01",
+            "tipo_led": "edgelite",
+            "max_cara_cm": 60,
             "precio": 330.60,
             "precio_modulo": 16.53,
             "watts": 1.32,
@@ -465,6 +478,44 @@ GRUAS = [
     {"id": "grua_mediana", "nombre": "Grúa telescópica mediana (15–30m)",    "precio_dia": 4500},
     {"id": "grua_grande",  "nombre": "Grúa articulada grande (>30m)",        "precio_dia": 8000},
 ]
+
+
+# ─── LED RECOMENDADO PARA CAJA DE LUZ ────────────────────────────────────────
+def recomendar_led_caja(
+    ancho_cm: float,
+    alto_cm: float,
+    doble_vista: bool = False,
+    uso: str = "exterior",
+    profundidad_cm: float = 15,
+) -> list:
+    """
+    Devuelve lista de LEDs recomendados para caja de luz, ordenados por idoneidad.
+    Prioriza edgelite cuando el lado corto de la cara cabe dentro de max_cara_cm.
+    Para doble vista fuerza LEDs con vistas >= 2.
+    """
+    pool = LEDS_CAJA.get(uso, LEDS_CAJA["exterior"])
+
+    if doble_vista:
+        candidatos = [l for l in pool if l.get("vistas", 1) >= 2]
+        return candidatos or pool
+
+    lado_corto = min(ancho_cm, alto_cm) if ancho_cm > 0 and alto_cm > 0 else 9999
+
+    # Filtrar por profundidad compatible
+    compatibles = [
+        l for l in pool
+        if l.get("profundidad_min", 0) <= profundidad_cm <= l.get("profundidad_max", 999)
+    ]
+
+    edgelite = sorted(
+        [l for l in compatibles if l.get("tipo_led") == "edgelite" and lado_corto <= l.get("max_cara_cm", 0)],
+        key=lambda x: x.get("lumenes") or 0,
+        reverse=True,
+    )
+    backlite = [l for l in compatibles if l.get("tipo_led") != "edgelite"]
+
+    # Edgelite primero cuando aplica; backlite como complemento o fallback
+    return edgelite + backlite if edgelite else backlite or compatibles
 
 
 # ─── CERCHA RECOMENDADA SEGÚN ALTURA DE LETRA ────────────────────────────────

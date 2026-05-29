@@ -12,9 +12,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install dependencies (Python 3.10+)
 pip install -r requirements.txt
 
-# Run development server (auto-reload) — preferred method
+# Run development server — preferred method (kills existing :8080, activates .venv if present, auto-opens browser)
 run.bat
-# Equivalent:
+# Equivalent (no auto-reload in run.bat):
 uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 
 # Server runs at http://localhost:8080
@@ -22,13 +22,18 @@ uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 
 No tests or linting configuration in this project.
 
+## Deployment
+
+Deployed to Render.com via `render.yaml` (Python 3.11, `uvicorn main:app --host 0.0.0.0 --port $PORT`). Local development uses Python 3.10+ with a `.venv` virtual environment.
+
 ## Architecture
 
 ### Request flow
 
-1. **Upload SVG** → `POST /api/parse-svg` → `calculator.parse_svg()` extracts paths with perimeter, area, and bounding box in SVG pixels → stored in `_svg_store[session_id]` (in-memory)
-2. **Quote** → `POST /api/cotizar/letras|caja|planas` → calls `cotizar_letras()` / `cotizar_caja()` / `cotizar_planas()`, which scale px→cm, select materials from catalog, compute costs using proportional $/cm² → result stored in `_quote_store[quote_id]`
-3. **PDF** → `GET /api/pdf/{quote_id}?cliente=X&notas=Y` (cotización), `/api/ot/{quote_id}` (orden de trabajo), `/api/entrega/{quote_id}` (acta de entrega + garantía)
+1. **Upload SVG** → `POST /api/parse-svg` → `calculator.parse_svg()` extracts paths with perimeter, area, and bounding box in SVG pixels → stored in `_svg_store[session_id]` (in-memory, lost on restart)
+2. **Quote** → `POST /api/cotizar/letras|caja|planas` → calls `cotizar_letras()` / `cotizar_caja()` / `cotizar_planas()`, which scale px→cm, select materials from catalog, compute costs → result stored in `_quote_store[quote_id]`; metadata (cliente, notas, folio) stored at `_quote_store[quote_id + "_meta"]`
+3. **PDF** → `GET /api/pdf/{quote_id}?cliente=X&notas=Y` (cotización), `/api/ot/{quote_id}` (orden de trabajo), `/api/entrega/{quote_id}` (acta de entrega + garantía) — PDFs written to `tmp/` directory
+4. **Catalog** → `GET /api/catalog` returns current in-memory catalog; `POST /api/catalog` calls `catalog_apply()` + `catalog_save()` to persist to `catalog.json`
 
 ### Module responsibilities
 
@@ -43,7 +48,9 @@ No tests or linting configuration in this project.
 
 ### Material cost methodology (critical)
 
-All material costs use **proportional $/cm²**, not whole-sheet rounding:
+**Channel letters (`cotizar_letras`) and flat letters (`cotizar_planas`)** use **proportional $/cm²** — cost is area used × price per cm², not sheets × price. **Light boxes (`cotizar_caja`)** use **whole-sheet pricing** for structure (aluminio cal 18) and fondo (PVC) — `lam_struct * mat["precio"]` — because box construction always consumes full sheets. The face material in `cotizar_caja` uses flat $/m² from `PRECIOS_CAJA_M2`.
+
+All channel letter material costs use **proportional $/cm²**, not whole-sheet rounding:
 
 ```python
 def precio_cm2(mat: dict) -> float:
@@ -87,6 +94,8 @@ precio_total = sum(precio_letra for all letters) × (1 + ajuste_pct/100)
 
 `PRECIOS_BASE["precio_cm"]` defaults to 10. Multiplicadores are defined in `PRECIOS_BASE["multiplicadores"]` and keyed by `tipo_multiplicador` (e.g. `"acrilico_con_luz_std"` = 4.5).
 
+IVA is always 16% (`subtotal * 0.16`), hardcoded in `calculator.py`.
+
 ### Construction types (TIPOS_CONSTRUCCION)
 
 | ID | Cara | Fondo PVC | LEDs | Multiplicador default |
@@ -126,6 +135,7 @@ Beyond basic cost fields, `QuoteResult` includes:
 - `catalog_load()` (called at module import) merges `catalog.json` into globals using `_catalog_merge()` — preserves Python defaults (e.g. `metros_por_envase`) not present in the JSON file
 - `catalog_apply()` (called by `POST /api/catalog`) does a full replace (used by the catalog editor UI)
 - PEGAMENTOS keys are tuples `(cercha_tipo, cara_tipo)`; serialized to JSON as `"aluminio|acrilico"`
+- `NEON_FLEX` is defined in `catalog_data.py` (neon flex strips with prices and colors) but is **not yet used in any quoting logic** — it exists for future expansion
 
 ### SVG scale detection priority
 

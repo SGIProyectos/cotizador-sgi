@@ -23,3 +23,8 @@ img3.png
 
 # Excel original (datos ya migrados a catalog_data.py)
 CATALOGO LETRAS.xlsx
+~$*
+
+# Imágenes y documentos de referencia local
+continua.png
+*.txt
