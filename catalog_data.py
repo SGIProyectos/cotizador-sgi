@@ -75,6 +75,77 @@ LAMINAS = {
         "grosor_mm": 3,
         "uso": ["fondo_premium", "cara_caja_exterior"],
     },
+    # ── Acrílico por acabado / color ──────────────────────────────────────────
+    "acrilico_3mm_blanco": {
+        "nombre": "Acrílico Blanco 3mm",
+        "precio": 1200,
+        "ancho_cm": 122, "alto_cm": 244,
+        "grosor_mm": 3,
+        "uso": ["cara_letra_pequena", "cara_letra_mediana", "cara_caja"],
+    },
+    "acrilico_3mm_colores": {
+        "nombre": "Acrílico Color 3mm",
+        "precio": 1100,
+        "ancho_cm": 122, "alto_cm": 244,
+        "grosor_mm": 3,
+        "colores": ["Rojo", "Amarillo", "Azul", "Azul Rey", "Verde", "Verde Pemex", "Negro", "Naranja"],
+        "uso": ["cara_letra_pequena", "cara_letra_mediana", "cara_caja"],
+    },
+    "acrilico_3mm_translucido": {
+        "nombre": "Acrílico Translúcido 3mm",
+        "precio": 1250,
+        "ancho_cm": 122, "alto_cm": 244,
+        "grosor_mm": 3,
+        "colores": ["Verde", "Azul", "Rojo"],
+        "uso": ["cara_letra_pequena", "cara_caja"],
+    },
+    "acrilico_3mm_espejo": {
+        "nombre": "Acrílico Espejo 3mm",
+        "precio": 1500,
+        "ancho_cm": 122, "alto_cm": 244,
+        "grosor_mm": 3,
+        "colores": ["Plata", "Dorado", "Rosa"],
+        "uso": ["cara_letra", "decoracion"],
+    },
+    "acrilico_5mm": {
+        "nombre": "Acrílico 5mm",
+        "precio": 1740,
+        "ancho_cm": 122, "alto_cm": 244,
+        "grosor_mm": 5,
+        "uso": ["cara_letra_grande"],
+    },
+    "acrilico_9mm": {
+        "nombre": "Acrílico 9mm",
+        "precio": 3016,
+        "ancho_cm": 122, "alto_cm": 244,
+        "grosor_mm": 9,
+        "uso": ["cara_letra_premium"],
+    },
+    # ── Alucom (panel compuesto aluminio-polietileno) ─────────────────────────
+    "alucom_base": {
+        "nombre": "Alucom Color Base",
+        "precio": 754,
+        "ancho_cm": 122, "alto_cm": 244,
+        "grosor_mm": 3,
+        "colores": ["Blanco", "Negro", "Rojo", "Azul Telecom", "Gris", "Verde Pemex", "Amarillo"],
+        "uso": ["cara_letra", "fondo_premium", "cara_caja_exterior"],
+    },
+    "alucom_especial": {
+        "nombre": "Alucom Acabado Especial",
+        "precio": 1009,
+        "ancho_cm": 122, "alto_cm": 244,
+        "grosor_mm": 3,
+        "colores": ["Madera Cerezo", "Plata Satinado", "Plata Cepillado", "Dorado Cepillado"],
+        "uso": ["cara_letra", "decoracion"],
+    },
+    "alucom_espejo": {
+        "nombre": "Alucom Espejo",
+        "precio": 1009,
+        "ancho_cm": 122, "alto_cm": 244,
+        "grosor_mm": 3,
+        "colores": ["Plata Espejo", "Dorado Espejo"],
+        "uso": ["cara_letra", "decoracion"],
+    },
 }
 
 # ─── MÓDULOS LED PARA LETRAS DE CANAL ────────────────────────────────────────
@@ -402,10 +473,54 @@ PRECIOS_BASE = {
 }
 
 PRECIOS_CAJA_M2 = {
-    "lona":            1800,
-    "acrilico":        2800,
+    "lona":             1800,
+    "vinil_corte":      1200,
+    "acrilico":         2800,
     "acrilico_2vistas": 3500,
 }
+
+# ─── VINILOS ADHESIVOS ────────────────────────────────────────────────────────
+# precio_ml: precio por metro lineal de rollo (ancho estándar 1.22 m)
+# precio_m2 = precio_ml / ancho_rollo_m
+VINILOS = [
+    {
+        "id": "vinil_std",
+        "nombre": "Vinil Estándar",
+        "precio_ml": 58.0,
+        "ancho_rollo_m": 1.22,
+        "acabado": "opaco",
+        "colores": ["Brimstone Yellow", "Yellow", "Golden Yellow", "Orange", "Crimson",
+                    "Red", "Cherry Red", "Pink", "Light Blue", "Middle Blue", "King Blue",
+                    "Middle Green", "Lilac", "Dark Green", "Middle Grey", "Lightgrey",
+                    "Light Brown", "Coffee Brown", "Azure Blue", "Dark Blue",
+                    "Silver Metallic", "Gold Metallic", "Pale Pink"],
+    },
+    {
+        "id": "vinil_std_plus",
+        "nombre": "Vinil Estándar Plus",
+        "precio_ml": 87.0,
+        "ancho_rollo_m": 1.22,
+        "acabado": "opaco",
+        "colores": ["Ivory", "Grey Blue"],
+    },
+    {
+        "id": "vinil_premium",
+        "nombre": "Vinil Premium",
+        "precio_ml": 120.0,
+        "ancho_rollo_m": 1.22,
+        "acabado": "opaco",
+        "colores": ["Zinc Yellow", "Yellow Orange", "Dark Red", "Heather Red", "Violet",
+                    "Intensive Blue", "Grass Green", "Gentian Blue", "Black", "White"],
+    },
+    {
+        "id": "vinil_premium_alto",
+        "nombre": "Vinil Premium Especial",
+        "precio_ml": 180.0,
+        "ancho_rollo_m": 1.22,
+        "acabado": "metalico",
+        "colores": ["Light Red", "Emerald", "Coral Red", "Gold"],
+    },
+]
 
 # ─── DISTANCIADORES (letras retroiluminadas) ─────────────────────────────────
 DISTANCIADORES = {
@@ -584,6 +699,8 @@ def catalog_to_dict() -> dict:
             "precio_cm": PRECIOS_BASE["precio_cm"],
             "multiplicadores": dict(PRECIOS_BASE["multiplicadores"]),
         },
+        "precios_caja_m2": dict(PRECIOS_CAJA_M2),
+        "vinilos": VINILOS,
         "tipos_construccion": TIPOS_CONSTRUCCION,
         "gruas": GRUAS,
     }
@@ -625,6 +742,12 @@ def catalog_apply(raw: dict):
         if "multiplicadores" in pb:
             PRECIOS_BASE["multiplicadores"].clear()
             PRECIOS_BASE["multiplicadores"].update(pb["multiplicadores"])
+    if "precios_caja_m2" in raw:
+        PRECIOS_CAJA_M2.clear()
+        PRECIOS_CAJA_M2.update({k: float(v) for k, v in raw["precios_caja_m2"].items()})
+    if "vinilos" in raw:
+        VINILOS.clear()
+        VINILOS.extend(raw["vinilos"])
 
 
 def _catalog_merge(raw: dict):
@@ -676,6 +799,17 @@ def _catalog_merge(raw: dict):
             PRECIOS_BASE["precio_cm"] = float(pb["precio_cm"])
         if "multiplicadores" in pb:
             PRECIOS_BASE["multiplicadores"].update(pb["multiplicadores"])
+    if "precios_caja_m2" in raw:
+        PRECIOS_CAJA_M2.update({k: float(v) for k, v in raw["precios_caja_m2"].items()})
+    if "vinilos" in raw:
+        raw_by_id = {v["id"]: v for v in raw["vinilos"] if "id" in v}
+        for vinyl in VINILOS:
+            if vinyl.get("id") in raw_by_id:
+                vinyl.update(raw_by_id[vinyl["id"]])
+        existing_ids = {v.get("id") for v in VINILOS}
+        for vinyl in raw["vinilos"]:
+            if vinyl.get("id") not in existing_ids:
+                VINILOS.append(vinyl)
 
 
 def catalog_load():

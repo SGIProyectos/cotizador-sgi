@@ -479,9 +479,24 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
       <label>Material de la cara</label>
       <select id="mat-cara">
         <option value="auto">Automático según altura</option>
-        <option value="acrilico_3mm">Acrílico 3mm</option>
-        <option value="acrilico_6mm">Acrílico 6mm</option>
-        <option value="aluminio_cal20">Aluminio Calibre 20</option>
+        <optgroup label="Acrílico">
+          <option value="acrilico_3mm">Acrílico 3mm</option>
+          <option value="acrilico_3mm_blanco">Acrílico Blanco 3mm</option>
+          <option value="acrilico_3mm_colores">Acrílico Color 3mm</option>
+          <option value="acrilico_3mm_translucido">Acrílico Translúcido 3mm</option>
+          <option value="acrilico_3mm_espejo">Acrílico Espejo 3mm</option>
+          <option value="acrilico_5mm">Acrílico 5mm</option>
+          <option value="acrilico_6mm">Acrílico 6mm</option>
+        </optgroup>
+        <optgroup label="Alucom">
+          <option value="alucom_base">Alucom Color Base</option>
+          <option value="alucom_especial">Alucom Acabado Especial</option>
+          <option value="alucom_espejo">Alucom Espejo</option>
+        </optgroup>
+        <optgroup label="Aluminio">
+          <option value="aluminio_cal20">Aluminio Calibre 20</option>
+          <option value="aluminio_cal18">Aluminio Calibre 18</option>
+        </optgroup>
       </select>
       <label>Material de la cercha</label>
       <select id="mat-cercha">
@@ -516,6 +531,7 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
       <label>Tipo de cara</label>
       <select id="tipo-cara-caja">
         <option value="lona">Lona impresa</option>
+        <option value="vinil_corte">Vinil de corte</option>
         <option value="acrilico">Acrílico</option>
         <option value="acrilico_2vistas">Acrílico 2 vistas</option>
       </select>
@@ -531,13 +547,32 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
       <h3>Parámetros — Letras Planas</h3>
       <label>Material de corte</label>
       <select id="mat-plana">
-        <option value="acrilico_3mm">Acrílico 3mm</option>
-        <option value="acrilico_6mm">Acrílico 6mm</option>
-        <option value="aluminio_cal18">Aluminio cal 18</option>
-        <option value="aluminio_cal20">Aluminio cal 20</option>
-        <option value="pvc_3mm">PVC 3mm</option>
-        <option value="pvc_6mm">PVC 6mm</option>
-        <option value="alucobon_3mm">Alucobon / Dibond 3mm</option>
+        <optgroup label="Acrílico">
+          <option value="acrilico_3mm">Acrílico 3mm</option>
+          <option value="acrilico_3mm_blanco">Acrílico Blanco 3mm</option>
+          <option value="acrilico_3mm_colores">Acrílico Color 3mm</option>
+          <option value="acrilico_3mm_translucido">Acrílico Translúcido 3mm</option>
+          <option value="acrilico_3mm_espejo">Acrílico Espejo 3mm</option>
+          <option value="acrilico_5mm">Acrílico 5mm</option>
+          <option value="acrilico_6mm">Acrílico 6mm</option>
+          <option value="acrilico_9mm">Acrílico 9mm</option>
+        </optgroup>
+        <optgroup label="Alucom">
+          <option value="alucom_base">Alucom Color Base</option>
+          <option value="alucom_especial">Alucom Acabado Especial</option>
+          <option value="alucom_espejo">Alucom Espejo</option>
+        </optgroup>
+        <optgroup label="Aluminio">
+          <option value="aluminio_cal18">Aluminio cal 18</option>
+          <option value="aluminio_cal20">Aluminio cal 20</option>
+        </optgroup>
+        <optgroup label="PVC / Espumado">
+          <option value="pvc_3mm">PVC 3mm</option>
+          <option value="pvc_6mm">PVC 6mm</option>
+        </optgroup>
+        <optgroup label="Compuesto">
+          <option value="alucobon_3mm">Alucobon / Dibond 3mm</option>
+        </optgroup>
       </select>
     </div>
 
@@ -656,6 +691,7 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
         <button class="cat-subbtn" onclick="showCatSection('fuentes',this)">⚡ Fuentes</button>
         <button class="cat-subbtn" onclick="showCatSection('pegamentos',this)">🔩 Pegamentos</button>
         <button class="cat-subbtn" onclick="showCatSection('precios_base',this)">💰 Precios Base</button>
+        <button class="cat-subbtn" onclick="showCatSection('vinilos',this)">🎨 Vinilos</button>
       </div>
 
       <!-- LÁMINAS -->
@@ -704,6 +740,15 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
           <button class="btn-add" onclick="openAddModal('pegamento')">+ Agregar pegamento</button>
         </div>
         <div id="tbl-pegamentos-wrap"></div>
+      </div>
+
+      <!-- VINILOS -->
+      <div class="cat-section" id="cat-vinilos">
+        <div class="cat-section-hdr">
+          <p>Vinilos adhesivos — precio por metro lineal (rollo ancho 1.22 m)</p>
+          <button class="btn-add" onclick="openAddModal('vinil')">+ Agregar vinil</button>
+        </div>
+        <div id="tbl-vinilos-wrap"></div>
       </div>
 
       <!-- PRECIOS BASE -->
@@ -832,11 +877,16 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
 
         <div class="cfg-step">
           <div class="cfg-step-label"><span class="cfg-step-num">3</span>¿Qué cara lleva la caja?</div>
-          <div class="cfg-cards-3" id="cfg-caja-cara-cards">
+          <div class="cfg-cards" id="cfg-caja-cara-cards">
             <div class="cfg-card active" data-val="lona" onclick="selectCfgCard(this,'cfg-caja-cara-cards')">
               <div class="cfg-card-icon">🖼️</div>
               <div class="cfg-card-name">Lona impresa</div>
               <div class="cfg-card-desc">Digital · económica · reemplazable</div>
+            </div>
+            <div class="cfg-card" data-val="vinil_corte" onclick="selectCfgCard(this,'cfg-caja-cara-cards')">
+              <div class="cfg-card-icon">✂️</div>
+              <div class="cfg-card-name">Vinil de corte</div>
+              <div class="cfg-card-desc">Letras y gráficos recortados · adhesivo</div>
             </div>
             <div class="cfg-card" data-val="acrilico" onclick="selectCfgCard(this,'cfg-caja-cara-cards')">
               <div class="cfg-card-icon">💎</div>
@@ -1555,10 +1605,36 @@ function showCatSection(sec, btn) {
   document.getElementById("cat-"+sec).classList.add("active");
 }
 
+function renderVinilos() {
+  const rows = (catalog.vinilos || []);
+  let html = `<table class="cat-table"><thead><tr>
+    <th>#</th><th>Nombre</th><th>$/ml</th><th>Ancho rollo</th><th>$/m²</th><th>Acabado</th><th>Colores</th><th></th>
+  </tr></thead><tbody>`;
+  rows.forEach((v, i) => {
+    const pm2 = v.ancho_rollo_m > 0 ? (v.precio_ml / v.ancho_rollo_m).toFixed(2) : "—";
+    const coloresList = (v.colores || []).join(", ");
+    html += `<tr>
+      <td>${i+1}</td>
+      <td><strong>${v.nombre}</strong></td>
+      <td class="price-cell">$${(v.precio_ml||0).toFixed(2)}</td>
+      <td>${v.ancho_rollo_m||1.22} m</td>
+      <td class="price-cell">$${pm2}</td>
+      <td>${v.acabado||"—"}</td>
+      <td style="font-size:10px;max-width:180px;color:#8a94a6">${coloresList}</td>
+      <td class="actions">
+        <button class="btn-edit" onclick="openEditModal('vinil',${i})">Editar</button>
+        <button class="btn-del"  onclick="deleteItem('vinil',${i})">✕</button>
+      </td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("tbl-vinilos-wrap").innerHTML = html;
+}
+
 function renderAllCatalog() {
   if (!catalog) return;
   renderLaminas(); renderLedsCanal(); renderLedsCaja();
-  renderFuentes(); renderPegamentos(); renderPreciosBase();
+  renderFuentes(); renderPegamentos(); renderPreciosBase(); renderVinilos();
   updateMultiplicadoresSelect();
 }
 
@@ -1832,6 +1908,10 @@ function openEditModal(type, key) {
     const [m1,m2] = key.split("|");
     modalCtx = {type, key, isNew:false};
     showModal(title, pegamentoFields(item, m1, m2, true));
+  } else if (type === "vinil") {
+    item = {...(catalog.vinilos||[])[key]}; title = "Editar vinil #"+(key+1);
+    modalCtx = {type, key, isNew:false};
+    showModal(title, vinilFields(item));
   }
 }
 
@@ -1843,6 +1923,7 @@ function openAddModal(type) {
     led_caja: {nombre:"", precio:0, watts:0, ip:"IP65", profundidad_min:6, profundidad_max:40, vistas:1, uso:"exterior"},
     fuente: {nombre:"", watts:60, precio:0, ip:"IP68", uso:"exterior", voltaje:12},
     pegamento: {nombre:"", precio_aprox:90},
+    vinil: {id:"", nombre:"", precio_ml:58, ancho_rollo_m:1.22, acabado:"opaco", colores:[]},
   };
   const baseType = type.replace("_int","").replace("_ext","");
   const item = defs[baseType] || {};
@@ -1851,6 +1932,7 @@ function openAddModal(type) {
   else if (type==="led_caja") showModal("Nuevo LED Caja", ledCajaFields({...item, uso:"exterior"}));
   else if (type==="fuente") showModal("Nueva fuente de poder", fuenteFields(item));
   else if (type==="pegamento") showModal("Nuevo pegamento", pegamentoFields(item,"","",false));
+  else if (type==="vinil") showModal("Nuevo grupo de vinil", vinilFields(item));
 }
 
 function showModal(title, bodyHtml) {
@@ -1934,6 +2016,21 @@ function pegamentoFields(m, m1, m2, readonly) {
   </div>`;
 }
 
+function vinilFields(m) {
+  const coloresStr = (m.colores || []).join(", ");
+  return `<div class="modal-grid2">
+    ${fld("id","ID único", m.id||"")}
+    ${fld("nombre","Nombre del grupo", m.nombre||"")}
+    ${fld("precio_ml","Precio por metro lineal ($)", m.precio_ml||58,"number","0.01")}
+    ${fld("ancho_rollo_m","Ancho del rollo (m)", m.ancho_rollo_m||1.22,"number","0.01")}
+    ${fld("acabado","Acabado", m.acabado||"opaco","text","1",[["opaco","Opaco"],["metalico","Metálico"],["espejo","Espejo"]])}
+  </div>
+  <div style="margin-top:12px">
+    <label style="font-size:12px;font-weight:700;color:var(--azul);display:block;margin-bottom:6px">Colores disponibles (separados por coma)</label>
+    <textarea id="f-colores" rows="3" style="width:100%;padding:8px;border:1.5px solid var(--borde);border-radius:6px;font-size:12px;resize:vertical">${coloresStr}</textarea>
+  </div>`;
+}
+
 function getModalValues(fields) {
   const obj = {};
   fields.forEach(f => {
@@ -1981,6 +2078,16 @@ function saveModal() {
     if (!isNew) delete catalog.pegamentos[key];
     catalog.pegamentos[newKey] = {nombre: vals.nombre, precio_aprox: vals.precio_aprox};
     renderPegamentos();
+  } else if (type === "vinil") {
+    const vals = getModalValues(["id","nombre","precio_ml","ancho_rollo_m","acabado"]);
+    const coloresRaw = document.getElementById("f-colores")?.value || "";
+    vals.colores = coloresRaw.split(",").map(s => s.trim()).filter(Boolean);
+    vals.precio_ml = parseFloat(vals.precio_ml) || 0;
+    vals.ancho_rollo_m = parseFloat(vals.ancho_rollo_m) || 1.22;
+    if (!catalog.vinilos) catalog.vinilos = [];
+    if (isNew) catalog.vinilos.push(vals);
+    else catalog.vinilos[key] = {...catalog.vinilos[key], ...vals};
+    renderVinilos();
   }
   closeModal();
   showToast("Elemento actualizado — recuerda guardar", "ok");
@@ -1992,6 +2099,7 @@ function deleteItem(type, key) {
   else if (type === "led_canal") { catalog.leds_canal.splice(key,1); renderLedsCanal(); }
   else if (type === "fuente") { catalog.fuentes.splice(key,1); renderFuentes(); }
   else if (type === "pegamento") { delete catalog.pegamentos[key]; renderPegamentos(); }
+  else if (type === "vinil") { (catalog.vinilos||[]).splice(key,1); renderVinilos(); }
   else if (type.startsWith("led_caja_")) {
     const side = type.replace("led_caja_","");
     catalog.leds_caja[side].splice(key,1); renderLedsCaja();
