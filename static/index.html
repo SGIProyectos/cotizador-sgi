@@ -1211,11 +1211,15 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
       return;
     }
     // Usar el path más grande (contorno de la caja) para las dimensiones reales
-    const mainPath = paths.reduce((a, b) => ((a.area_px||0) >= (b.area_px||0) ? a : b), paths[0]);
+    const mainPath  = paths.reduce((a, b) => ((a.area_px||0) >= (b.area_px||0) ? a : b), paths[0]);
     let perimTotal = 0;
     paths.forEach(p => { perimTotal += p.perimeter_px || 0; });
-    const anchoTotal = ((mainPath.bbox?.w || 0) * scaleFactor).toFixed(1);
-    const altoTotal  = ((mainPath.bbox?.h || 0) * scaleFactor).toFixed(1);
+    // Ancho = el que el usuario ingresó (autoritativo); alto = proporcional al path
+    const anchoReal  = parseFloat(document.getElementById("ancho-real")?.value) || 0;
+    const _bw        = mainPath.bbox?.w || 1;
+    const _bh        = mainPath.bbox?.h || 1;
+    const anchoTotal = anchoReal > 0 ? anchoReal.toFixed(1) : (_bw * scaleFactor).toFixed(1);
+    const altoTotal  = anchoReal > 0 ? (anchoReal * (_bh / _bw)).toFixed(1) : (_bh * scaleFactor).toFixed(1);
     const areaTotal  = (parseFloat(anchoTotal) * parseFloat(altoTotal)).toFixed(1);
     const perimCm    = (perimTotal * scaleFactor).toFixed(1);
     const vinilArea  = (parseFloat(areaTotal) / 10000).toFixed(3);

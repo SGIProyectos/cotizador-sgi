@@ -652,12 +652,14 @@ def cotizar_caja(
     if svg_data.paths:
         paths_sorted = sorted(svg_data.paths, key=lambda p: p.area_cm2, reverse=True)
         caja = paths_sorted[0]
-        caja_w_cm = caja.bbox["w"] * sf
-        caja_h_cm = caja.bbox["h"] * sf
-    else:
-        # Si no hay paths, usar el viewBox completo
+        # Ancho = el que el usuario ingresó (autoritativo)
+        # Alto = proporcional al aspect ratio real del path
+        _bw = caja.bbox["w"] or 1
         caja_w_cm = real_width_cm
-        caja_h_cm = svg_data.viewbox_h * sf
+        caja_h_cm = round(real_width_cm * (caja.bbox["h"] / _bw), 2)
+    else:
+        caja_w_cm = real_width_cm
+        caja_h_cm = round(svg_data.viewbox_h * sf, 2)
         caja_area = caja_w_cm * caja_h_cm
         caja_perim = 2 * (caja_w_cm + caja_h_cm)
 
