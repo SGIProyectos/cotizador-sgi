@@ -878,49 +878,55 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
         </div>
 
         <div class="cfg-step">
-          <div class="cfg-step-label"><span class="cfg-step-num">2</span>¿Se ve de uno o dos lados?</div>
+          <div class="cfg-step-label"><span class="cfg-step-num">2</span>¿Cuántas caras tiene la caja?</div>
           <div class="cfg-cards" id="cfg-caja-vistas-cards">
             <div class="cfg-card active" data-val="1" onclick="selectCfgCard(this,'cfg-caja-vistas-cards');onCfgCajaChange()">
               <div class="cfg-card-icon">👁️</div>
-              <div class="cfg-card-name">Una sola vista</div>
-              <div class="cfg-card-desc">El anuncio se ve de un lado únicamente</div>
+              <div class="cfg-card-name">Una cara</div>
+              <div class="cfg-card-desc">Se ve de un solo lado · fondo Alucobon</div>
             </div>
             <div class="cfg-card" data-val="2" onclick="selectCfgCard(this,'cfg-caja-vistas-cards');onCfgCajaChange()">
               <div class="cfg-card-icon">👁️‍🗨️</div>
-              <div class="cfg-card-name">Dos vistas</div>
-              <div class="cfg-card-desc">Se ve de ambos lados (cuelga o está en centro)</div>
+              <div class="cfg-card-name">Dos caras</div>
+              <div class="cfg-card-desc">Se ve de ambos lados · cuelga o está en centro</div>
             </div>
           </div>
         </div>
 
         <div class="cfg-step">
-          <div class="cfg-step-label"><span class="cfg-step-num">3</span>¿Qué cara lleva la caja?</div>
-          <div class="cfg-cards" id="cfg-caja-cara-cards">
-            <div class="cfg-card active" data-val="lona" onclick="selectCfgCard(this,'cfg-caja-cara-cards')">
+          <div class="cfg-step-label"><span class="cfg-step-num">3</span>Material de la cara</div>
+          <div class="cfg-cards" id="cfg-caja-mat-cards">
+            <div class="cfg-card active" data-val="lona" onclick="selectCfgCard(this,'cfg-caja-mat-cards');onCfgCajaMatChange()">
               <div class="cfg-card-icon">🖼️</div>
-              <div class="cfg-card-name">Lona impresa</div>
-              <div class="cfg-card-desc">Digital · económica · reemplazable</div>
+              <div class="cfg-card-name">Lona</div>
+              <div class="cfg-card-desc">Económica · flexible · reemplazable</div>
             </div>
-            <div class="cfg-card" data-val="vinil_corte" onclick="selectCfgCard(this,'cfg-caja-cara-cards')">
-              <div class="cfg-card-icon">✂️</div>
-              <div class="cfg-card-name">Vinil de corte</div>
-              <div class="cfg-card-desc">Letras y gráficos recortados · adhesivo</div>
-            </div>
-            <div class="cfg-card" data-val="acrilico" onclick="selectCfgCard(this,'cfg-caja-cara-cards')">
+            <div class="cfg-card" data-val="acrilico" onclick="selectCfgCard(this,'cfg-caja-mat-cards');onCfgCajaMatChange()">
               <div class="cfg-card-icon">💎</div>
               <div class="cfg-card-name">Acrílico</div>
               <div class="cfg-card-desc">Durable · translúcido · premium</div>
             </div>
-            <div class="cfg-card" data-val="acrilico_2vistas" onclick="selectCfgCard(this,'cfg-caja-cara-cards')">
-              <div class="cfg-card-icon">💠</div>
-              <div class="cfg-card-name">Acrílico 2 vistas</div>
-              <div class="cfg-card-desc">Doble cara · mayor luminosidad</div>
+          </div>
+        </div>
+
+        <div class="cfg-step">
+          <div class="cfg-step-label"><span class="cfg-step-num">4</span>Acabado de la cara</div>
+          <div class="cfg-cards" id="cfg-caja-acabado-cards">
+            <div class="cfg-card active" data-val="impresa" onclick="selectCfgCard(this,'cfg-caja-acabado-cards')">
+              <div class="cfg-card-icon">🖨️</div>
+              <div class="cfg-card-name">Impresión digital</div>
+              <div class="cfg-card-desc">Lona impresa a todo color</div>
+            </div>
+            <div class="cfg-card" data-val="vinil_corte" onclick="selectCfgCard(this,'cfg-caja-acabado-cards')">
+              <div class="cfg-card-icon">✂️</div>
+              <div class="cfg-card-name">Vinil de corte</div>
+              <div class="cfg-card-desc">Letras y gráficos recortados sobre la lona</div>
             </div>
           </div>
         </div>
 
         <div class="cfg-step">
-          <div class="cfg-step-label"><span class="cfg-step-num">4</span>Profundidad del cajón</div>
+          <div class="cfg-step-label"><span class="cfg-step-num">5</span>Profundidad del cajón</div>
           <div id="cfg-caja-led-rec" class="cfg-rec-box">
             <div class="cfg-rec-title">Ajusta las opciones arriba para ver la recomendación</div>
           </div>
@@ -2635,6 +2641,38 @@ function onCfgCerchaChange() {
   renderCfgCerchaRec();
 }
 
+function onCfgCajaMatChange() {
+  const mat = _cfgCardVal("cfg-caja-mat-cards") || "lona";
+  const container = document.getElementById("cfg-caja-acabado-cards");
+  if (!container) return;
+  const prev = _cfgCardVal("cfg-caja-acabado-cards");
+  if (mat === "lona") {
+    container.innerHTML = `
+      <div class="cfg-card${prev === "impresa" || !prev ? " active" : ""}" data-val="impresa" onclick="selectCfgCard(this,'cfg-caja-acabado-cards')">
+        <div class="cfg-card-icon">🖨️</div>
+        <div class="cfg-card-name">Impresión digital</div>
+        <div class="cfg-card-desc">Lona impresa a todo color</div>
+      </div>
+      <div class="cfg-card${prev === "vinil_corte" ? " active" : ""}" data-val="vinil_corte" onclick="selectCfgCard(this,'cfg-caja-acabado-cards')">
+        <div class="cfg-card-icon">✂️</div>
+        <div class="cfg-card-name">Vinil de corte</div>
+        <div class="cfg-card-desc">Letras recortadas adheridas sobre la lona</div>
+      </div>`;
+  } else {
+    container.innerHTML = `
+      <div class="cfg-card${prev === "vinil_impresion" || !prev ? " active" : ""}" data-val="vinil_impresion" onclick="selectCfgCard(this,'cfg-caja-acabado-cards')">
+        <div class="cfg-card-icon">🖨️</div>
+        <div class="cfg-card-name">Vinil de impresión</div>
+        <div class="cfg-card-desc">Vinilo impreso adherido al acrílico</div>
+      </div>
+      <div class="cfg-card${prev === "vinil_corte" ? " active" : ""}" data-val="vinil_corte" onclick="selectCfgCard(this,'cfg-caja-acabado-cards')">
+        <div class="cfg-card-icon">✂️</div>
+        <div class="cfg-card-name">Vinil de corte</div>
+        <div class="cfg-card-desc">Letras recortadas adheridas al acrílico</div>
+      </div>`;
+  }
+}
+
 function onCfgCajaChange() {
   const uso  = _cfgCardVal("cfg-caja-uso-cards") || "exterior";
   const vistas = parseInt(_cfgCardVal("cfg-caja-vistas-cards") || "1");
@@ -2706,26 +2744,23 @@ function aplicarConfiguracion() {
     actualizarAsesor();
 
   } else if (tipoActual === "caja") {
-    const uso    = _cfgCardVal("cfg-caja-uso-cards") || "exterior";
+    const uso    = _cfgCardVal("cfg-caja-uso-cards")    || "exterior";
     const vistas = parseInt(_cfgCardVal("cfg-caja-vistas-cards") || "1");
-    const cara   = _cfgCardVal("cfg-caja-cara-cards") || "lona";
+    const mat    = _cfgCardVal("cfg-caja-mat-cards")    || "lona";
+    const acabado = _cfgCardVal("cfg-caja-acabado-cards") || "impresa";
     const prof   = parseInt(document.getElementById("cfg-caja-prof-slider")?.value || 15);
 
     const selUso = document.getElementById("uso");
-    if (selUso) selUso.value = uso;
+    if (selUso) { selUso.value = uso; populateLedsCaja(); }
     const selVistas = document.getElementById("vistas");
     if (selVistas) selVistas.value = vistas;
-    // cara del configurador: "lona" | "vinil_corte" | "acrilico" | "acrilico_2vistas"
-    const selBase = document.getElementById("base-cara-caja");
+
+    const selBase    = document.getElementById("base-cara-caja");
     const selAcabado = document.getElementById("acabado-cara-caja");
     if (selBase && selAcabado) {
-      if (cara === "vinil_corte") {
-        selBase.value = "lona"; onBaseCaraCajaChange("lona"); selAcabado.value = "vinil_corte";
-      } else if (cara === "acrilico" || cara === "acrilico_2vistas") {
-        selBase.value = "acrilico"; onBaseCaraCajaChange("acrilico"); selAcabado.value = "vinil_corte";
-      } else {
-        selBase.value = "lona"; onBaseCaraCajaChange("lona"); selAcabado.value = "impresa";
-      }
+      selBase.value = mat;
+      onBaseCaraCajaChange(mat);
+      selAcabado.value = acabado;
     }
     const inpProf = document.getElementById("profundidad");
     if (inpProf) inpProf.value = prof;
