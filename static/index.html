@@ -1518,8 +1518,13 @@ function renderResult(d) {
       ${stat("Cercha total", (m.perimetro_total_cm/100).toFixed(2)+" m", "prof. "+m.cercha_altura_cm+" cm")}
       ${stat("Módulos LED", il.modulos+" uds", il.led)}
       ${stat("Watts", il.watts_total+" W", il.fuente)}
-      ${stat("Material cara", mats.cara.nombre, mats.cara.laminas+" lám.")}
+      ${stat("Material cara", mats.cara.nombre+(mats.cara.base ? " / "+mats.cara.base : ""), mats.cara.laminas+" lám.")}
       ${stat("Material cercha", mats.cercha.nombre, mats.cercha.laminas+" lám.")}
+      ${mats.cara.vinil_ancho_cm != null ? stat(
+          "Vinil de corte",
+          mats.cara.vinil_ancho_cm+" × "+mats.cara.vinil_alto_cm+" cm",
+          (mats.cara.vinil_area_m2||0).toFixed(3)+" m²"
+        ) : ""}
     </div>
 
     <!-- ── DESGLOSE DE COSTOS ── -->

@@ -342,6 +342,10 @@ def _result_to_dict(r: QuoteResult, qid: str) -> dict:
         "materiales": {
             "cara": {
                 "nombre": r.material_cara.get("nombre"),
+                "base": r.material_cara.get("base"),
+                "vinil_ancho_cm": r.material_cara.get("vinil_ancho_cm"),
+                "vinil_alto_cm":  r.material_cara.get("vinil_alto_cm"),
+                "vinil_area_m2":  r.material_cara.get("vinil_area_m2"),
                 "laminas": r.laminas_cara,
                 "costo": round(r.costo_material_cara, 2),
             },

@@ -757,8 +757,10 @@ def cotizar_caja(
 
     mat_cara_info = {"nombre": tipo_cara, "precio": c_cara}
     if tipo_cara == "vinil_corte":
-        mat_cara_info["base"] = base_cara_vinil
-        mat_cara_info["vinil_area_m2"] = vinil_area_m2
+        mat_cara_info["base"]          = base_cara_vinil
+        mat_cara_info["vinil_ancho_cm"] = round(vinil_w_cm, 1)
+        mat_cara_info["vinil_alto_cm"]  = round(caja_h_cm, 1)
+        mat_cara_info["vinil_area_m2"]  = vinil_area_m2
 
     return QuoteResult(
         tipo="caja_luz",
