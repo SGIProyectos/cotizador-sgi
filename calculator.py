@@ -14,6 +14,7 @@ from catalog_data import (
     cercha_recomendada_cm, led_recomendado,
     material_cercha, material_cara, fuente_optima,
     recomendar_tipo_construccion, silvatrim_recomendado,
+    recomendar_led_caja,
 )
 
 
@@ -638,6 +639,7 @@ def cotizar_caja(
     profundidad_cm: float,
     tipo_cara: str = "lona",       # "lona" | "acrilico" | "acrilico_2vistas" | "vinil_corte"
     base_cara_vinil: str = "lona", # base cuando tipo_cara == "vinil_corte": "lona" | "acrilico"
+    led_id: str = "auto",
     uso: str = "exterior",
     vistas: int = 1,
     margen_ganancia: float = 0.35,
@@ -693,15 +695,15 @@ def cotizar_caja(
     lam_fondo = laminas_necesarias(caja.area_cm2, "pvc_6mm" if uso == "exterior" else "pvc_3mm")
     c_fondo   = lam_fondo * mat_fondo["precio"]
 
-    # LEDs — tiras horizontales cada 18cm de profundidad
-    if uso == "exterior":
-        leds_disp = LEDS_CAJA["exterior"]
-        leds_disp = [l for l in leds_disp if l["profundidad_min"] <= profundidad_cm <= l["profundidad_max"]]
-        led = leds_disp[0] if leds_disp else LEDS_CAJA["exterior"][0]
+    # LEDs — selección automática o manual
+    all_leds = LEDS_CAJA["interior"] + LEDS_CAJA["exterior"]
+    if led_id != "auto":
+        led = next((l for l in all_leds if l["id"] == led_id), None)
     else:
-        leds_disp = LEDS_CAJA["interior"]
-        leds_disp = [l for l in leds_disp if l["profundidad_min"] <= profundidad_cm <= l["profundidad_max"]]
-        led = leds_disp[0] if leds_disp else LEDS_CAJA["interior"][0]
+        led = None
+    if led is None:
+        recs = recomendar_led_caja(caja_w_cm, caja_h_cm, vistas == 2, uso, profundidad_cm)
+        led  = recs[0] if recs else (LEDS_CAJA[uso][0] if LEDS_CAJA[uso] else all_leds[0])
 
     tipo_led = led.get("tipo_led", "backlite")
     if tipo_led == "edgelite":

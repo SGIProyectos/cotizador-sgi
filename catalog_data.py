@@ -695,10 +695,15 @@ def recomendar_led_caja(
         key=lambda x: x.get("lumenes") or 0,
         reverse=True,
     )
-    backlite = [l for l in compatibles if l.get("tipo_led") != "edgelite"]
+    perimetral = [l for l in compatibles if l.get("tipo_led") == "perimetral"]
+    backlite   = [l for l in compatibles if l.get("tipo_led") == "backlite"]
 
-    # Edgelite primero cuando aplica; backlite como complemento o fallback
-    return edgelite + backlite if edgelite else backlite or compatibles
+    # Edgelite > perimetral > backlite según aplique; fallback a todo compatible
+    if edgelite:
+        return edgelite + perimetral + backlite
+    if perimetral:
+        return perimetral + backlite
+    return backlite or compatibles
 
 
 # ─── CERCHA RECOMENDADA SEGÚN ALTURA DE LETRA ────────────────────────────────

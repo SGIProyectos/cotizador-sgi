@@ -113,6 +113,7 @@ class CajaRequest(_InstMixin):
     profundidad_cm: float
     tipo_cara: str = "lona"
     base_cara_vinil: str = "lona"
+    led_id: str = "auto"
     uso: str = "exterior"
     vistas: int = 1
     margen_ganancia: float = 0.35
@@ -207,6 +208,7 @@ async def api_cotizar_caja(req: CajaRequest):
             profundidad_cm=req.profundidad_cm,
             tipo_cara=req.tipo_cara,
             base_cara_vinil=req.base_cara_vinil,
+            led_id=req.led_id,
             uso=req.uso,
             vistas=req.vistas,
             margen_ganancia=req.margen_ganancia,

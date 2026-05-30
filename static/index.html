@@ -453,7 +453,7 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
       <label>Ancho real del diseño (cm)</label>
       <input type="number" id="ancho-real" value="60" min="1" step="1">
       <label>Uso</label>
-      <select id="uso">
+      <select id="uso" onchange="populateLedsCaja()">
         <option value="exterior">Exterior</option>
         <option value="interior">Interior</option>
       </select>
@@ -527,7 +527,7 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
     <div class="panel field-group" id="params-caja">
       <h3>Parámetros — Caja de Luz</h3>
       <label>Profundidad del cajón (cm)</label>
-      <input type="number" id="profundidad" value="15" min="5" step="1">
+      <input type="number" id="profundidad" value="15" min="5" step="1" oninput="sugerirLedCaja()">
       <label>Tipo de cara</label>
       <select id="tipo-cara-caja" onchange="onTipoCaraCajaChange(this.value)">
         <option value="lona">Lona impresa</option>
@@ -543,10 +543,15 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
         </select>
       </div>
       <label>Número de vistas</label>
-      <select id="vistas">
+      <select id="vistas" onchange="sugerirLedCaja()">
         <option value="1">1 vista</option>
         <option value="2">2 vistas</option>
       </select>
+      <label>Tipo de LED</label>
+      <select id="led-caja" onchange="sugerirLedCaja()">
+        <option value="auto">Auto (recomendado)</option>
+      </select>
+      <div id="led-caja-hint" style="font-size:11px;color:var(--azul);margin-top:-6px;margin-bottom:4px;min-height:16px"></div>
     </div>
 
     <!-- Parámetros PLANAS -->
@@ -1030,6 +1035,49 @@ function onTipoCaraCajaChange(val) {
     val === "vinil_corte" ? "block" : "none";
 }
 
+// ─── SELECTOR DE LED CAJA ────────────────────────────────────────────────────
+function populateLedsCaja() {
+  const uso = document.getElementById("uso")?.value || "exterior";
+  const sel = document.getElementById("led-caja");
+  if (!sel || !catalog?.leds_caja) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="auto">Auto (recomendado)</option>';
+  const pool = uso === "interior"
+    ? (catalog.leds_caja.interior || [])
+    : (catalog.leds_caja.exterior || []);
+  pool.forEach(l => {
+    const tag = l.tipo_led === "edgelite" ? "barra" : l.tipo_led === "perimetral" ? "módulo perim." : "backlite";
+    const opt = document.createElement("option");
+    opt.value = l.id;
+    opt.textContent = `${l.nombre} · ${tag}`;
+    sel.appendChild(opt);
+  });
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+  sugerirLedCaja();
+}
+
+function sugerirLedCaja() {
+  const hint = document.getElementById("led-caja-hint");
+  const sel  = document.getElementById("led-caja");
+  if (!hint || !sel || !catalog?.leds_caja) return;
+  if (sel.value !== "auto") { hint.textContent = ""; return; }
+  const uso   = document.getElementById("uso")?.value || "exterior";
+  const prof  = parseFloat(document.getElementById("profundidad")?.value) || 15;
+  const vistas = parseInt(document.getElementById("vistas")?.value) || 1;
+  const pool  = uso === "interior"
+    ? (catalog.leds_caja.interior || [])
+    : (catalog.leds_caja.exterior || []);
+  const compatibles = pool.filter(l =>
+    (l.profundidad_min ?? 0) <= prof && prof <= (l.profundidad_max ?? 999)
+  );
+  if (!compatibles.length) { hint.textContent = "Sin LED compatible con esa profundidad"; return; }
+  let rec = vistas >= 2
+    ? (compatibles.find(l => (l.vistas ?? 1) >= 2) || compatibles[0])
+    : compatibles[0];
+  const tag = rec.tipo_led === "edgelite" ? "barra rígida" : rec.tipo_led === "perimetral" ? "módulo perimetral" : "backlite";
+  hint.textContent = `Sugerido: ${rec.nombre} · ${tag} · IP${rec.ip || ""}`;
+}
+
 // ─── TIPO DE CONSTRUCCIÓN ────────────────────────────────────────────────────
 function onTipoConstruccionChange() {
   const tipo = document.getElementById("tipo-construccion").value;
@@ -1228,6 +1276,7 @@ async function calcular() {
         profundidad_cm: parseFloat(document.getElementById("profundidad").value) || 15,
         tipo_cara:      document.getElementById("tipo-cara-caja").value,
         base_cara_vinil: document.getElementById("base-cara-vinil").value,
+        led_id:         document.getElementById("led-caja").value,
         uso,
         vistas:         parseInt(document.getElementById("vistas").value) || 1,
         margen_ganancia: margen,
@@ -1597,6 +1646,7 @@ async function loadCatalog(force=false) {
     catLoaded = true;
     renderAllCatalog();
     populateGruas();
+    populateLedsCaja();
   } catch(e) {
     showToast("Error cargando catálogo", "err");
   }
