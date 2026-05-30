@@ -528,20 +528,16 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
       <h3>Parámetros — Caja de Luz</h3>
       <label>Profundidad del cajón (cm)</label>
       <input type="number" id="profundidad" value="15" min="5" step="1" oninput="sugerirLedCaja()">
-      <label>Tipo de cara</label>
-      <select id="tipo-cara-caja" onchange="onTipoCaraCajaChange(this.value)">
-        <option value="lona">Lona impresa</option>
-        <option value="vinil_corte">Vinil de corte</option>
+      <label>Material de la cara</label>
+      <select id="base-cara-caja" onchange="onBaseCaraCajaChange(this.value)">
+        <option value="lona">Lona</option>
         <option value="acrilico">Acrílico</option>
-        <option value="acrilico_2vistas">Acrílico 2 vistas</option>
       </select>
-      <div id="base-cara-vinil-row" style="display:none">
-        <label>Material base (sustrato del vinil)</label>
-        <select id="base-cara-vinil">
-          <option value="lona">Lona translúcida</option>
-          <option value="acrilico">Acrílico</option>
-        </select>
-      </div>
+      <label>Acabado</label>
+      <select id="acabado-cara-caja" onchange="onTipoCaraCajaChange()">
+        <option value="impresa">Impresión digital</option>
+        <option value="vinil_corte">Vinil de corte</option>
+      </select>
       <label>Número de vistas</label>
       <select id="vistas" onchange="sugerirLedCaja()">
         <option value="1">1 vista</option>
@@ -1008,6 +1004,8 @@ let svgMaxHeightPx   = 0;
 let svgViewboxW      = 0;
 let svgArtboardWCm   = 0;    // >0 si SVG de Illustrator (ancho artboard en cm)
 let svgPathsRaw      = [];   // paths con px, para recalcular en cm
+let lastScaleFactor  = 0;   // último sf calculado, para re-render al cambiar tipo
+let lastCerchaAltura = 0;
 
 // ─── TIPOS DE CONSTRUCCIÓN (JS) ──────────────────────────────────────────────
 const TIPOS_CONSTRUCCION_JS = {
@@ -1027,12 +1025,34 @@ function setTipo(tipo, btn) {
   document.getElementById("params-caja").classList.toggle("visible",   tipo === "caja");
   const btnCalc = document.getElementById("btn-calc");
   if (btnCalc) btnCalc.disabled = !sessionId;
+  // Re-render cards según el tipo (caja = bbox global, letras = por path)
+  if (svgPathsRaw.length) renderPathCards(svgPathsRaw, lastScaleFactor, lastCerchaAltura);
 }
 
-// ─── TIPO DE CARA CAJA ───────────────────────────────────────────────────────
-function onTipoCaraCajaChange(val) {
-  document.getElementById("base-cara-vinil-row").style.display =
-    val === "vinil_corte" ? "block" : "none";
+// ─── SELECCIÓN DE CARA CAJA (dos niveles: base + acabado) ────────────────────
+function onBaseCaraCajaChange(base) {
+  const sel = document.getElementById("acabado-cara-caja");
+  const prev = sel.value;
+  sel.innerHTML = base === "lona"
+    ? `<option value="impresa">Impresión digital</option>
+       <option value="vinil_corte">Vinil de corte</option>`
+    : `<option value="vinil_corte">Vinil de corte</option>
+       <option value="vinil_impresion">Vinil de impresión</option>`;
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+  onTipoCaraCajaChange();
+}
+
+function onTipoCaraCajaChange() {
+  // nada que mostrar/ocultar extra — la lógica se resuelve en getCaraCajaParams()
+}
+
+// Devuelve {tipo_cara, base_cara_vinil} para enviar al backend
+function getCaraCajaParams() {
+  const base    = document.getElementById("base-cara-caja").value;
+  const acabado = document.getElementById("acabado-cara-caja").value;
+  if (acabado === "vinil_corte") return { tipo_cara: "vinil_corte", base_cara_vinil: base };
+  if (base === "acrilico")       return { tipo_cara: "acrilico",    base_cara_vinil: "acrilico" };
+  return { tipo_cara: "lona", base_cara_vinil: "lona" };
 }
 
 // ─── SELECTOR DE LED CAJA ────────────────────────────────────────────────────
@@ -1174,9 +1194,56 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
   const grid = document.getElementById("paths-grid");
   if (!paths.length) { grid.innerHTML = ""; return; }
 
-  const hasCm    = scaleFactor > 0;
+  const hasCm     = scaleFactor > 0;
   const hasCercha = hasCm && cerchaAlturaCm > 0;
 
+  // ── CAJA DE LUZ: una sola card con el bbox total del diseño ──────────────
+  if (tipoActual === "caja") {
+    if (!hasCm) {
+      grid.innerHTML = `<div style="grid-column:1/-1;font-size:12px;color:#aaa">
+        Ingresa el ancho real para ver medidas en cm</div>`;
+      return;
+    }
+    // bbox global = unión de todos los paths
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let perimTotal = 0;
+    paths.forEach(p => {
+      if (p.bbox) {
+        minX = Math.min(minX, p.bbox.x ?? 0);
+        minY = Math.min(minY, p.bbox.y ?? 0);
+        maxX = Math.max(maxX, (p.bbox.x ?? 0) + (p.bbox.w ?? 0));
+        maxY = Math.max(maxY, (p.bbox.y ?? 0) + (p.bbox.h ?? 0));
+      }
+      perimTotal += p.perimeter_px || 0;
+    });
+    const anchoTotal  = ((maxX - minX) * scaleFactor).toFixed(1);
+    const altoTotal   = ((maxY - minY) * scaleFactor).toFixed(1);
+    const areaTotal   = ((maxX - minX) * (maxY - minY) * scaleFactor * scaleFactor).toFixed(1);
+    const perimCm     = (perimTotal * scaleFactor).toFixed(1);
+    const vinilAncho  = Math.max(122, parseFloat(anchoTotal)).toFixed(0);
+    const vinilArea   = ((parseFloat(vinilAncho) * parseFloat(altoTotal)) / 10000).toFixed(3);
+
+    grid.innerHTML = `
+      <div style="grid-column:1/-1;font-size:12px;color:#666;margin-bottom:4px">
+        Caja de luz — diseño completo (${paths.length} elementos)
+      </div>
+      <div class="path-card" style="grid-column:1/-1;max-width:340px">
+        <div class="name">Diseño completo</div>
+        <div class="row"><span>Ancho total</span><span>${anchoTotal} cm</span></div>
+        <div class="row"><span>Alto total</span><span>${altoTotal} cm</span></div>
+        <div class="row"><span>Área cara (bbox)</span><span>${areaTotal} cm²</span></div>
+        <div class="row"><span>Perímetro total</span><span>${perimCm} cm</span></div>
+        <div style="margin-top:5px;padding-top:5px;border-top:1px solid #eee">
+          <div class="row" style="color:#e87c2a;font-weight:700">
+            <span>Vinil de corte (ancho rollo ${vinilAncho} cm)</span>
+            <span>${vinilArea} m²</span>
+          </div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // ── LETRAS / PLANAS: una card por path ───────────────────────────────────
   const header = hasCm
     ? `<div style="grid-column:1/-1;font-size:12px;color:#666;margin-bottom:4px">
          Medidas en <strong>cm</strong> · cercha ${cerchaAlturaCm} cm
@@ -1274,8 +1341,7 @@ async function calcular() {
         session_id:     sessionId,
         real_width_cm:  anchoReal,
         profundidad_cm: parseFloat(document.getElementById("profundidad").value) || 15,
-        tipo_cara:      document.getElementById("tipo-cara-caja").value,
-        base_cara_vinil: document.getElementById("base-cara-vinil").value,
+        ...getCaraCajaParams(),
         led_id:         document.getElementById("led-caja").value,
         uso,
         vistas:         parseInt(document.getElementById("vistas").value) || 1,
@@ -2341,6 +2407,8 @@ function actualizarAsesor(autoFillAltura = false) {
     cerchaManual > 0 ? `Cercha manual: ${cerchaManual} cm` : `Cercha automática: ${cercha} cm`;
 
   // ── 3. Actualizar path cards con medidas en cm ────────────────────────────
+  lastScaleFactor  = sf;
+  lastCerchaAltura = cercha;
   if (svgPathsRaw.length > 0) {
     renderPathCards(svgPathsRaw, sf, cercha);
   }
@@ -2647,8 +2715,18 @@ function aplicarConfiguracion() {
     if (selUso) selUso.value = uso;
     const selVistas = document.getElementById("vistas");
     if (selVistas) selVistas.value = vistas;
-    const selCara = document.getElementById("tipo-cara-caja");
-    if (selCara) selCara.value = cara;
+    // cara del configurador: "lona" | "vinil_corte" | "acrilico" | "acrilico_2vistas"
+    const selBase = document.getElementById("base-cara-caja");
+    const selAcabado = document.getElementById("acabado-cara-caja");
+    if (selBase && selAcabado) {
+      if (cara === "vinil_corte") {
+        selBase.value = "lona"; onBaseCaraCajaChange("lona"); selAcabado.value = "vinil_corte";
+      } else if (cara === "acrilico" || cara === "acrilico_2vistas") {
+        selBase.value = "acrilico"; onBaseCaraCajaChange("acrilico"); selAcabado.value = "vinil_corte";
+      } else {
+        selBase.value = "lona"; onBaseCaraCajaChange("lona"); selAcabado.value = "impresa";
+      }
+    }
     const inpProf = document.getElementById("profundidad");
     if (inpProf) inpProf.value = prof;
 

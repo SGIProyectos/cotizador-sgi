@@ -690,9 +690,13 @@ def cotizar_caja(
     lam_struct  = laminas_necesarias(area_struct, "aluminio_cal18")
     c_struct    = lam_struct * mat_struct["precio"]
 
-    # Fondo
-    mat_fondo = LAMINAS["pvc_6mm" if uso == "exterior" else "pvc_3mm"]
-    lam_fondo = laminas_necesarias(caja.area_cm2, "pvc_6mm" if uso == "exterior" else "pvc_3mm")
+    # Fondo — Alucobon 3mm para 1 vista (rigidez), PVC para 2 vistas (peso)
+    if vistas == 1:
+        fondo_id  = "alucobon_3mm"
+    else:
+        fondo_id  = "pvc_6mm" if uso == "exterior" else "pvc_3mm"
+    mat_fondo = LAMINAS[fondo_id]
+    lam_fondo = laminas_necesarias(caja.area_cm2, fondo_id)
     c_fondo   = lam_fondo * mat_fondo["precio"]
 
     # LEDs — selección automática o manual
