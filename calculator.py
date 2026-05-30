@@ -673,8 +673,11 @@ def cotizar_caja(
     if tipo_cara == "vinil_corte":
         precio_base_m2 = PRECIOS_CAJA_M2.get(base_cara_vinil, PRECIOS_CAJA_M2["lona"])
         c_cara_base = round(area_m2 * precio_base_m2, 2)
-        vinil_w_cm = max(122.0, caja_w_cm)          # mínimo un ancho de rollo (1.22 m)
-        vinil_area_m2 = round((vinil_w_cm * caja_h_cm) / 10000, 4)
+        # El vinil se mide igual que el diseño (lona/acrílico)
+        # El rollo solo define el mínimo facturable para precios, no la medida
+        vinil_w_cm    = caja_w_cm
+        vinil_h_cm    = caja_h_cm
+        vinil_area_m2 = round((vinil_w_cm * vinil_h_cm) / 10000, 4)
         c_vinil = round(vinil_area_m2 * PRECIOS_CAJA_M2["vinil_corte"], 2)
         c_cara  = round(c_cara_base + c_vinil, 2)
     else:
@@ -740,7 +743,7 @@ def cotizar_caja(
     if tipo_cara == "vinil_corte":
         desglose = [
             {"concepto": f"Base cara ({base_cara_vinil}) {area_m2:.2f} m²", "costo": c_cara_base},
-            {"concepto": f"Vinil de corte {vinil_w_cm:.0f}×{caja_h_cm:.0f} cm ({vinil_area_m2:.2f} m²)", "costo": c_vinil},
+            {"concepto": f"Vinil de corte {vinil_w_cm:.0f}×{vinil_h_cm:.0f} cm ({vinil_area_m2:.2f} m²)", "costo": c_vinil},
         ]
     else:
         desglose = [
@@ -759,7 +762,7 @@ def cotizar_caja(
     if tipo_cara == "vinil_corte":
         mat_cara_info["base"]          = base_cara_vinil
         mat_cara_info["vinil_ancho_cm"] = round(vinil_w_cm, 1)
-        mat_cara_info["vinil_alto_cm"]  = round(caja_h_cm, 1)
+        mat_cara_info["vinil_alto_cm"]  = round(vinil_h_cm, 1)
         mat_cara_info["vinil_area_m2"]  = vinil_area_m2
 
     return QuoteResult(

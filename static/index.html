@@ -1210,24 +1210,15 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
         Ingresa el ancho real para ver medidas en cm</div>`;
       return;
     }
-    // bbox global = unión de todos los paths
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    // Usar el path más grande (contorno de la caja) para las dimensiones reales
+    const mainPath = paths.reduce((a, b) => ((a.area_px||0) >= (b.area_px||0) ? a : b), paths[0]);
     let perimTotal = 0;
-    paths.forEach(p => {
-      if (p.bbox) {
-        minX = Math.min(minX, p.bbox.x ?? 0);
-        minY = Math.min(minY, p.bbox.y ?? 0);
-        maxX = Math.max(maxX, (p.bbox.x ?? 0) + (p.bbox.w ?? 0));
-        maxY = Math.max(maxY, (p.bbox.y ?? 0) + (p.bbox.h ?? 0));
-      }
-      perimTotal += p.perimeter_px || 0;
-    });
-    const anchoTotal  = ((maxX - minX) * scaleFactor).toFixed(1);
-    const altoTotal   = ((maxY - minY) * scaleFactor).toFixed(1);
-    const areaTotal   = ((maxX - minX) * (maxY - minY) * scaleFactor * scaleFactor).toFixed(1);
-    const perimCm     = (perimTotal * scaleFactor).toFixed(1);
-    const vinilAncho  = Math.max(122, parseFloat(anchoTotal)).toFixed(0);
-    const vinilArea   = ((parseFloat(vinilAncho) * parseFloat(altoTotal)) / 10000).toFixed(3);
+    paths.forEach(p => { perimTotal += p.perimeter_px || 0; });
+    const anchoTotal = ((mainPath.bbox?.w || 0) * scaleFactor).toFixed(1);
+    const altoTotal  = ((mainPath.bbox?.h || 0) * scaleFactor).toFixed(1);
+    const areaTotal  = (parseFloat(anchoTotal) * parseFloat(altoTotal)).toFixed(1);
+    const perimCm    = (perimTotal * scaleFactor).toFixed(1);
+    const vinilArea  = (parseFloat(areaTotal) / 10000).toFixed(3);
 
     grid.innerHTML = `
       <div style="grid-column:1/-1;font-size:12px;color:#666;margin-bottom:4px">
@@ -1235,17 +1226,17 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
       </div>
       <div class="path-card" style="grid-column:1/-1;max-width:340px">
         <div class="name">Diseño completo</div>
-        <div class="row"><span>Ancho total</span><span>${anchoTotal} cm</span></div>
-        <div class="row"><span>Alto total</span><span>${altoTotal} cm</span></div>
-        <div class="row"><span>Área cara (bbox)</span><span>${areaTotal} cm²</span></div>
+        <div class="row"><span>Ancho</span><span>${anchoTotal} cm</span></div>
+        <div class="row"><span>Alto</span><span>${altoTotal} cm</span></div>
+        <div class="row"><span>Área cara</span><span>${areaTotal} cm²</span></div>
         <div class="row"><span>Perímetro total</span><span>${perimCm} cm</span></div>
         <div style="margin-top:5px;padding-top:5px;border-top:1px solid #eee">
           <div class="row" style="color:#e87c2a;font-weight:700">
-            <span>Vinil de corte</span>
-            <span>${vinilAncho} × ${altoTotal} cm</span>
+            <span>Lona / Vinil / Acrílico</span>
+            <span>${anchoTotal} × ${altoTotal} cm</span>
           </div>
           <div class="row" style="color:#e87c2a">
-            <span>Área vinil</span>
+            <span>Área material cara</span>
             <span>${vinilArea} m²</span>
           </div>
         </div>
