@@ -703,11 +703,21 @@ def cotizar_caja(
         leds_disp = [l for l in leds_disp if l["profundidad_min"] <= profundidad_cm <= l["profundidad_max"]]
         led = leds_disp[0] if leds_disp else LEDS_CAJA["interior"][0]
 
-    filas_led = max(1, math.ceil(profundidad_cm / 18))
-    tiras     = filas_led  # 1 tira del ancho de la caja por fila
-    c_led     = tiras * led["precio"]
+    tipo_led = led.get("tipo_led", "backlite")
+    if tipo_led == "edgelite":
+        largo_cm = led.get("largo_cm", 56)
+        tiras    = max(1, math.ceil(perimetro / largo_cm))
+        c_led    = round(tiras * led["precio"], 2)
+    elif tipo_led == "perimetral":
+        espaciado_cm = led.get("espaciado_cm", 4.3)
+        tiras        = max(1, math.ceil(perimetro / espaciado_cm))
+        c_led        = round(tiras * led.get("precio_modulo", led["precio"]), 2)
+    else:  # backlite — filas horizontales cada 18 cm de profundidad
+        filas_led = max(1, math.ceil(profundidad_cm / 18))
+        tiras     = filas_led
+        c_led     = round(tiras * led["precio"], 2)
 
-    watts     = tiras * led["watts"]
+    watts     = round(tiras * led["watts"], 2)
     fuente    = fuente_optima(watts, uso)
     fraccion_caja = max(0.20, watts / fuente["watts"]) if fuente["watts"] > 0 else 1.0
     c_fuente  = round(fuente["precio"] * fraccion_caja, 2)
@@ -734,7 +744,7 @@ def cotizar_caja(
     desglose += [
         {"concepto": f"Estructura cajón ({mat_struct['nombre']}) × {lam_struct} lám.", "costo": c_struct},
         {"concepto": f"Fondo ({mat_fondo['nombre']}) × {lam_fondo} lám.", "costo": c_fondo},
-        {"concepto": f"{led['nombre']} × {tiras} tiras", "costo": c_led},
+        {"concepto": f"{led['nombre']} × {tiras} {'barras' if tipo_led=='edgelite' else 'módulos' if tipo_led=='perimetral' else 'tiras'}", "costo": c_led},
         {"concepto": fuente["nombre"], "costo": c_fuente},
         {"concepto": f"Pegamento: {pegamento['nombre']}", "costo": c_peg},
     ]
