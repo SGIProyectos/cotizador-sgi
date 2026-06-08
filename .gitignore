@@ -43,3 +43,20 @@ CATALOGO LETRAS.xlsx
 continua.png
 *.txt
 !requirements*.txt
+
+# Imágenes / docs personales en raíz (no afecta a static/)
+/*.png
+/*.jpg
+/*.jpeg
+/*.svg
+!/sgilogo.svg
+/*.pdf
+/*.xlsx
+/*.zip
+
+# Carpeta de trabajos del usuario
+TRABAJOS/
+
+# Debug / runtime
+server_err.log
+tmp_check.py
