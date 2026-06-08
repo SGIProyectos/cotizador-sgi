@@ -1,22 +1,27 @@
 import io
 import math
-import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from typing import Optional
-import numpy as np
-from svgpathtools import parse_path, svg2paths2
+
+from svgpathtools import svg2paths2
 
 from catalog_data import (
-    LAMINAS, LEDS_CANAL, LEDS_CAJA, FUENTES, PEGAMENTOS,
-    PRECIOS_BASE, PRECIOS_CAJA_M2, SILVATRIM, VINILOS_CERCHA,
-    TIPOS_CONSTRUCCION, DISTANCIADORES,
-    cercha_recomendada_cm, led_recomendado,
-    material_cercha, material_cara, fuente_optima,
-    recomendar_tipo_construccion, silvatrim_recomendado,
+    DISTANCIADORES,
+    LAMINAS,
+    LEDS_CAJA,
+    PEGAMENTOS,
+    PRECIOS_BASE,
+    PRECIOS_CAJA_M2,
+    TIPOS_CONSTRUCCION,
+    VINILOS_CERCHA,
+    cercha_recomendada_cm,
+    fuente_optima,
+    led_recomendado,
+    material_cara,
+    material_cercha,
     recomendar_led_caja,
+    silvatrim_recomendado,
 )
-
 
 # ─── ESTRUCTURAS DE DATOS ────────────────────────────────────────────────────
 

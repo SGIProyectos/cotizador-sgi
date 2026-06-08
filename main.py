@@ -2,30 +2,31 @@ import asyncio
 import dataclasses
 import json
 import logging
+import os
 import re
 import shutil
 import time
 import uuid
-import io
-import os
 from contextlib import asynccontextmanager
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from datetime import datetime
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Query
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 import db
-from calculator import parse_svg, cotizar_letras, cotizar_caja, cotizar_planas, QuoteResult
-from pdf_gen import generar_pdf, generar_pdf_ot, generar_pdf_entrega, generar_pdf_plano
-from excel_gen import generar_xlsx
+from calculator import QuoteResult, cotizar_caja, cotizar_letras, cotizar_planas, parse_svg
 from catalog_data import (
-    LAMINAS, LEDS_CANAL, LEDS_CAJA, FUENTES, PEGAMENTOS,
-    catalog_to_dict, catalog_save, catalog_apply, GRUAS,
+    GRUAS,
+    catalog_apply,
+    catalog_save,
+    catalog_to_dict,
 )
+from excel_gen import generar_xlsx
+from pdf_gen import generar_pdf, generar_pdf_entrega, generar_pdf_ot, generar_pdf_plano
 
 BASE = Path(__file__).parent
 STATIC = BASE / "static"

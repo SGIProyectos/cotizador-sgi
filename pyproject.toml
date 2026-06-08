@@ -1,0 +1,35 @@
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = [
+    "static",
+    "backups",
+    "tmp",
+    "TRABAJOS",
+]
+
+[tool.ruff.lint]
+# E/W: pycodestyle, F: pyflakes, I: isort, B: bugbear, UP: pyupgrade, SIM: simplify
+select = ["E", "W", "F", "I", "B", "UP", "SIM"]
+ignore = [
+    "E501",   # line-too-long — varias tablas/listas de catálogo son cómodas anchas
+    "B008",   # FastAPI usa Depends/Query/File como defaults
+    "SIM108", # ternario forzado; a veces if/else explícito es más claro
+    "E701",   # if x: pass — estilo aceptado en el proyecto para bloques cortos
+    "E702",   # statements; en una línea — usado en catálogos densos
+    "E741",   # nombres ambiguos (l, I, O) — frecuentes en código matemático
+    "B904",   # raise sin from — refactor gradual; no bloquea funcionalidad
+    "B905",   # zip(strict=) — Python 3.10+ feature, opcional
+    "F841",   # variable asignada sin usar — frecuente en pdf_gen para legibilidad
+    "E731",   # lambda assignment — un caso en pdf_gen, refactor cuando se toque
+    "B007",   # loop variable unused — caso menor en pdf_gen
+    "SIM105", # try/except/pass — un caso en catalog_data.catalog_load
+    "SIM115", # context manager para archivos — un caso en pdf_gen.generar_pdf_plano
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]  # asserts en tests
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

@@ -6,15 +6,21 @@ Estos tests son CRÍTICOS: un error aquí afecta el precio que se cobra al clien
 import pytest
 
 from calculator import (
-    PathInfo, SVGData, QuoteResult,
-    _parse_viewbox, _path_area_shoelace,
-    _find_caja_outline, _group_design_paths_by_row,
-    parse_svg, apply_scale,
-    laminas_necesarias, precio_cm2,
-    cotizar_letras, cotizar_planas, cotizar_caja,
+    PathInfo,
+    QuoteResult,
+    _find_caja_outline,
+    _group_design_paths_by_row,
+    _parse_viewbox,
+    _path_area_shoelace,
+    apply_scale,
+    cotizar_caja,
+    cotizar_letras,
+    cotizar_planas,
+    laminas_necesarias,
+    parse_svg,
+    precio_cm2,
 )
 from catalog_data import LAMINAS, PRECIOS_BASE
-
 
 # ─── PARSEO Y ESCALA ─────────────────────────────────────────────────────────
 

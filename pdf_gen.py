@@ -1,14 +1,20 @@
 import io
 from datetime import datetime
-from reportlab.lib.pagesizes import letter
+
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph,
-    Spacer, HRFlowable, KeepTogether,
+    HRFlowable,
+    KeepTogether,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
 )
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 
 # Página carta: 21.59 cm ancho. Márgenes 2 cm c/lado → útil = 17.59 cm
 PW = 17.59 * cm
@@ -559,14 +565,17 @@ def generar_pdf_plano(meta: dict, svg_text: str,
                       paths: list) -> bytes:
     """Plano técnico de medidas — Landscape A4, cotas estilo ingeniería."""
     try:
-        from svglib.svglib import svg2rlg
         from reportlab.graphics import renderPDF as _rPDF
+        from svglib.svglib import svg2rlg
     except ImportError:
         raise RuntimeError("svglib no instalado — ejecuta: pip install svglib")
 
-    import tempfile, os
+    import os
+    import tempfile
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.pagesizes import landscape as _ls
     from reportlab.pdfgen import canvas as _cv
-    from reportlab.lib.pagesizes import A4, landscape as _ls
 
     buf = io.BytesIO()
     PW, PH = _ls(A4)

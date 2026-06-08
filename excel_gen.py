@@ -10,7 +10,6 @@ from openpyxl.utils import get_column_letter
 
 from calculator import QuoteResult
 
-
 _HEAD_FILL  = PatternFill("solid", fgColor="1F3A5F")
 _HEAD_FONT  = Font(bold=True, color="FFFFFF", size=11)
 _TOTAL_FONT = Font(bold=True, size=11)

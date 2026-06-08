@@ -1,7 +1,6 @@
 """Fixtures compartidas para los tests."""
 import pytest
 
-
 SQUARE_SVG = b"""<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
   <path d="M50,50 L150,50 L150,150 L50,150 Z" id="cuadrado"/>

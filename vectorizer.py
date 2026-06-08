@@ -3,6 +3,7 @@ vectorizer.py — Imagen raster → SVG para fabricación de anuncios.
 Pipeline: flood-fill elimina fondo → PNG transparente → vtracer genera Bézier.
 """
 import io
+
 import cv2
 import numpy as np
 from PIL import Image as _PIL
