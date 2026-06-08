@@ -120,33 +120,48 @@ def _purge_expired_caches() -> None:
     if svg_dead or q_dead:
         log.info("TTL purge: %d svgs, %d quotes", len(svg_dead), len(q_dead))
 
-# ─── BACKUP DE DB ────────────────────────────────────────────────────────────
+# ─── BACKUPS ─────────────────────────────────────────────────────────────────
 
-BACKUP_DIR = BASE / "backups"
-DB_FILE    = BASE / "cotizador.db"
+BACKUP_DIR    = BASE / "backups"
+DB_FILE       = BASE / "cotizador.db"
+CATALOG_FILE  = BASE / "catalog.json"
 BACKUP_RETENTION_DAYS = 30
 BACKUP_INTERVAL = 24 * 3600  # diario
 
 
-def _backup_db() -> None:
-    if not DB_FILE.exists():
-        return
-    BACKUP_DIR.mkdir(exist_ok=True)
-    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dest = BACKUP_DIR / f"cotizador_{ts}.db"
-    try:
-        shutil.copy2(DB_FILE, dest)
-        log.info("Backup creado: %s", dest.name)
-    except Exception:
-        log.exception("Backup de DB falló")
-        return
+def _rotate_backups(prefix: str) -> None:
+    """Borra archivos backups/<prefix>_*.* anteriores al periodo de retención."""
     cutoff = time.time() - BACKUP_RETENTION_DAYS * 86400
-    for old in BACKUP_DIR.glob("cotizador_*.db"):
+    for old in BACKUP_DIR.glob(f"{prefix}_*.*"):
         try:
             if old.stat().st_mtime < cutoff:
                 old.unlink()
         except Exception:
             pass
+
+
+def _backup_file(src: Path, prefix: str) -> None:
+    """Copia src a backups/<prefix>_YYYYMMDD_HHMMSS<extension>, rota antiguos."""
+    if not src.exists():
+        return
+    BACKUP_DIR.mkdir(exist_ok=True)
+    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = BACKUP_DIR / f"{prefix}_{ts}{src.suffix}"
+    try:
+        shutil.copy2(src, dest)
+        log.info("Backup creado: %s", dest.name)
+    except Exception:
+        log.exception("Backup falló para %s", src.name)
+        return
+    _rotate_backups(prefix)
+
+
+def _backup_db() -> None:
+    _backup_file(DB_FILE, "cotizador")
+
+
+def _backup_catalog() -> None:
+    _backup_file(CATALOG_FILE, "catalog")
 
 # ─── LIFESPAN ────────────────────────────────────────────────────────────────
 
@@ -164,6 +179,7 @@ async def _periodic_backup() -> None:
         await asyncio.sleep(BACKUP_INTERVAL)
         try:
             _backup_db()
+            _backup_catalog()
         except Exception:
             log.exception("Backup periódico falló")
 
@@ -174,6 +190,7 @@ async def lifespan(app: FastAPI):
     app.state.started_at = datetime.now().isoformat(timespec="seconds")
     db.init_db()
     _backup_db()
+    _backup_catalog()
     cleanup_task = asyncio.create_task(_periodic_cleanup())
     backup_task  = asyncio.create_task(_periodic_backup())
     try:
@@ -828,6 +845,8 @@ async def api_save_catalog(payload: CatalogPayload):
     data = payload.model_dump(exclude_none=True)
     if not data:
         raise HTTPException(400, "Catálogo vacío: no se aplicaron cambios")
+    # Backup ANTES de aplicar — si algo sale mal hay copia para revertir
+    _backup_catalog()
     try:
         catalog_apply(data)
         catalog_save()
