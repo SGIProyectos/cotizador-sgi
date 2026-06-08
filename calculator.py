@@ -9,7 +9,7 @@ from svgpathtools import parse_path, svg2paths2
 
 from catalog_data import (
     LAMINAS, LEDS_CANAL, LEDS_CAJA, FUENTES, PEGAMENTOS,
-    PRECIOS_BASE, PRECIOS_CAJA_M2, SILVATRIM,
+    PRECIOS_BASE, PRECIOS_CAJA_M2, SILVATRIM, VINILOS_CERCHA,
     TIPOS_CONSTRUCCION, DISTANCIADORES,
     cercha_recomendada_cm, led_recomendado,
     material_cercha, material_cara, fuente_optima,
@@ -29,6 +29,7 @@ class PathInfo:
     is_closed: bool
     perimeter_cm: float = 0.0
     area_cm2: float = 0.0
+    svg_id: str = ""    # original id attribute from the SVG element
 
 @dataclass
 class SVGData:
@@ -93,6 +94,10 @@ class QuoteResult:
     silvatrim: dict = field(default_factory=dict)
     metros_silvatrim: float = 0.0
     costo_silvatrim: float = 0.0
+    # Vinil en cercha
+    vinil_cercha: dict = field(default_factory=dict)
+    metros_vinil_cercha: float = 0.0
+    costo_vinil_cercha: float = 0.0
     # Mano de obra e instalación
     mo_total: float = 0.0
     inst_activa: bool = False
@@ -199,12 +204,14 @@ def parse_svg(svg_bytes: bytes) -> SVGData:
         except Exception:
             bbox = {"x": 0, "y": 0, "w": 0, "h": 0}
 
+        orig_id = attr.get("id", f"path_{i}")
         path_infos.append(PathInfo(
-            id=attr.get("id", f"path_{i}"),
+            id=orig_id,
             perimeter_px=perimeter,
             area_px=area,
             bbox=bbox,
             is_closed=is_closed,
+            svg_id=orig_id,
         ))
 
     # Ordenar por posición horizontal (izquierda → derecha) y renombrar
@@ -292,6 +299,7 @@ def cotizar_letras(
     tipo_construccion: str = "cajon_luz",
     tipo_multiplicador: str = "acrilico_con_luz_std",
     ajuste_pct: float = 0.0,
+    vinil_cercha_id: str = "",
 ) -> QuoteResult:
 
     # Si el usuario conoce la altura, escalar desde ella (ignora márgenes del artboard).
@@ -408,8 +416,13 @@ def cotizar_letras(
     c_silvatrim = round(metros_sv * sv["precio_ml"], 2)
     desglose_sv = f"Silvatrim {sv['nombre']} · {metros_sv:.1f} m × ${sv['precio_ml']:.2f}/m"
 
+    # ── VINIL CERCHA ──────────────────────────────────────────────────────────
+    vc = next((v for v in VINILOS_CERCHA if v["id"] == vinil_cercha_id), None)
+    metros_vc      = round(perimetro_total / 100, 2) if vc else 0.0
+    c_vinil_cercha = round(metros_vc * vc["precio_ml"], 2) if vc else 0.0
+
     # ── TOTALES ───────────────────────────────────────────────────────────────
-    subtotal = c_cara + c_cercha + c_fondo + c_led + c_fuente + c_dist + c_peg + c_silvatrim
+    subtotal = c_cara + c_cercha + c_fondo + c_led + c_fuente + c_dist + c_peg + c_silvatrim + c_vinil_cercha
     iva      = subtotal * 0.16
     total    = subtotal + iva
     venta    = total / (1 - margen_ganancia)
@@ -436,6 +449,8 @@ def cotizar_letras(
         desglose.append({"concepto": f"{DISTANCIADORES['nombre']} × {n_letras_dist} letras", "costo": c_dist})
     desglose.append({"concepto": f"Pegamento {pegamento['nombre']} · {metros_peg:.1f}m ({envases:.2f} env.)", "costo": c_peg})
     desglose.append({"concepto": desglose_sv, "costo": c_silvatrim})
+    if vc:
+        desglose.append({"concepto": f"Vinil cercha {vc['nombre']} · {metros_vc:.1f} m × ${vc['precio_ml']:.2f}/m", "costo": c_vinil_cercha})
 
     # ── Lógica de cotización (hoja COTIZANDO del Excel) ─────────────────────────
     # precio_letra = altura_real_cm × precio_cm × multiplicador
@@ -518,6 +533,9 @@ def cotizar_letras(
         silvatrim=sv,
         metros_silvatrim=metros_sv,
         costo_silvatrim=c_silvatrim,
+        vinil_cercha=vc or {},
+        metros_vinil_cercha=metros_vc,
+        costo_vinil_cercha=c_vinil_cercha,
         desglose=desglose,
         desglose_letras=desglose_letras,
     )
@@ -633,6 +651,50 @@ def cotizar_planas(
 
 # ─── COTIZACIÓN CAJA DE LUZ ──────────────────────────────────────────────────
 
+def _find_caja_outline(paths: list):
+    """
+    Identifica el contorno rectangular de la caja: el path con mayor bbox-área
+    cuyo perímetro ≈ 2*(w+h) (ratio ≤ 2.5).
+    Devuelve None si ningún path pasa el criterio rectangular — el caller
+    debe usar artboard/viewbox como fallback.
+    """
+    if not paths:
+        return None
+    best, best_bbox_area = None, 0.0
+    for candidate in paths:
+        cw = candidate.bbox["w"]
+        ch = candidate.bbox["h"]
+        exp_perim = 2 * (cw + ch)
+        if exp_perim <= 0:
+            continue
+        if candidate.perimeter_px / exp_perim <= 2.5:
+            bbox_area = cw * ch
+            if bbox_area > best_bbox_area:
+                best_bbox_area = bbox_area
+                best = candidate
+    return best  # None cuando no hay path rectangular
+
+
+def _group_design_paths_by_row(paths: list) -> list:
+    """
+    Agrupa paths en filas horizontales fusionando intervalos Y solapados.
+    Devuelve lista de listas (una sublista por fila).
+    """
+    if not paths:
+        return []
+    ordered = sorted(paths, key=lambda p: p.bbox["y"])
+    rows = [[ordered[0]]]
+    cur_bottom = ordered[0].bbox["y"] + ordered[0].bbox["h"]
+    for p in ordered[1:]:
+        if p.bbox["y"] <= cur_bottom:          # solapado → misma fila
+            rows[-1].append(p)
+            cur_bottom = max(cur_bottom, p.bbox["y"] + p.bbox["h"])
+        else:                                   # gap → nueva fila
+            rows.append([p])
+            cur_bottom = p.bbox["y"] + p.bbox["h"]
+    return rows
+
+
 def cotizar_caja(
     svg_data: SVGData,
     real_width_cm: float,
@@ -648,46 +710,79 @@ def cotizar_caja(
     svg_data = apply_scale(svg_data, real_width_cm)
     sf = svg_data.scale_factor
 
-    # El path más grande = contorno de la caja
+    caja_w_cm = real_width_cm
+
+    # Determinar altura de la cara y paths del diseño
     if svg_data.paths:
-        paths_sorted = sorted(svg_data.paths, key=lambda p: p.area_cm2, reverse=True)
-        caja = paths_sorted[0]
-        # Ancho = el que el usuario ingresó (autoritativo)
-        # Alto = proporcional al aspect ratio real del path
-        _bw = caja.bbox["w"] or 1
-        caja_w_cm = real_width_cm
-        caja_h_cm = round(real_width_cm * (caja.bbox["h"] / _bw), 2)
+        caja_path = _find_caja_outline(svg_data.paths)
+        if caja_path is not None:
+            # Hay contorno rectangular → usarlo para la relación de aspecto
+            _bw = caja_path.bbox["w"] or 1
+            caja_h_cm     = round(real_width_cm * (caja_path.bbox["h"] / _bw), 2)
+            design_paths_all = [p for p in svg_data.paths if p is not caja_path]
+            clamp_x, clamp_y = caja_path.bbox["x"], caja_path.bbox["y"]
+            clamp_w, clamp_h = caja_path.bbox["w"], caja_path.bbox["h"]
+        else:
+            # Sin contorno rectangular → usar artboard/viewbox (Illustrator: viewBox en pt)
+            caja_h_cm     = round(svg_data.viewbox_h * sf, 2)
+            design_paths_all = list(svg_data.paths)
+            clamp_x, clamp_y = 0.0, 0.0
+            clamp_w, clamp_h = svg_data.viewbox_w, svg_data.viewbox_h
     else:
-        caja_w_cm = real_width_cm
-        caja_h_cm = round(svg_data.viewbox_h * sf, 2)
-        caja_area = caja_w_cm * caja_h_cm
-        caja_perim = 2 * (caja_w_cm + caja_h_cm)
+        caja_h_cm        = round(svg_data.viewbox_h * sf, 2)
+        design_paths_all = []
+        clamp_x, clamp_y = 0.0, 0.0
+        clamp_w, clamp_h = svg_data.viewbox_w, svg_data.viewbox_h
 
-        class _Fake:
-            area_cm2 = caja_area
-            perimeter_cm = caja_perim
-        caja = _Fake()
+    caja_area_cm2 = caja_w_cm * caja_h_cm
+    area_m2       = caja_area_cm2 / 10000
+    perimetro     = 2 * (caja_w_cm + caja_h_cm)
 
-    area_m2    = caja.area_cm2 / 10000
-    perimetro  = caja.perimeter_cm
+    # ── CARA ─────────────────────────────────────────────────────────────────
+    vinil_filas: list[dict] = []
 
-    # Costo de cara
     if tipo_cara == "vinil_corte":
         precio_base_m2 = PRECIOS_CAJA_M2.get(base_cara_vinil, PRECIOS_CAJA_M2["lona"])
         c_cara_base = round(area_m2 * precio_base_m2, 2)
-        # El vinil se mide igual que el diseño (lona/acrílico)
-        # El rollo solo define el mínimo facturable para precios, no la medida
-        vinil_w_cm    = caja_w_cm
-        vinil_h_cm    = caja_h_cm
-        vinil_area_m2 = round((vinil_w_cm * vinil_h_cm) / 10000, 4)
-        c_vinil = round(vinil_area_m2 * PRECIOS_CAJA_M2["vinil_corte"], 2)
+
+        # Solo paths cerrados con área real (excluye trazos/contornos abiertos como el cajón)
+        vinil_design = [p for p in design_paths_all if p.is_closed and p.area_px > 0.0]
+        if not vinil_design:
+            vinil_design = [p for p in design_paths_all if p.is_closed]
+
+        if vinil_design:
+            filas_paths = _group_design_paths_by_row(vinil_design)
+            total_area_cm2 = 0.0
+            for fila_paths in filas_paths:
+                raw_min_x = min(p.bbox["x"] for p in fila_paths)
+                raw_min_y = min(p.bbox["y"] for p in fila_paths)
+                raw_max_x = max(p.bbox["x"] + p.bbox["w"] for p in fila_paths)
+                raw_max_y = max(p.bbox["y"] + p.bbox["h"] for p in fila_paths)
+                cl_min_x  = max(raw_min_x, clamp_x)
+                cl_min_y  = max(raw_min_y, clamp_y)
+                cl_max_x  = min(raw_max_x, clamp_x + clamp_w)
+                cl_max_y  = min(raw_max_y, clamp_y + clamp_h)
+                fw = round(max(0.0, (cl_max_x - cl_min_x) * sf), 1)
+                fh = round(max(0.0, (cl_max_y - cl_min_y) * sf), 1)
+                fa = round(fw * fh / 10000, 4)
+                total_area_cm2 += fw * fh
+                vinil_filas.append({"ancho_cm": fw, "alto_cm": fh, "area_m2": fa})
+            vinil_total_area_m2 = round(total_area_cm2 / 10000, 4)
+        else:
+            vinil_filas         = [{"ancho_cm": caja_w_cm, "alto_cm": caja_h_cm,
+                                    "area_m2": round(caja_area_cm2 / 10000, 4)}]
+            vinil_total_area_m2 = area_m2
+
+        c_vinil = round(vinil_total_area_m2 * PRECIOS_CAJA_M2["vinil_corte"], 2)
         c_cara  = round(c_cara_base + c_vinil, 2)
     else:
         precio_m2 = PRECIOS_CAJA_M2.get(
             "acrilico_2vistas" if vistas == 2 else tipo_cara,
             PRECIOS_CAJA_M2["lona"]
         )
-        c_cara = round(area_m2 * precio_m2, 2)
+        c_cara              = round(area_m2 * precio_m2, 2)
+        c_cara_base         = c_cara
+        vinil_total_area_m2 = 0.0
 
     # Estructura (aluminio cal 18 para el cajón)
     mat_struct = LAMINAS["aluminio_cal18"]
@@ -701,7 +796,7 @@ def cotizar_caja(
     else:
         fondo_id  = "pvc_6mm" if uso == "exterior" else "pvc_3mm"
     mat_fondo = LAMINAS[fondo_id]
-    lam_fondo = laminas_necesarias(caja.area_cm2, fondo_id)
+    lam_fondo = laminas_necesarias(caja_area_cm2, fondo_id)
     c_fondo   = lam_fondo * mat_fondo["precio"]
 
     # LEDs — selección automática o manual
@@ -743,9 +838,16 @@ def cotizar_caja(
     venta    = total / (1 - margen_ganancia)
 
     if tipo_cara == "vinil_corte":
+        if len(vinil_filas) == 1:
+            fila_desc = f"{vinil_filas[0]['ancho_cm']:.0f}×{vinil_filas[0]['alto_cm']:.0f} cm"
+        else:
+            fila_desc = " + ".join(
+                f"F{i+1}:{f['ancho_cm']:.0f}×{f['alto_cm']:.0f}"
+                for i, f in enumerate(vinil_filas)
+            )
         desglose = [
             {"concepto": f"Base cara ({base_cara_vinil}) {area_m2:.2f} m²", "costo": c_cara_base},
-            {"concepto": f"Vinil de corte {vinil_w_cm:.0f}×{vinil_h_cm:.0f} cm ({vinil_area_m2:.2f} m²)", "costo": c_vinil},
+            {"concepto": f"Vinil de corte {fila_desc} ({vinil_total_area_m2:.3f} m²)", "costo": c_vinil},
         ]
     else:
         desglose = [
@@ -760,17 +862,16 @@ def cotizar_caja(
         {"concepto": f"Pegamento: {pegamento['nombre']}", "costo": c_peg},
     ]
 
-    mat_cara_info = {"nombre": tipo_cara, "precio": c_cara}
+    mat_cara_info: dict = {"nombre": tipo_cara, "precio": c_cara}
     if tipo_cara == "vinil_corte":
         mat_cara_info["base"]          = base_cara_vinil
-        mat_cara_info["vinil_ancho_cm"] = round(vinil_w_cm, 1)
-        mat_cara_info["vinil_alto_cm"]  = round(vinil_h_cm, 1)
-        mat_cara_info["vinil_area_m2"]  = vinil_area_m2
+        mat_cara_info["vinil_filas"]   = vinil_filas
+        mat_cara_info["vinil_area_m2"] = vinil_total_area_m2
 
     return QuoteResult(
         tipo="caja_luz",
         paths_count=1,
-        area_cara_cm2=caja.area_cm2,
+        area_cara_cm2=caja_area_cm2,
         perimetro_total_cm=perimetro,
         cercha_altura_cm=profundidad_cm,
         cercha_area_cm2=area_struct,

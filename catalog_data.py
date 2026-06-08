@@ -590,6 +590,35 @@ VINILOS = [
     },
 ]
 
+# ─── VINILOS PARA CERCHA (cara lateral de letras 3D) ─────────────────────────
+# Rollos angostos (0.30–0.61 m), precio por metro lineal del rollo
+VINILOS_CERCHA = [
+    {
+        "id": "vc_std",
+        "nombre": "Vinil Cercha Estándar",
+        "precio_ml": 48.0,
+        "ancho_rollo_m": 0.61,
+        "acabado": "opaco",
+        "colores": ["Blanco", "Negro", "Rojo", "Azul Rey", "Verde", "Amarillo", "Naranja", "Gris", "Café"],
+    },
+    {
+        "id": "vc_metalico",
+        "nombre": "Vinil Cercha Metálico",
+        "precio_ml": 75.0,
+        "ancho_rollo_m": 0.61,
+        "acabado": "metalico",
+        "colores": ["Plata Cromado", "Dorado", "Bronce", "Cobre"],
+    },
+    {
+        "id": "vc_premium",
+        "nombre": "Vinil Cercha Premium",
+        "precio_ml": 98.0,
+        "ancho_rollo_m": 0.61,
+        "acabado": "opaco",
+        "colores": ["Negro Mate", "Blanco Mate", "Rojo Oscuro", "Azul Marino", "Verde Pemex"],
+    },
+]
+
 # ─── DISTANCIADORES (letras retroiluminadas) ─────────────────────────────────
 DISTANCIADORES = {
     "nombre": "Distanciadores acero inox (juego / letra)",
@@ -775,6 +804,7 @@ def catalog_to_dict() -> dict:
         "precios_caja_m2": dict(PRECIOS_CAJA_M2),
         "silvatrim": SILVATRIM,
         "vinilos": VINILOS,
+        "vinilos_cercha": VINILOS_CERCHA,
         "tipos_construccion": TIPOS_CONSTRUCCION,
         "gruas": GRUAS,
     }
@@ -825,6 +855,9 @@ def catalog_apply(raw: dict):
     if "vinilos" in raw:
         VINILOS.clear()
         VINILOS.extend(raw["vinilos"])
+    if "vinilos_cercha" in raw:
+        VINILOS_CERCHA.clear()
+        VINILOS_CERCHA.extend(raw["vinilos_cercha"])
 
 
 def _catalog_merge(raw: dict):
@@ -896,6 +929,15 @@ def _catalog_merge(raw: dict):
         for vinyl in raw["vinilos"]:
             if vinyl.get("id") not in existing_ids:
                 VINILOS.append(vinyl)
+    if "vinilos_cercha" in raw:
+        raw_by_id = {v["id"]: v for v in raw["vinilos_cercha"] if "id" in v}
+        for vinyl in VINILOS_CERCHA:
+            if vinyl.get("id") in raw_by_id:
+                vinyl.update(raw_by_id[vinyl["id"]])
+        existing_ids = {v.get("id") for v in VINILOS_CERCHA}
+        for vinyl in raw["vinilos_cercha"]:
+            if vinyl.get("id") not in existing_ids:
+                VINILOS_CERCHA.append(vinyl)
 
 
 def catalog_load():

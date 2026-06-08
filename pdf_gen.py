@@ -550,3 +550,451 @@ def _un_ano(fecha_str: str) -> str:
         return d.replace(year=d.year + 1).strftime("%d/%m/%Y")
     except Exception:
         return "—"
+
+
+# ─── PLANO DE MEDIDAS ────────────────────────────────────────────────────────
+
+def generar_pdf_plano(meta: dict, svg_text: str,
+                      real_width_cm: float, viewbox_w: float, viewbox_h: float,
+                      paths: list) -> bytes:
+    """Plano técnico de medidas — Landscape A4, cotas estilo ingeniería."""
+    try:
+        from svglib.svglib import svg2rlg
+        from reportlab.graphics import renderPDF as _rPDF
+    except ImportError:
+        raise RuntimeError("svglib no instalado — ejecuta: pip install svglib")
+
+    import tempfile, os
+    from reportlab.pdfgen import canvas as _cv
+    from reportlab.lib.pagesizes import A4, landscape as _ls
+
+    buf = io.BytesIO()
+    PW, PH = _ls(A4)
+    MAR = 1.1 * cm
+    c = _cv.Canvas(buf, pagesize=(PW, PH))
+
+    AZUL       = (0.10, 0.17, 0.29)
+    DR, DG, DB = 0.12, 0.18, 0.52
+    ER, EG, EB = 0.50, 0.56, 0.72
+    GR, GG, GB = 0.60, 0.60, 0.60
+    AH, AL     = 3.5, 8.0
+
+    def get_bbox(p):
+        return p.bbox if hasattr(p, "bbox") else (p.get("bbox") or {})
+
+    sf_cm      = real_width_cm / viewbox_w if viewbox_w > 0 else 1.0
+    real_h_cm  = real_width_cm * (viewbox_h / viewbox_w) if viewbox_w > 0 else 0.0
+    proporcion = f"{real_width_cm / real_h_cm:.2f} : 1" if real_h_cm > 0 else "—"
+    folio      = meta.get("folio", "")
+    cliente    = meta.get("cliente") or "—"
+    fecha      = (meta.get("fecha") or datetime.now().strftime("%Y-%m-%d"))[:10]
+
+    # ── Agrupar paths en elementos lógicos ───────────────────────────────────
+    # Prioridad 1: estructura <g> del SVG (refleja intención del diseñador).
+    # Prioridad 2: solapamiento de bandas Y con restricción de relación de alturas.
+
+    def _try_svg_groups(svg_str, path_infos):
+        """Lee grupos <g> del SVG y fusiona bboxes de sus paths. Retorna None si no hay grupos reales."""
+        try:
+            import xml.etree.ElementTree as ET
+            id_map = {}
+            for p in (path_infos or []):
+                sid = getattr(p, "svg_id", None) or getattr(p, "id", None) or ""
+                if sid:
+                    id_map[sid] = p
+            if not id_map:
+                return None
+            root_el = ET.fromstring(svg_str)
+        except Exception:
+            return None
+
+        def ns(t):
+            return t.split("}", 1)[-1] if "}" in t else t
+
+        def collect_ids(elem):
+            ids = []
+            if ns(elem.tag) in ("path", "circle", "ellipse", "rect", "polygon", "polyline"):
+                eid = elem.get("id", "")
+                if eid:
+                    ids.append(eid)
+            for ch in elem:
+                ids.extend(collect_ids(ch))
+            return ids
+
+        def mbox(ids):
+            ps = [id_map[i] for i in ids if i in id_map]
+            if not ps:
+                return None
+            bb = lambda p: p.bbox
+            xs = [bb(p).get("x", 0) for p in ps]
+            ys = [bb(p).get("y", 0) for p in ps]
+            x2 = [bb(p).get("x", 0) + bb(p).get("w", 0) for p in ps]
+            y2 = [bb(p).get("y", 0) + bb(p).get("h", 0) for p in ps]
+            return {"x": min(xs), "y": min(ys),
+                    "w": max(x2) - min(xs), "h": max(y2) - min(ys)}
+
+        def skip_wrap(elem, d=0):
+            """Salta cadenas de <g> único (patrón artboard de Illustrator)."""
+            gs  = [c for c in elem if ns(c.tag) == "g"]
+            vis = [c for c in elem if ns(c.tag) not in
+                   ("g", "defs", "style", "title", "metadata", "desc")]
+            if len(gs) == 1 and not vis and d < 6:
+                return skip_wrap(gs[0], d + 1)
+            return elem
+
+        content = skip_wrap(root_el)
+        result  = []
+        for ch in content:
+            if ns(ch.tag) in ("defs", "style", "title", "desc", "metadata"):
+                continue
+            ids = collect_ids(ch)
+            if not ids:
+                continue
+            bb = mbox(ids)
+            if not bb:
+                continue
+            gid = ch.get("id", "") or f"g{len(result)}"
+            mbbs = [dict(id_map[i].bbox) for i in ids if i in id_map]
+            result.append({"x": bb["x"], "y": bb["y"], "w": bb["w"], "h": bb["h"],
+                           "ids": ids, "n": len(ids), "group_id": gid,
+                           "member_bbs": mbbs})
+
+        # Solo considerar válido si hay al menos un grupo con múltiples paths
+        return result if any(g["n"] > 1 for g in result) else None
+
+    def _cluster_by_overlap(all_paths):
+        """Agrupa paths cuyas bandas Y se solapan, sin mezclar elementos de alturas muy distintas."""
+        if not all_paths:
+            return []
+        ordered = sorted(all_paths, key=lambda p: get_bbox(p).get("y", 0))
+        clusters = []
+        for p in ordered:
+            bb  = get_bbox(p)
+            py1 = bb.get("y", 0)
+            py2 = py1 + bb.get("h", 0)
+            ph  = max(py2 - py1, 1)
+            added = False
+            for cl in clusters:
+                ov = min(py2, cl["bot"]) - max(py1, cl["top"])
+                if ov > 0:
+                    ch = max(cl["bot"] - cl["top"], 1)
+                    # Solo unir si las alturas son similares (factor ≤ 2)
+                    if max(ch, ph) / min(ch, ph) <= 2.0:
+                        cl["members"].append(p)
+                        cl["top"] = min(cl["top"], py1)
+                        cl["bot"] = max(cl["bot"], py2)
+                        added = True
+                        break
+            if not added:
+                clusters.append({"members": [p], "top": py1, "bot": py2})
+        result = []
+        for cl in clusters:
+            bbs   = [get_bbox(q) for q in cl["members"]]
+            min_x = min(b.get("x", 0) for b in bbs)
+            min_y = min(b.get("y", 0) for b in bbs)
+            max_x = max(b.get("x", 0) + b.get("w", 0) for b in bbs)
+            max_y = max(b.get("y", 0) + b.get("h", 0) for b in bbs)
+            ids   = [getattr(q, "svg_id", None) or getattr(q, "id", None) or "?"
+                     for q in cl["members"]]
+            result.append({"x": min_x, "y": min_y,
+                           "w": max_x - min_x, "h": max_y - min_y,
+                           "ids": ids, "n": len(cl["members"]),
+                           "member_bbs": bbs})   # bboxes individuales para cotas de ancho
+        return result
+
+    # Etapa 1: grupos del SVG; Etapa 2: solapamiento Y
+    clusters_raw = (_try_svg_groups(svg_text, paths) if svg_text else None) \
+                   or _cluster_by_overlap(paths or [])
+    clusters = clusters_raw or []
+    total_area = (viewbox_w or 1) * (viewbox_h or 1)
+    min_w_px   = (viewbox_w or 0) * 0.04
+    min_h_px   = (viewbox_h or 0) * 0.02
+
+    # Excluir: demasiado pequeños O demasiado grandes (paths de fondo que cubren > 60 %)
+    sig = sorted(
+        [cl for cl in clusters
+         if cl["w"] >= min_w_px and cl["h"] >= min_h_px
+         and cl["w"] * cl["h"] <= total_area * 0.60],
+        key=lambda cl: cl["w"] * cl["h"],
+        reverse=True
+    )[:6]
+    N_e = len(sig)
+
+    # ── Layout ────────────────────────────────────────────────────────────────
+    HDR_H      = 28
+    TABLE_H    = 148
+    VSTEP      = 22
+    TOP_ZONE   = 35        # solo la cota global de ancho
+    RIGHT_ZONE = max(24, 14 + N_e * VSTEP) + 8
+    LEFT_ZONE  = 34
+
+    svg_left    = MAR + LEFT_ZONE
+    svg_right   = PW  - MAR - RIGHT_ZONE
+    svg_top_lyt = PH  - HDR_H - 6 - TOP_ZONE
+    svg_bot     = TABLE_H
+    avail_w     = svg_right  - svg_left
+    avail_h     = svg_top_lyt - svg_bot
+
+    # ── Header ────────────────────────────────────────────────────────────────
+    c.setFillColorRGB(*AZUL)
+    c.rect(0, PH - HDR_H, PW, HDR_H, fill=1, stroke=0)
+    c.setFillColorRGB(1, 1, 1)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(MAR, PH - HDR_H + 8, "SGI — PLANO DE MEDIDAS")
+    c.setFont("Helvetica", 8.5)
+    c.drawRightString(PW - MAR, PH - HDR_H + 8,
+                      f"{folio}   ·   {cliente}   ·   {fecha}")
+
+    # ── Renderizar SVG ────────────────────────────────────────────────────────
+    svg_x = svg_left; svg_y = svg_bot
+    svg_rw = avail_w;  svg_rh = avail_h
+
+    if svg_text:
+        try:
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".svg",
+                                              mode="w", encoding="utf-8")
+            tmp.write(svg_text); tmp.close()
+            rlg = svg2rlg(tmp.name)
+            os.unlink(tmp.name)
+        except Exception:
+            rlg = None
+        if rlg and rlg.width > 0 and rlg.height > 0:
+            sc     = min(avail_w / rlg.width, avail_h / rlg.height)
+            svg_rw = rlg.width  * sc
+            svg_rh = rlg.height * sc
+            svg_x  = svg_left + (avail_w - svg_rw) / 2
+            svg_y  = svg_bot  + (avail_h - svg_rh) / 2
+            rlg.width = svg_rw; rlg.height = svg_rh
+            rlg.transform = (sc, 0, 0, sc, 0, 0)
+            c.saveState()
+            c.translate(svg_x, svg_y)
+            _rPDF.draw(rlg, c, 0, 0)
+            c.restoreState()
+
+    c.setStrokeColorRGB(GR, GG, GB); c.setLineWidth(0.3)
+    c.rect(svg_x, svg_y, svg_rw, svg_rh, stroke=1, fill=0)
+
+    pdf_sc    = (svg_rw / viewbox_w) if viewbox_w > 0 else 1.0
+    pdf_sc_y  = (svg_rh / viewbox_h) if viewbox_h > 0 else pdf_sc
+    svg_top_y = svg_y + svg_rh
+
+    # Offset del viewBox (min-x, min-y) — Illustrator exporta con origen ≠ 0.
+    # svgpathtools devuelve coords absolutas; debemos restarle el origen del viewBox.
+    vb_ox, vb_oy = 0.0, 0.0
+    if svg_text:
+        try:
+            import xml.etree.ElementTree as _ET
+            _svgr = _ET.fromstring(svg_text)
+            _vbs  = _svgr.get("viewBox") or _svgr.get("viewbox") or ""
+            _vbp  = _vbs.replace(",", " ").split()
+            if len(_vbp) == 4:
+                vb_ox, vb_oy = float(_vbp[0]), float(_vbp[1])
+        except Exception:
+            pass
+
+    def to_pdf(bb):
+        """bbox SVG → (px1, px2, py_bot, py_top) en pts PDF, corrigiendo offset viewBox."""
+        bx = bb.get("x", 0) - vb_ox
+        by = bb.get("y", 0) - vb_oy
+        bw, bh = bb.get("w", 0), bb.get("h", 0)
+        px1    = svg_x + bx * pdf_sc
+        px2    = svg_x + (bx + bw) * pdf_sc
+        py_top = svg_y + svg_rh - by * pdf_sc_y
+        py_bot = svg_y + svg_rh - (by + bh) * pdf_sc_y
+        return px1, px2, py_bot, py_top
+
+    # ── Primitivas ────────────────────────────────────────────────────────────
+    def _arrow(x, y, dx, dy):
+        c.setFillColorRGB(DR, DG, DB)
+        nx, ny = -dy, dx
+        p = c.beginPath()
+        p.moveTo(x, y)
+        p.lineTo(x + dx*AL + nx*AH, y + dy*AL + ny*AH)
+        p.lineTo(x + dx*AL - nx*AH, y + dy*AL - ny*AH)
+        p.close()
+        c.drawPath(p, fill=1, stroke=0)
+
+    def hdim(x1, x2, y_line, label, ext_y=None, fsz=6.5):
+        if ext_y is not None:
+            c.setStrokeColorRGB(ER, EG, EB); c.setLineWidth(0.35)
+            c.line(x1, ext_y, x1, y_line + 3)
+            c.line(x2, ext_y, x2, y_line + 3)
+        c.setStrokeColorRGB(DR, DG, DB); c.setLineWidth(0.75)
+        c.line(x1 + AL, y_line, x2 - AL, y_line)
+        _arrow(x1, y_line, -1, 0)
+        _arrow(x2, y_line, +1, 0)
+        span = x2 - x1
+        if label and span > 22:
+            c.setFont("Helvetica-Bold", fsz)
+            lw = c.stringWidth(label, "Helvetica-Bold", fsz)
+            mx = (x1 + x2) / 2
+            if lw + 6 < span * 0.88:
+                c.setFillColorRGB(1, 1, 1)
+                c.rect(mx - lw/2 - 2, y_line + 1.5, lw + 4, fsz + 1.5, fill=1, stroke=0)
+                c.setFillColorRGB(DR, DG, DB)
+                c.drawCentredString(mx, y_line + 3, label)
+            else:
+                c.setFillColorRGB(1, 1, 1)
+                c.rect(mx - lw/2 - 2, y_line + fsz + 4, lw + 4, fsz + 2, fill=1, stroke=0)
+                c.setFillColorRGB(DR, DG, DB)
+                c.drawCentredString(mx, y_line + fsz + 5, label)
+
+    def vdim(x_line, y1, y2, label, ext_x=None, fsz=6.5, lbl_left=True):
+        if ext_x is not None:
+            c.setStrokeColorRGB(ER, EG, EB); c.setLineWidth(0.35)
+            c.line(ext_x, y1, x_line + 3, y1)
+            c.line(ext_x, y2, x_line + 3, y2)
+        c.setStrokeColorRGB(DR, DG, DB); c.setLineWidth(0.75)
+        c.line(x_line, y1 + AL, x_line, y2 - AL)
+        _arrow(x_line, y1, 0, -1)
+        _arrow(x_line, y2, 0, +1)
+        if label and (y2 - y1) > 18:
+            mid = (y1 + y2) / 2
+            off = -(fsz + 6) if lbl_left else (fsz + 4)
+            c.saveState()
+            c.translate(x_line + off, mid)
+            c.rotate(90)
+            c.setFont("Helvetica-Bold", fsz)
+            lw = c.stringWidth(label, "Helvetica-Bold", fsz)
+            c.setFillColorRGB(1, 1, 1)
+            c.rect(-lw/2 - 2, -1, lw + 4, fsz + 2.5, fill=1, stroke=0)
+            c.setFillColorRGB(DR, DG, DB)
+            c.drawCentredString(0, 1, label)
+            c.restoreState()
+
+    # ── COTA GLOBAL ANCHO (margen superior) ──────────────────────────────────
+    hdim(svg_x, svg_x + svg_rw, svg_top_y + 22,
+         f"{real_width_cm:.2f} cm", ext_y=svg_top_y, fsz=9)
+
+    # ── COTA GLOBAL ALTO (margen izquierdo) ───────────────────────────────────
+    vdim(svg_x - 24, svg_y, svg_top_y,
+         f"{real_h_cm:.2f} cm", ext_x=svg_x, fsz=9, lbl_left=True)
+
+    # ── COTAS POR GRUPO ───────────────────────────────────────────────────────
+    # Ancho: una cota por ELEMENTO INDIVIDUAL (letra/path) dentro de cada fila.
+    #        Si hay un solo elemento, muestra su cota directamente.
+    # Alto:  una cota por FILA (alto fusionado), margen derecho apilado.
+    vert_sorted = sorted(sig, key=lambda cl: cl["h"])
+
+    for i, cl in enumerate(sig):
+        # Obtener bboxes individuales; si no están, usar el bbox del cluster completo
+        members = cl.get("member_bbs") or [cl]
+        # Filtrar miembros con ancho significativo y ordenar de izquierda a derecha
+        members = sorted(
+            [m for m in members if m.get("w", 0) * sf_cm >= 0.5],
+            key=lambda m: m.get("x", 0)
+        )
+        # Limitar a 10 para no saturar el plano
+        for mbb in members[:10]:
+            mpx1, mpx2, mpy_bot, mpy_top = to_pdf(mbb)
+            wc = mbb.get("w", 0) * sf_cm
+            if (mpx2 - mpx1) > 18:
+                hdim(mpx1, mpx2, mpy_top, f"{wc:.1f} cm", ext_y=None, fsz=6.5)
+
+    for level, cl in enumerate(vert_sorted):
+        px1, px2, py_bot, py_top = to_pdf(cl)
+        hc = cl["h"] * sf_cm
+        if (py_top - py_bot) < 10:
+            continue
+        x_cota = svg_x + svg_rw + 14 + level * VSTEP
+        vdim(x_cota, py_bot, py_top,
+             f"{hc:.1f} cm", ext_x=px2, fsz=6.0, lbl_left=False)
+
+    # ── CÍRCULOS NUMERADOS sobre la imagen ────────────────────────────────────
+    for i, cl in enumerate(sig):
+        px1, px2, py_bot, py_top = to_pdf(cl)
+        cx, cy = (px1 + px2) / 2, (py_bot + py_top) / 2
+        c.setFillColorRGB(1, 1, 1)
+        c.setStrokeColorRGB(DR, DG, DB)
+        c.setLineWidth(1.3)
+        c.circle(cx, cy, 7, fill=1, stroke=1)
+        c.setFont("Helvetica-Bold", 7)
+        c.setFillColorRGB(DR, DG, DB)
+        c.drawCentredString(cx, cy - 2.5, str(i + 1))
+
+    # ── TABLA (inferior izquierda) ─────────────────────────────────────────────
+    TBL_TOP = TABLE_H - 6
+    tl = MAR; tr = PW * 0.60
+    cols_w = [22, 140, 62, 62, 68]
+    row_h  = 11
+
+    c.setFillColorRGB(*AZUL)
+    c.rect(tl, TBL_TOP - 13, tr - tl, 14, fill=1, stroke=0)
+    c.setFillColorRGB(1, 1, 1); c.setFont("Helvetica-Bold", 7)
+    c.drawString(tl + 4, TBL_TOP - 6, "ELEMENTOS DEL DISEÑO")
+
+    def _row(vals, y, bold=False, shade=False):
+        if shade:
+            c.setFillColorRGB(0.95, 0.96, 0.98)
+            c.rect(tl, y - row_h + 2, tr - tl, row_h, fill=1, stroke=0)
+        c.setFont("Helvetica-Bold" if bold else "Helvetica", 6.5)
+        c.setFillColorRGB(*(AZUL if bold else (0.1, 0.1, 0.1)))
+        x = tl + 3
+        for v, cw in zip(vals, cols_w):
+            c.drawString(x, y - row_h + 4, str(v)); x += cw
+        c.setStrokeColorRGB(GR, GG, GB); c.setLineWidth(0.25)
+        c.line(tl, y - row_h + 2, tr, y - row_h + 2)
+
+    ry = TBL_TOP - 14
+    _row(["#", "Elemento", "Ancho (cm)", "Alto (cm)", "Área (cm²)"], ry, bold=True)
+    ry -= row_h
+    row_num = 1
+    for i, cl in enumerate(sig):
+        hc_cl = round(cl["h"] * sf_cm, 2)
+        members = cl.get("member_bbs") or [cl]
+        members = sorted(
+            [m for m in members if m.get("w", 0) * sf_cm >= 0.5],
+            key=lambda m: m.get("x", 0)
+        )
+        ids = cl.get("ids", [])
+        gid = cl.get("group_id", "")
+        base_label = gid if gid else (ids[0] if len(ids) == 1 else f"Grupo {i+1}")
+        for j, mbb in enumerate(members[:10]):
+            wc = round(mbb.get("w", 0) * sf_cm, 2)
+            hc = round(mbb.get("h", 0) * sf_cm, 2) or hc_cl
+            lbl = base_label if len(members) == 1 else f"{base_label} [{j+1}]"
+            _row([f"{row_num}", lbl, f"{wc:.2f}", f"{hc:.2f}", f"{wc*hc:.2f}"],
+                 ry, shade=(row_num % 2 == 0))
+            row_num += 1
+            ry -= row_h
+            if ry < 8:
+                break
+        if ry < 8:
+            break
+
+    # ── RESUMEN + NOTAS (inferior derecha) ────────────────────────────────────
+    RX = PW * 0.62; RW = PW - RX - MAR
+
+    def _mini(title, rows, rx, ry_top, rw):
+        c.setFillColorRGB(*AZUL)
+        c.rect(rx, ry_top - 13, rw, 14, fill=1, stroke=0)
+        c.setFillColorRGB(1, 1, 1); c.setFont("Helvetica-Bold", 7)
+        c.drawString(rx + 4, ry_top - 6, title)
+        cy = ry_top - 13
+        for k, v in rows:
+            cy -= 11
+            c.setFont("Helvetica-Bold", 6.5); c.setFillColorRGB(*AZUL)
+            c.drawString(rx + 4, cy + 3, k)
+            c.setFont("Helvetica", 6.5); c.setFillColorRGB(0.1, 0.1, 0.1)
+            c.drawRightString(rx + rw - 4, cy + 3, v)
+            c.setStrokeColorRGB(GR, GG, GB); c.setLineWidth(0.2)
+            c.line(rx, cy, rx + rw, cy)
+        return cy
+
+    ry2 = TBL_TOP
+    ry2 = _mini("RESUMEN GENERAL", [
+        ("Medida total:", f"{real_width_cm:.2f} × {real_h_cm:.2f} cm"),
+        ("Proporción:",   proporcion),
+        ("Grupos:",       str(N_e)),
+    ], RX, ry2, RW)
+    ry2 -= 8
+    _mini("NOTAS", [
+        ("", "Todas las medidas en cm."),
+        ("", "Verificar en obra antes de fabricar."),
+    ], RX, ry2, RW)
+
+    c.setFont("Helvetica", 5.5); c.setFillColorRGB(GR, GG, GB)
+    c.drawCentredString(PW / 2, 4,
+                        f"SGI Impresión y Diseño  ·  Plano {folio}  ·  {fecha}")
+    c.save()
+    return buf.getvalue()
