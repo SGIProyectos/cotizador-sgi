@@ -81,6 +81,28 @@ def test_cotizar_letras_flujo_completo(client, square_svg):
     assert "quote_id" in body
 
 
+def test_excel_export(client, square_svg):
+    sid = _new_session(client, square_svg)
+    qid = client.post("/api/cotizar/letras", json={
+        "session_id": sid,
+        "real_width_cm": 200.0,
+        "altura_letra_cm": 50.0,
+    }).json()["quote_id"]
+    r = client.get(f"/api/excel/{qid}")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    # Header XLSX = ZIP "PK\x03\x04"
+    assert r.content[:4] == b"PK\x03\x04"
+    assert "Cotizacion_" in r.headers.get("content-disposition", "")
+
+
+def test_excel_export_quote_inexistente(client):
+    r = client.get("/api/excel/no-existe")
+    assert r.status_code == 404
+
+
 def test_cotizar_caja_flujo(client, caja_svg):
     sid = _new_session(client, caja_svg)
     r = client.post("/api/cotizar/caja", json={

@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 import db
 from calculator import parse_svg, cotizar_letras, cotizar_caja, cotizar_planas, QuoteResult
 from pdf_gen import generar_pdf, generar_pdf_ot, generar_pdf_entrega, generar_pdf_plano
+from excel_gen import generar_xlsx
 from catalog_data import (
     LAMINAS, LEDS_CANAL, LEDS_CAJA, FUENTES, PEGAMENTOS,
     catalog_to_dict, catalog_save, catalog_apply, GRUAS,
@@ -679,6 +680,25 @@ async def api_pdf(quote_id: str, cliente: str = "", notas: str = ""):
         path=_write_tmp(pdf_bytes, filename),
         filename=filename,
         media_type="application/pdf",
+    )
+
+
+@app.get("/api/excel/{quote_id}")
+async def api_excel(quote_id: str, cliente: str = "", notas: str = ""):
+    """Exporta la cotización a .xlsx con hojas Resumen / Letras / Desglose."""
+    result = _ensure_quote_in_memory(quote_id)
+    meta   = dict(_quote_store.get(quote_id + "_meta", {}))
+    if not result:
+        raise HTTPException(404, "Cotización no encontrada")
+    if cliente: meta["cliente"] = cliente
+    if notas:   meta["notas"]   = notas
+
+    xlsx_bytes = generar_xlsx(result, meta)
+    filename = f"Cotizacion_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.xlsx"
+    return FileResponse(
+        path=_write_tmp(xlsx_bytes, filename),
+        filename=filename,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 

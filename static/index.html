@@ -2542,6 +2542,10 @@ function renderResult(d) {
             onclick="return actualizarDocUrl('entrega','${d.quote_id}')"
             style="background:#2e7d32"
             title="Acta de entrega y garantía (al terminar el trabajo)">✅ Acta de Entrega</a>
+          <a class="btn-pdf" id="btn-xls-link" href="/api/excel/${d.quote_id}"
+            onclick="return actualizarDocUrl('excel','${d.quote_id}')"
+            style="background:#107c41"
+            title="Cotización en Excel editable">📊 Excel</a>
         </div>
         <input id="pdf-notas" type="text" placeholder="Notas para los documentos (opcional)"
           style="font-size:11px;padding:3px 8px;border:1px solid #ddd;border-radius:6px;width:100%;color:#666;margin-top:4px">
@@ -3659,7 +3663,9 @@ function actualizarPdfUrl(quoteId) {
 function actualizarDocUrl(tipo, quoteId) {
   const qs  = _pdfParams();
   const url = `/api/${tipo}/${quoteId}` + (qs ? `?${qs}` : "");
-  document.getElementById(`btn-${tipo === "entrega" ? "ent" : tipo}-link`).href = url;
+  const btnSuffix = {entrega: "ent", excel: "xls"}[tipo] || tipo;
+  const btn = document.getElementById(`btn-${btnSuffix}-link`);
+  if (btn) btn.href = url;
   return true;
 }
 

@@ -8,3 +8,4 @@ svglib>=1.5.1
 opencv-python>=4.9.0
 rembg>=2.0.50
 vtracer>=0.6.0
+openpyxl>=3.1.0
