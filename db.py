@@ -48,6 +48,12 @@ def init_db():
                 email    TEXT DEFAULT '',
                 telefono TEXT DEFAULT ''
             );
+            -- Índices: aceleran filtros y orden del historial
+            CREATE INDEX IF NOT EXISTS idx_quotes_fecha   ON quotes(fecha DESC);
+            CREATE INDEX IF NOT EXISTS idx_quotes_cliente ON quotes(cliente);
+            CREATE INDEX IF NOT EXISTS idx_quotes_folio   ON quotes(folio);
+            CREATE INDEX IF NOT EXISTS idx_quotes_tipo    ON quotes(tipo);
+            CREATE INDEX IF NOT EXISTS idx_clients_nombre ON clients(nombre);
         """)
 
 
