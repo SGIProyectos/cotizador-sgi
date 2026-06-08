@@ -6,9 +6,23 @@ __pycache__/
 venv/
 env/
 
+# Variables de entorno (claves de API, secretos)
+.env
+.env.*
+!.env.example
+
 # Archivos temporales generados por la app
 tmp/
 server.log
+server.log.*
+backups/
+cotizador.db
+
+# Coverage / pytest
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
 
 # IDE
 .vs/
@@ -28,3 +42,4 @@ CATALOGO LETRAS.xlsx
 # Imágenes y documentos de referencia local
 continua.png
 *.txt
+!requirements*.txt

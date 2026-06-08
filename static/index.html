@@ -54,6 +54,22 @@ body { font-family: var(--sans); background: var(--gris); color: var(--texto); f
             display: flex; align-items: center; gap: 8px; }
 .panel h3::before { content: ""; width: 3px; height: 11px; background: var(--naranja); border-radius: 2px; }
 
+/* Panel tarjeta destacada */
+.panel-card {
+  background: rgba(30,70,120,.35);
+  border: 1px solid rgba(100,160,240,.18);
+  border-bottom: 1px solid rgba(100,160,240,.18);
+  border-radius: 10px;
+  margin: 12px 14px;
+  padding: 14px 16px;
+}
+.panel-card h3 {
+  color: #b8d0f0;
+  font-size: 10px;
+  letter-spacing: .13em;
+}
+.panel-card h3::before { background: #5b9bd5; }
+
 label { font-size: 11px; color: #aebcd4; display: block; margin-bottom: 5px; margin-top: 11px; font-weight: 500; }
 label:first-of-type { margin-top: 0; }
 
@@ -100,6 +116,119 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
 .drop-zone p { font-size: 12px; color: #aebcd4; line-height: 1.5; }
 .drop-zone.ok { border-color: var(--ok); border-style: solid; background: rgba(31,157,87,.12); }
 .drop-zone.ok p { color: #5fd99b; }
+.img-sep { text-align:center; margin:10px 0 8px; color:#4a5a74; font-size:10.5px; letter-spacing:.05em; }
+#img-trace-preview { margin-top:8px; }
+#img-trace-thumb { background:#1a2b4a; border-radius:6px; height:54px; overflow:hidden;
+                   display:flex; align-items:center; justify-content:center;
+                   border:1px solid rgba(255,255,255,.1); }
+#img-trace-thumb svg { max-width:100%; max-height:54px; display:block; }
+#btn-open-trace-modal { width:100%; margin-top:6px; padding:6px 8px; font-size:11px;
+                        background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12);
+                        color:#aebcd4; border-radius:4px; cursor:pointer; }
+#btn-open-trace-modal:hover { background:rgba(255,255,255,.13); color:#eef3fb; }
+/* ── modal de trazado ─────────────────────────────────────────────── */
+#trace-modal { display:none; position:fixed; inset:0; z-index:3000;
+               background:rgba(5,12,26,.86); align-items:center; justify-content:center; padding:16px; }
+#trace-modal.open { display:flex; }
+.tm-box { background:linear-gradient(155deg,#15243f,#1a2b4a);
+          border:1px solid rgba(255,255,255,.12); border-radius:12px;
+          width:min(980px,98vw); max-height:94vh;
+          display:flex; flex-direction:column; overflow:hidden;
+          box-shadow:0 32px 80px rgba(0,0,0,.6); }
+.tm-header { display:flex; align-items:center; padding:13px 20px;
+             border-bottom:1px solid rgba(255,255,255,.09); flex-shrink:0; }
+.tm-header-text { flex:1; }
+.tm-header-text h3 { font-size:14px; color:#eef3fb; font-weight:700; }
+.tm-header-text p  { font-size:10.5px; color:#7a90b4; margin-top:2px; }
+.tm-close { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14);
+            color:#aebcd4; border-radius:6px; padding:5px 12px; font-size:13px; cursor:pointer; }
+.tm-close:hover { background:rgba(255,255,255,.16); color:#eef3fb; }
+.tm-preview { flex:1; overflow:auto; background:#dde; min-height:220px;
+              display:flex; align-items:center; justify-content:center; position:relative; }
+#tm-svg-box { max-width:100%; max-height:100%; padding:8px; }
+#tm-svg-box svg { max-width:100%; height:auto; display:block; }
+.tm-loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+              background:rgba(5,12,26,.7); color:#eef3fb; font-size:13px; }
+.tm-controls { border-top:1px solid rgba(255,255,255,.08); padding:14px 20px;
+               display:grid; grid-template-columns:1fr 1fr; gap:14px 36px; flex-shrink:0; }
+.tm-ctrl-label { font-size:11px; font-weight:600; color:#eef3fb; margin-bottom:5px; }
+.tm-ctrl-label span { font-weight:400; color:#6a80a0; margin-left:5px; }
+.tm-ctrl-val { font-size:10px; color:#e87c2a; font-family:var(--mono); text-align:right;
+               margin-top:2px; }
+.trace-slider-row { display:grid; grid-template-columns:auto 1fr auto;
+                    align-items:center; gap:6px; }
+.trace-slider-row span { font-size:9.5px; color:#4a6080; white-space:nowrap; }
+.trace-slider-row input[type=range] { accent-color:var(--naranja); }
+.trace-check { display:flex; align-items:center; gap:6px; font-size:11px;
+               color:#8aa0be; cursor:pointer; }
+.tm-footer { border-top:1px solid rgba(255,255,255,.06); padding:10px 20px;
+             display:flex; align-items:center; gap:10px; flex-shrink:0; flex-wrap:wrap; }
+.tm-dim { display:flex; align-items:center; gap:7px; margin-left:auto; }
+.tm-dim label { font-size:11px; color:#aebcd4; white-space:nowrap; }
+.tm-dim input  { width:76px; padding:5px 8px; border-radius:4px; border:1px solid #2d4468;
+                 background:#101e34; color:#eef3fb; font-size:12px; font-family:var(--mono); }
+.tm-footer button { padding:7px 16px; font-size:12px; border:none; border-radius:5px; cursor:pointer; }
+#tm-btn-retrace { background:#2a3f63; color:#eef3fb; }
+#tm-btn-usar    { background:var(--naranja); color:#fff; font-weight:700; }
+
+/* ── split preview original vs vectorizado ─────────────────────── */
+.tm-preview-split {
+  display:grid; grid-template-columns:1fr 1fr; gap:0;
+  flex:1 1 0; min-height:0; overflow:hidden;
+}
+.tm-preview-pane {
+  overflow:hidden; display:flex; align-items:center; justify-content:center;
+  padding:10px; position:relative; box-sizing:border-box;
+  min-height:200px;
+}
+/* ambos paneles usan <img> — se dimensionan igual */
+.tm-preview-pane img {
+  max-width:calc(100% - 20px); max-height:calc(100% - 20px);
+  width:auto; height:auto;
+  object-fit:contain; display:block;
+}
+.tm-pane-orig  { background:#0d1a2e; border-right:1px solid rgba(255,255,255,.08); }
+.tm-pane-vec   { background:#f0f4f8; }
+/* placeholder cuando no hay contenido */
+.tm-pane-empty {
+  font-size:11px; color:#8fa0b8; text-align:center;
+  pointer-events:none; user-select:none; position:absolute;
+}
+.tm-pane-orig .tm-pane-empty { color:#3d5270; }
+.tm-pane-label {
+  position:absolute; top:6px; left:7px;
+  font-size:9px; text-transform:uppercase; letter-spacing:.09em;
+  color:#7a90b4; background:rgba(0,0,0,.45);
+  padding:2px 7px; border-radius:3px; pointer-events:none; z-index:2;
+}
+.tm-pane-orig .tm-pane-label { color:#c0cfdf; }
+.tm-pane-vec  .tm-pane-label { color:#4a5a6e; }
+/* presets */
+.preset-btns { display:flex; gap:5px; flex-wrap:wrap; margin-top:4px; }
+.preset-btn {
+  background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.13);
+  color:#aebcd4; border-radius:4px; padding:5px 11px;
+  font-size:11px; cursor:pointer; transition:.13s;
+}
+.preset-btn:hover { background:rgba(255,255,255,.14); color:#eef3fb; }
+.preset-btn.active { background:var(--naranja); border-color:var(--naranja); color:#fff; font-weight:600; }
+/* loading spinner dentro del panel vectorizado */
+.tm-vec-loading {
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:10px;
+  background:rgba(14,26,52,.82); color:#eef3fb; font-size:12px;
+}
+.tm-spinner {
+  width:28px; height:28px; border:3px solid rgba(255,255,255,.15);
+  border-top-color:var(--naranja); border-radius:50%;
+  animation:spin .75s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+/* info de paths detectados */
+#tm-paths-info {
+  font-size:10px; color:#6b9e6b; font-family:var(--mono);
+  padding:0 20px 8px; text-align:right; flex-shrink:0;
+}
 
 /* asesor */
 #panel-asesor { background: rgba(0,0,0,.16); }
@@ -404,7 +533,48 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
 }
 .cfg-btn-ok:hover { filter: brightness(1.07); }
 
+/* ── VISTA 3D ── */
+#tab-3d { padding: 0 !important; overflow: hidden; }
+#visor3d-wrap {
+  width: 100%; height: 100%; position: relative;
+  background: #0d0d1c; display: flex; flex-direction: column;
+  min-height: 500px;
+}
+#visor3d-canvas { flex: 1; width: 100%; display: block; }
+#visor3d-empty {
+  position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center;
+  flex-direction: column; gap: 14px; color: #44446a;
+  pointer-events: none;
+}
+#visor3d-empty .v3d-icon { font-size: 54px; opacity: .35; }
+#visor3d-empty p { font-size: 13px; }
+.v3d-btn-bar {
+  position: absolute; top: 12px; left: 12px; z-index: 10;
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+.v3d-btn {
+  background: rgba(20,30,60,.72); border: 1px solid rgba(255,255,255,.18);
+  color: #aebcd4; border-radius: 6px; padding: 5px 13px;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  backdrop-filter: blur(8px); transition: .15s; white-space: nowrap;
+}
+.v3d-btn:hover { background: rgba(232,124,42,.3); border-color: var(--naranja); color: #fff; }
+.v3d-hint {
+  position: absolute; bottom: 10px; right: 14px;
+  font-size: 11px; color: #2a2a44; pointer-events: none; user-select: none;
+}
+
 </style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.min.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+  }
+}
+</script>
+<!-- imagetracerjs reemplazado por vectorización backend (vectorizer.py + OpenCV) -->
 </head>
 <body>
 
@@ -413,8 +583,20 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
   <!-- ══════════════════ SIDEBAR ══════════════════ -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <h1>⬡ SGI Cotizador</h1>
-      <p>Letras 3D · Cajas de Luz · Anuncios</p>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <h1>⬡ SGI Cotizador</h1>
+          <p>Letras 3D · Cajas de Luz · Anuncios</p>
+        </div>
+        <button onclick="abrirHistorial()" title="Historial de cotizaciones"
+          style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);
+                 color:#aebcd4;border-radius:6px;padding:5px 9px;font-size:12px;
+                 cursor:pointer;white-space:nowrap;margin-top:2px;transition:.15s"
+          onmouseover="this.style.background='rgba(255,255,255,.16)'"
+          onmouseout="this.style.background='rgba(255,255,255,.08)'">
+          📋 Historial
+        </button>
+      </div>
     </div>
 
     <!-- Tipo de anuncio -->
@@ -439,6 +621,31 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
         <p id="drop-label">Arrastra tu SVG aquí<br>o haz clic para seleccionar</p>
       </div>
       <input type="file" id="svg-input" accept=".svg" style="display:none" onchange="handleFile(event)">
+
+      <button onclick="toggleImgZone()" id="btn-img-toggle"
+        style="background:none;border:none;color:#6b7d9c;font-size:11px;cursor:pointer;
+               margin-top:8px;padding:0;text-align:left;letter-spacing:.01em;transition:.15s"
+        onmouseover="this.style.color='#aebcd4'"
+        onmouseout="this.style.color='#6b7d9c'">
+        ↳ convertir desde imagen JPG / PNG
+      </button>
+
+      <div id="img-zone-wrap" style="display:none;margin-top:8px">
+        <div class="drop-zone" id="img-drop-zone"
+             onclick="document.getElementById('img-input').click()"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="handleImgDrop(event)">
+          <div class="icon">🖼️</div>
+          <p id="img-drop-label">Arrastra JPG · PNG aquí<br>o haz clic para seleccionar</p>
+        </div>
+        <input type="file" id="img-input" accept=".jpg,.jpeg,.png,.webp" style="display:none" onchange="handleImgFile(event)">
+
+        <div id="img-trace-preview" style="display:none;">
+          <div id="img-trace-thumb"></div>
+          <button id="btn-open-trace-modal" onclick="openTraceModal()">⚙ Ver y ajustar trazado</button>
+        </div>
+      </div>
     </div>
 
     <!-- Asesor automático -->
@@ -447,16 +654,31 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
       <div id="asesor-content"></div>
     </div>
 
-    <!-- Datos generales -->
-    <div class="panel">
-      <h3>Datos generales</h3>
-      <label>Ancho real del diseño (cm)</label>
-      <input type="number" id="ancho-real" value="60" min="1" step="1">
+    <!-- Datos del diseño y presentación -->
+    <div class="panel panel-card">
+      <h3>Diseño y presentación</h3>
+      <label>Ancho detectado del diseño (cm)</label>
+      <input type="number" id="ancho-real" placeholder="ej. 60" min="1" step="1">
       <label>Uso</label>
       <select id="uso" onchange="populateLedsCaja()">
         <option value="exterior">Exterior</option>
         <option value="interior">Interior</option>
       </select>
+      <div style="height:1px;background:rgba(100,160,240,.15);margin:13px 0 10px"></div>
+      <label style="margin-top:0;color:#7a9fc0;font-size:10px;letter-spacing:.07em;text-transform:uppercase">
+        Espacio en pared
+        <span style="text-transform:none;letter-spacing:0;opacity:.6;font-weight:400"> — opcional, activa preview</span>
+      </label>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <div style="flex:1">
+          <label>Ancho (cm)</label>
+          <input type="number" id="pared-ancho" placeholder="ej. 300" min="1" step="1" oninput="renderWallPreview()">
+        </div>
+        <div style="flex:1">
+          <label>Alto (cm)</label>
+          <input type="number" id="pared-alto" placeholder="ej. 120" min="1" step="1" oninput="renderWallPreview()">
+        </div>
+      </div>
     </div>
 
     <!-- Parámetros LETRAS -->
@@ -474,52 +696,57 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
       <label>Altura de la letra (cm)</label>
       <input type="number" id="altura-letra" value="15" min="1" step="1">
       <div class="info-tag" id="cercha-auto-tag">Cercha automática: 5 cm</div>
-      <label>Cercha manual (0 = automático)</label>
-      <input type="number" id="cercha-manual" value="0" min="0" step="0.5">
-      <label>Material de la cara</label>
-      <select id="mat-cara">
-        <option value="auto">Automático según altura</option>
-        <optgroup label="Acrílico">
-          <option value="acrilico_3mm">Acrílico 3mm</option>
-          <option value="acrilico_3mm_blanco">Acrílico Blanco 3mm</option>
-          <option value="acrilico_3mm_colores">Acrílico Color 3mm</option>
-          <option value="acrilico_3mm_translucido">Acrílico Translúcido 3mm</option>
-          <option value="acrilico_3mm_espejo">Acrílico Espejo 3mm</option>
-          <option value="acrilico_5mm">Acrílico 5mm</option>
-          <option value="acrilico_6mm">Acrílico 6mm</option>
-        </optgroup>
-        <optgroup label="Alucom">
-          <option value="alucom_base">Alucom Color Base</option>
-          <option value="alucom_especial">Alucom Acabado Especial</option>
-          <option value="alucom_espejo">Alucom Espejo</option>
-        </optgroup>
-        <optgroup label="Aluminio">
+
+      <!-- Avanzado colapsable -->
+      <button onclick="toggleAvanzadoLetras()" id="btn-avanzado-letras"
+        style="background:none;border:none;color:#6b7d9c;font-size:11px;cursor:pointer;
+               margin-top:10px;padding:0;text-align:left;letter-spacing:.01em;transition:.15s;
+               display:flex;align-items:center;gap:4px"
+        onmouseover="this.style.color='#aebcd4'"
+        onmouseout="this.style.color='#6b7d9c'">
+        <span id="avanzado-letras-arrow" style="font-size:9px">▶</span> opciones avanzadas
+      </button>
+      <div id="avanzado-letras-wrap" style="display:none;margin-top:8px">
+        <label>Cercha manual <span style="font-size:10px;opacity:.55">(0 = automático)</span></label>
+        <input type="number" id="cercha-manual" value="0" min="0" step="0.5">
+        <label>Material de la cara</label>
+        <select id="mat-cara">
+          <option value="auto">Automático según altura</option>
+          <optgroup label="Acrílico">
+            <option value="acrilico_3mm">Acrílico 3mm</option>
+            <option value="acrilico_3mm_blanco">Acrílico Blanco 3mm</option>
+            <option value="acrilico_3mm_colores">Acrílico Color 3mm</option>
+            <option value="acrilico_3mm_translucido">Acrílico Translúcido 3mm</option>
+            <option value="acrilico_3mm_espejo">Acrílico Espejo 3mm</option>
+            <option value="acrilico_5mm">Acrílico 5mm</option>
+            <option value="acrilico_6mm">Acrílico 6mm</option>
+          </optgroup>
+          <optgroup label="Alucom">
+            <option value="alucom_base">Alucom Color Base</option>
+            <option value="alucom_especial">Alucom Acabado Especial</option>
+            <option value="alucom_espejo">Alucom Espejo</option>
+          </optgroup>
+          <optgroup label="Aluminio">
+            <option value="aluminio_cal20">Aluminio Calibre 20</option>
+            <option value="aluminio_cal18">Aluminio Calibre 18</option>
+          </optgroup>
+        </select>
+        <label>Material de la cercha</label>
+        <select id="mat-cercha">
+          <option value="auto">Automático según altura</option>
+          <option value="aluminio_cal22">Aluminio Calibre 22</option>
           <option value="aluminio_cal20">Aluminio Calibre 20</option>
           <option value="aluminio_cal18">Aluminio Calibre 18</option>
-        </optgroup>
-      </select>
-      <label>Material de la cercha</label>
-      <select id="mat-cercha">
-        <option value="auto">Automático según altura</option>
-        <option value="aluminio_cal22">Aluminio Calibre 22</option>
-        <option value="aluminio_cal20">Aluminio Calibre 20</option>
-        <option value="aluminio_cal18">Aluminio Calibre 18</option>
-        <option value="alucobon_3mm">Alucobon / Dibond 3mm</option>
-      </select>
-      <label>Tipo de fabricación</label>
-      <select id="tipo-multiplicador">
-        <option value="aluminio_sin_luz">Aluminio sin luz  ×2.0</option>
-        <option value="aluminio_con_luz">Aluminio con luz  ×2.5</option>
-        <option value="aluminio_acrilico_con_luz">Aluminio + acrílico con luz  ×3.5</option>
-        <option value="acrilico_con_luz_std">Acrílico con luz estándar  ×4.5</option>
-        <option value="acrilico_con_luz_premium">Acrílico con luz premium  ×5.5</option>
-      </select>
-      <div id="formula-preview" class="info-tag" style="display:none;background:#e8f5e9;color:#1b5e20;font-weight:700;font-size:13px;margin-top:4px"></div>
-      <label>Ajuste de precio % <span style="font-size:10px;opacity:.55">(+ sube, − baja)</span></label>
-      <input type="number" id="ajuste-pct" value="0" min="-50" max="200" step="1">
-      <div id="led-fields-group">
-        <label>Espaciado entre módulos LED (cm)</label>
-        <input type="number" id="espaciado-led" value="6" min="3" max="15" step="1">
+          <option value="alucobon_3mm">Alucobon / Dibond 3mm</option>
+        </select>
+        <div id="led-fields-group">
+          <label>Espaciado entre módulos LED (cm)</label>
+          <input type="number" id="espaciado-led" value="6" min="3" max="15" step="1">
+        </div>
+        <!-- Vinil cercha: oculto, se llena desde el modal de configuración -->
+        <select id="vinil-cercha-id" style="display:none">
+          <option value="">Sin vinil en cercha</option>
+        </select>
       </div>
     </div>
 
@@ -584,19 +811,37 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
       </select>
     </div>
 
-    <!-- Margen -->
+    <!-- Costos y ganancia -->
     <div class="panel">
-      <h3>Margen de ganancia</h3>
-      <label>Margen (%)</label>
-      <input type="number" id="margen" value="35" min="0" max="80" step="5">
-    </div>
+      <h3>Costos y ganancia</h3>
 
-    <!-- Mano de obra -->
-    <div class="panel">
-      <h3>Mano de obra</h3>
+      <!-- Precio fórmula — solo letras 3D y planas (no caja) -->
+      <div id="ajuste-section" style="display:none">
+        <label>Multiplicador de precio</label>
+        <select id="tipo-multiplicador">
+          <option value="aluminio_sin_luz">Aluminio sin luz  ×2.0</option>
+          <option value="aluminio_con_luz">Aluminio con luz  ×2.5</option>
+          <option value="aluminio_acrilico_con_luz">Aluminio + acrílico con luz  ×3.5</option>
+          <option value="acrilico_con_luz_std">Acrílico con luz estándar  ×4.5</option>
+          <option value="acrilico_con_luz_premium">Acrílico con luz premium  ×5.5</option>
+        </select>
+        <label>Ajuste de precio % <span style="font-size:10px;opacity:.55">(+ sube, − baja)</span></label>
+        <input type="number" id="ajuste-pct" value="0" min="-50" max="200" step="1">
+        <div id="formula-preview" class="info-tag" style="display:none;background:#e8f5e9;color:#1b5e20;font-weight:700;font-size:13px;margin-top:4px"></div>
+        <div style="height:1px;background:rgba(255,255,255,.08);margin:13px 0 11px"></div>
+      </div>
+
+      <label>% Ganancia sobre costo</label>
+      <input type="number" id="margen" value="35" min="0" max="80" step="5">
+      <div style="font-size:9.5px;color:#6b7d9c;margin-top:4px;line-height:1.4">
+        precio mínimo = costo ÷ (1 − ganancia)
+      </div>
+
+      <div style="height:1px;background:rgba(255,255,255,.08);margin:13px 0 11px"></div>
+
       <div style="display:flex;gap:8px">
         <div style="flex:1">
-          <label>Horas</label>
+          <label>Horas MO</label>
           <input type="number" id="mo-horas" value="0" min="0" step="0.5" oninput="calcMO()">
         </div>
         <div style="flex:1">
@@ -605,11 +850,9 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
         </div>
       </div>
       <div class="info-tag" id="mo-tag" style="margin-top:6px">Total MO: $0</div>
-    </div>
 
-    <!-- Instalación -->
-    <div class="panel">
-      <h3>Instalación</h3>
+      <div style="height:1px;background:rgba(255,255,255,.1);margin:13px 0 11px"></div>
+
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <span style="font-size:12px;opacity:.85">¿Incluye instalación?</span>
         <div style="position:relative;width:44px;height:24px;cursor:pointer" onclick="toggleInst()">
@@ -635,6 +878,27 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
       </div>
     </div>
 
+    <!-- Cliente -->
+    <div class="panel">
+      <h3>Cliente <span style="font-weight:400;font-size:10px;color:#9fb0cb">(opcional)</span>
+        <button onclick="abrirClientes()" title="Administrar clientes"
+          style="float:right;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);
+                 color:#aebcd4;border-radius:5px;padding:2px 7px;font-size:11px;cursor:pointer">
+          ⚙ Clientes
+        </button>
+      </h3>
+      <div style="position:relative">
+        <input id="cliente-input" type="text" placeholder="Nombre del cliente..."
+          autocomplete="off" oninput="buscarClienteAuto(this.value)"
+          onfocus="buscarClienteAuto(this.value)"
+          style="width:100%;box-sizing:border-box">
+        <div id="cliente-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;
+          background:#1e304f;border:1px solid #2a4068;border-radius:0 0 8px 8px;
+          z-index:200;max-height:180px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,.4)">
+        </div>
+      </div>
+    </div>
+
     <button class="btn-calc" id="btn-calc" onclick="calcular()" disabled>
       <span id="btn-label">⚡ Calcular cotización</span>
       <div class="spinner" id="spinner"></div>
@@ -646,17 +910,39 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
     <nav class="tabs">
       <div class="tab active" onclick="switchTab('svg')">Vista SVG</div>
       <div class="tab" onclick="switchTab('result')">Cotización</div>
+      <div class="tab" onclick="switchTab('3d')">Vista 3D</div>
       <div class="tab" onclick="switchTab('rec')">Recomendaciones</div>
       <div class="tab" onclick="switchTab('catalog'); loadCatalog()">📦 Catálogo</div>
     </nav>
 
     <!-- TAB: SVG -->
     <div class="tab-content active" id="tab-svg">
+      <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;
+                  padding:6px 10px 0;margin-bottom:-2px">
+        <span style="font-size:11px;color:#8a94a6;margin-right:2px">Vista:</span>
+        <button id="btn-view-2d" onclick="togglePreviewMode('2d')"
+          style="padding:3px 11px;font-size:11px;border-radius:5px 0 0 5px;
+                 border:1px solid #3a5a8a;background:#1a3a6a;color:#eef3fb;
+                 cursor:pointer;font-weight:700;transition:.15s">2D</button>
+        <button id="btn-view-3d" onclick="togglePreviewMode('3d')"
+          style="padding:3px 11px;font-size:11px;border-radius:0 5px 5px 0;
+                 border:1px solid #c8d4e8;border-left:none;background:#fff;
+                 color:#6a7a8a;cursor:pointer;transition:.15s">3D</button>
+      </div>
       <div id="svg-preview-box">
         <div class="svg-empty">
           <div class="icon">🎨</div>
           <p>Sube un archivo SVG para visualizarlo aquí</p>
         </div>
+      </div>
+      <div style="padding:8px 12px 4px; display:flex; justify-content:flex-end;">
+        <button id="btn-plano" onclick="abrirPlano()" disabled
+          style="padding:6px 14px; font-size:12px; background:#1a2b4a; color:#eef3fb;
+                 border:1px solid rgba(255,255,255,.18); border-radius:5px; cursor:pointer;
+                 opacity:.45; transition:.15s;"
+          title="Genera PDF con plano de medidas del diseño">
+          📐 Plano de medidas
+        </button>
       </div>
       <div class="paths-grid" id="paths-grid"></div>
     </div>
@@ -678,6 +964,30 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
           <div class="icon">💡</div>
           <p>Las recomendaciones aparecerán después de calcular</p>
         </div>
+      </div>
+    </div>
+
+    <!-- TAB: VISTA 3D -->
+    <div class="tab-content" id="tab-3d">
+      <div id="visor3d-wrap">
+        <div class="v3d-btn-bar">
+          <button class="v3d-btn" onclick="v3d_setView('iso')">⬡ Isométrico</button>
+          <button class="v3d-btn" onclick="v3d_setView('front')">⬛ Frente</button>
+          <button class="v3d-btn" onclick="v3d_setView('top')">▤ Superior</button>
+          <button class="v3d-btn" onclick="v3d_setView('right')">▶ Lateral</button>
+          <button class="v3d-btn" onclick="v3d_setView('back')">◀ Posterior</button>
+          <button class="v3d-btn" id="btn-explode"
+            onclick="window.v3d_explode?.()"
+            style="display:none;border-color:#e87c2a;color:#e87c2a">
+            💥 Explotar cara
+          </button>
+        </div>
+        <canvas id="visor3d-canvas" style="display:none"></canvas>
+        <div id="visor3d-empty">
+          <div class="v3d-icon">⬡</div>
+          <p>Calcula una cotización para ver la extrusión 3D</p>
+        </div>
+        <div class="v3d-hint">Arrastrar · girar &nbsp;|&nbsp; Scroll · zoom &nbsp;|&nbsp; Clic derecho · pan</div>
       </div>
     </div>
 
@@ -835,11 +1145,12 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
         </div>
 
         <div class="cfg-step">
-          <div class="cfg-step-label"><span class="cfg-step-num">2</span>¿Cuánto mide la letra más alta?</div>
+          <div class="cfg-step-label"><span class="cfg-step-num">2</span>Alto total del diseño</div>
           <div class="cfg-inline">
-            <label>Altura real de la letra (cm)</label>
-            <input type="number" id="cfg-altura" value="15" min="1" step="1" oninput="onCfgAlturaChange()">
+            <label>Alto total — todos los elementos (cm)</label>
+            <input type="number" id="cfg-altura" min="1" step="1" oninput="onCfgAlturaChange()">
           </div>
+          <div id="cfg-altura-hint" style="font-size:10px;color:#8a94a6;margin-top:6px;line-height:1.5"></div>
         </div>
 
         <div class="cfg-step" id="cfg-step-cercha">
@@ -854,6 +1165,30 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
             <span class="cfg-slider-val" id="cfg-cercha-val">8 cm</span>
           </div>
           <div id="cfg-led-opts" class="cfg-led-list"></div>
+
+          <!-- Vinil en cercha -->
+          <div style="margin-top:14px;border-top:1px solid #e8ecf2;padding-top:12px">
+            <div style="font-size:12px;font-weight:600;color:#4a5568;margin-bottom:8px">¿Aplicar vinil en la cercha?</div>
+            <div class="cfg-cards" id="cfg-vinil-cercha-cards">
+              <div class="cfg-card active" data-val="no" onclick="selectCfgCard(this,'cfg-vinil-cercha-cards');onCfgVinilCerchaChange()">
+                <div class="cfg-card-icon">—</div>
+                <div class="cfg-card-name">Sin vinil</div>
+                <div class="cfg-card-desc">Cercha aluminio al natural o pintada</div>
+              </div>
+              <div class="cfg-card" data-val="si" onclick="selectCfgCard(this,'cfg-vinil-cercha-cards');onCfgVinilCerchaChange()">
+                <div class="cfg-card-icon">🎨</div>
+                <div class="cfg-card-name">Con vinil</div>
+                <div class="cfg-card-desc">Color o acabado metálico sobre la cercha</div>
+              </div>
+            </div>
+            <div id="cfg-vinil-cercha-opts" style="display:none;margin-top:10px">
+              <select id="cfg-vinil-cercha-sel" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid #c8d4e8;font-size:13px" onchange="onCfgVinilCerchaSelChange()">
+                <option value="">Selecciona tipo de vinil…</option>
+              </select>
+              <div id="cfg-vinil-cercha-info" style="font-size:11px;color:#6b7d9c;margin-top:6px;min-height:16px"></div>
+            </div>
+          </div>
+
         </div>
 
       </div><!-- /cfg-sec-letras -->
@@ -945,11 +1280,12 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
       <div id="cfg-sec-planas" style="display:none">
 
         <div class="cfg-step">
-          <div class="cfg-step-label"><span class="cfg-step-num">1</span>¿Cuánto mide la letra más alta?</div>
+          <div class="cfg-step-label"><span class="cfg-step-num">1</span>Alto total del diseño</div>
           <div class="cfg-inline">
-            <label>Altura real de la letra (cm)</label>
-            <input type="number" id="cfg-altura-plana" value="15" min="1" step="1">
+            <label>Alto total — todos los elementos (cm)</label>
+            <input type="number" id="cfg-altura-plana" min="1" step="1">
           </div>
+          <div id="cfg-altura-plana-hint" style="font-size:10px;color:#8a94a6;margin-top:6px;line-height:1.5"></div>
         </div>
 
         <div class="cfg-step">
@@ -1003,15 +1339,23 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
 
 <script>
 // ─── ESTADO ──────────────────────────────────────────────────────────────────
+const PATH_PALETTE = [
+  "#2d88e8","#e8542d","#27ae60","#8e44ad","#e8a82d",
+  "#16a0a0","#c0392b","#2980b9","#f39c12","#1abc9c",
+];
+
 let sessionId        = null;
 let tipoActual       = "letras";
 let quoteId          = null;
 let svgMaxHeightPx   = 0;
 let svgViewboxW      = 0;
+let svgViewboxH      = 0;
 let svgArtboardWCm   = 0;    // >0 si SVG de Illustrator (ancho artboard en cm)
 let svgPathsRaw      = [];   // paths con px, para recalcular en cm
 let lastScaleFactor  = 0;   // último sf calculado, para re-render al cambiar tipo
 let lastCerchaAltura = 0;
+let currentSvgText   = null; // SVG source para vista 3D
+let previewMode      = "2d"; // "2d" | "3d"
 
 // ─── TIPOS DE CONSTRUCCIÓN (JS) ──────────────────────────────────────────────
 const TIPOS_CONSTRUCCION_JS = {
@@ -1029,10 +1373,17 @@ function setTipo(tipo, btn) {
   document.getElementById("params-letras").classList.toggle("visible", tipo === "letras");
   document.getElementById("params-planas").classList.toggle("visible", tipo === "planas");
   document.getElementById("params-caja").classList.toggle("visible",   tipo === "caja");
+  // Ajuste de precio y multiplicador solo aplican a letras y planas, no a caja
+  const ajusteSection = document.getElementById("ajuste-section");
+  if (ajusteSection) ajusteSection.style.display = tipo !== "caja" ? "" : "none";
   const btnCalc = document.getElementById("btn-calc");
   if (btnCalc) btnCalc.disabled = !sessionId;
   // Re-render cards según el tipo (caja = bbox global, letras = por path)
-  if (svgPathsRaw.length) renderPathCards(svgPathsRaw, lastScaleFactor, lastCerchaAltura);
+  if (svgPathsRaw.length) {
+    renderPathCards(svgPathsRaw, lastScaleFactor, lastCerchaAltura);
+    const svgEl = document.getElementById("svg-preview-box")?.querySelector("svg");
+    if (svgEl) colorizePaths(svgEl, svgPathsRaw);
+  }
 }
 
 // ─── SELECCIÓN DE CARA CAJA (dos niveles: base + acabado) ────────────────────
@@ -1080,6 +1431,62 @@ function populateLedsCaja() {
   });
   if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
   sugerirLedCaja();
+}
+
+// ─── SELECTOR DE VINIL CERCHA ────────────────────────────────────────────────
+function populateVinilCercha() {
+  const vinilos = catalog?.vinilos_cercha || [];
+
+  // Select oculto del sidebar (fuente de verdad para el payload)
+  const hidSel = document.getElementById("vinil-cercha-id");
+  if (hidSel) {
+    const prev = hidSel.value;
+    hidSel.innerHTML = '<option value="">Sin vinil en cercha</option>';
+    vinilos.forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = v.id; opt.textContent = v.nombre;
+      hidSel.appendChild(opt);
+    });
+    if ([...hidSel.options].some(o => o.value === prev)) hidSel.value = prev;
+  }
+
+  // Select del modal
+  const cfgSel = document.getElementById("cfg-vinil-cercha-sel");
+  if (cfgSel) {
+    const prev = cfgSel.value;
+    cfgSel.innerHTML = '<option value="">Selecciona tipo de vinil…</option>';
+    vinilos.forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = v.id;
+      opt.textContent = `${v.nombre} · $${v.precio_ml}/ml`;
+      cfgSel.appendChild(opt);
+    });
+    if ([...cfgSel.options].some(o => o.value === prev)) cfgSel.value = prev;
+    onCfgVinilCerchaSelChange();
+  }
+}
+
+function onCfgVinilCerchaChange() {
+  const val  = _cfgCardVal("cfg-vinil-cercha-cards");
+  const opts = document.getElementById("cfg-vinil-cercha-opts");
+  if (opts) opts.style.display = val === "si" ? "" : "none";
+  if (val === "si") {
+    // Asegurar que el select del modal esté poblado con el catálogo
+    populateVinilCercha();
+  } else {
+    const cfgSel = document.getElementById("cfg-vinil-cercha-sel");
+    if (cfgSel) { cfgSel.value = ""; onCfgVinilCerchaSelChange(); }
+  }
+}
+
+function onCfgVinilCerchaSelChange() {
+  const cfgSel = document.getElementById("cfg-vinil-cercha-sel");
+  const info   = document.getElementById("cfg-vinil-cercha-info");
+  if (!cfgSel || !info) return;
+  const v = (catalog?.vinilos_cercha || []).find(x => x.id === cfgSel.value);
+  if (!v) { info.textContent = ""; return; }
+  const colores = (v.colores || []).join(", ");
+  info.textContent = `${v.acabado} · rollo ${v.ancho_rollo_m * 100} cm ancho${colores ? " — " + colores : ""}`;
 }
 
 function sugerirLedCaja() {
@@ -1149,24 +1556,24 @@ async function uploadSVG(file) {
     sessionId      = data.session_id;
     svgMaxHeightPx = data.max_letter_height_px || 0;
     svgViewboxW    = data.viewbox_w || 0;
+    svgViewboxH    = data.viewbox_h || 0;
     svgArtboardWCm = data.artboard_w_cm || 0;
     svgPathsRaw    = data.paths || [];
+    currentSvgText = data.svg_text || null;
+    _svgFromVectorizer = false;
 
-    // SVG de Illustrator: auto-llenar el ancho real con el ancho del artboard
+    // Limpiar campos del diseño anterior
+    document.getElementById("pared-ancho").value = "";
+    document.getElementById("pared-alto").value  = "";
     if (svgArtboardWCm > 0) {
       document.getElementById("ancho-real").value = svgArtboardWCm.toFixed(1);
       showToast(`Illustrator detectado — artboard ${svgArtboardWCm.toFixed(1)} cm`, "ok");
+    } else {
+      document.getElementById("ancho-real").value = "";
     }
 
-    // Mostrar SVG
-    const box = document.getElementById("svg-preview-box");
-    box.innerHTML = data.svg_text;
-    const svgEl = box.querySelector("svg");
-    if (svgEl) {
-      svgEl.style.maxWidth = "100%";
-      svgEl.style.maxHeight = "520px";
-      colorizePaths(svgEl);
-    }
+    // Mostrar SVG (con contexto de pared si ya hay dims, o preview normal)
+    renderWallPreview();
 
     // Cards: sin escala todavía, se actualizan en actualizarAsesor
     renderPathCards(svgPathsRaw, 0, 0);
@@ -1174,6 +1581,8 @@ async function uploadSVG(file) {
     dz.classList.add("ok");
     document.getElementById("drop-label").textContent = `✓ ${file.name}  (${data.paths.length} paths)`;
     document.getElementById("btn-calc").disabled = false;
+    const btnPlano = document.getElementById("btn-plano");
+    if (btnPlano) { btnPlano.disabled = false; btnPlano.style.opacity = "1"; }
 
     actualizarAsesor(true);   // actualiza sidebar, path cards y asesor
     switchTab("svg");
@@ -1185,15 +1594,651 @@ async function uploadSVG(file) {
   }
 }
 
-// Colorear paths: cerrados = azul, abiertos = naranja
-function colorizePaths(svgEl) {
-  svgEl.querySelectorAll("path").forEach((p, i) => {
-    const d = p.getAttribute("d") || "";
-    const closed = d.trim().toUpperCase().endsWith("Z");
-    p.style.fill   = closed ? "rgba(45,89,134,0.25)" : "none";
-    p.style.stroke = closed ? "#2d5986" : "#e87c2a";
-    p.style.strokeWidth = "1.5";
+// ─── IMAGEN → SVG (vectorización backend) ────────────────────────────────────
+let _traceFile        = null;
+let _tracedSvg        = null;
+let _traceSessionData = null;   // respuesta completa de /api/vectorize
+let _svgFromVectorizer = false; // true cuando el SVG viene de vtracer (no de diseño vectorial)
+
+function renderWallPreview() {
+  const box = document.getElementById("svg-preview-box");
+  if (!currentSvgText || !svgViewboxW) return;
+
+  const paredAncho  = parseFloat(document.getElementById("pared-ancho")?.value) || 0;
+  const paredAlto   = parseFloat(document.getElementById("pared-alto")?.value)  || 0;
+  const disenoAncho = parseFloat(document.getElementById("ancho-real")?.value)  || 0;
+
+  if (!paredAncho || !paredAlto || !disenoAncho) {
+    box.innerHTML = currentSvgText;
+    const svgEl = box.querySelector("svg");
+    if (svgEl) { svgEl.style.maxWidth = "100%"; svgEl.style.maxHeight = "520px"; colorizePaths(svgEl, svgPathsRaw); }
+    return;
+  }
+
+  const disenoAlto = svgViewboxW > 0 ? disenoAncho * (svgViewboxH / svgViewboxW) : disenoAncho;
+  const cabeAncho  = disenoAncho <= paredAncho;
+  const cabeAlto   = disenoAlto  <= paredAlto;
+  const cabe       = cabeAncho && cabeAlto;
+  const pctW       = Math.min(100, (disenoAncho / paredAncho) * 100);
+
+  const borderColor = cabe ? "#4caf50" : "#ef5350";
+  const fitBg       = cabe ? "rgba(46,125,50,.9)" : "rgba(198,40,40,.9)";
+  let fitMsg;
+  if (cabe) {
+    fitMsg = `✓ Cabe — sobran ${(paredAncho-disenoAncho).toFixed(0)} × ${(paredAlto-disenoAlto).toFixed(0)} cm`;
+  } else {
+    const excW = !cabeAncho ? ` +${(disenoAncho-paredAncho).toFixed(0)} cm ancho` : "";
+    const excH = !cabeAlto  ? ` +${(disenoAlto -paredAlto ).toFixed(0)} cm alto`  : "";
+    fitMsg = `⚠ No cabe —${excW}${excH}`;
+  }
+
+  // Contenedor fijo 340px — la pared se escala dentro con aspect-ratio (letterbox)
+  box.innerHTML = `
+    <div style="width:100%;height:340px;background:#6b7d8f;border-radius:8px;
+                display:flex;align-items:center;justify-content:center;
+                position:relative;overflow:hidden">
+      <!-- pared: aspect-ratio hace que quepa siempre en 340px sin desbordar -->
+      <div style="aspect-ratio:${paredAncho}/${paredAlto};max-width:94%;max-height:94%;
+                  background:#e8e0d4;position:relative;
+                  box-shadow:0 6px 24px rgba(0,0,0,.45);
+                  display:flex;align-items:center;justify-content:center;overflow:hidden">
+        <!-- diseño centrado en la pared -->
+        <div style="width:${pctW}%;position:relative;flex-shrink:0">
+          <div style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);
+                      white-space:nowrap;background:rgba(0,0,0,.6);color:#fff;
+                      border-radius:4px;padding:2px 7px;font-size:9.5px;
+                      font-family:monospace;pointer-events:none">
+            ${disenoAncho.toFixed(0)} × ${disenoAlto.toFixed(0)} cm
+          </div>
+          <div style="border:2px solid ${borderColor};border-radius:2px;
+                      box-shadow:0 2px 12px rgba(0,0,0,.3);overflow:hidden">
+            ${currentSvgText}
+          </div>
+        </div>
+        <!-- etiqueta pared -->
+        <div style="position:absolute;top:6px;left:8px;background:rgba(0,0,0,.38);color:#fff;
+                    border-radius:4px;padding:2px 7px;font-size:10px;
+                    font-family:monospace;pointer-events:none">
+          Pared ${paredAncho} × ${paredAlto} cm
+        </div>
+      </div>
+      <!-- estado fit -->
+      <div style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
+                  white-space:nowrap;background:${fitBg};color:#fff;border-radius:5px;
+                  padding:4px 12px;font-size:11px;font-weight:700;pointer-events:none">
+        ${fitMsg}
+      </div>
+    </div>`;
+
+  const svgEl = box.querySelector("svg");
+  if (svgEl) { svgEl.style.width="100%"; svgEl.style.height="auto"; svgEl.style.display="block"; colorizePaths(svgEl, svgPathsRaw); }
+}
+
+// ─── TOGGLE 2D / 3D ──────────────────────────────────────────────────────────
+function togglePreviewMode(mode) {
+  previewMode = mode;
+  const btn2d = document.getElementById("btn-view-2d");
+  const btn3d = document.getElementById("btn-view-3d");
+  if (btn2d) {
+    btn2d.style.background  = mode === "2d" ? "#1a3a6a" : "#fff";
+    btn2d.style.color        = mode === "2d" ? "#eef3fb" : "#6a7a8a";
+    btn2d.style.borderColor  = mode === "2d" ? "#3a5a8a" : "#c8d4e8";
+    btn2d.style.fontWeight   = mode === "2d" ? "700" : "400";
+  }
+  if (btn3d) {
+    btn3d.style.background  = mode === "3d" ? "#1a3a6a" : "#fff";
+    btn3d.style.color        = mode === "3d" ? "#eef3fb" : "#6a7a8a";
+    btn3d.style.borderColor  = mode === "3d" ? "#3a5a8a" : "#c8d4e8";
+    btn3d.style.fontWeight   = mode === "3d" ? "700" : "400";
+  }
+  renderPreview();
+}
+
+function renderPreview() {
+  if (previewMode === "3d" && tipoActual === "letras" && currentSvgText) {
+    render3D();
+  } else {
+    renderWallPreview();
+  }
+}
+
+function render3D() {
+  const box = document.getElementById("svg-preview-box");
+  if (!currentSvgText || !svgViewboxW) return;
+
+  const cercha    = parseFloat(document.getElementById("cercha-manual")?.value) || lastCerchaAltura || 8;
+  const tipoCons  = document.getElementById("tipo-construccion")?.value || "cajon_luz";
+  const matCaraId = document.getElementById("mat-cara")?.value || "auto";
+
+  // Profundidad visible en px proporcional a cercha real
+  const displayW  = 360;
+  const sfDisp    = displayW / svgViewboxW;
+  const rawDepth  = cercha * sfDisp * 0.75;
+  const depth     = Math.max(5, Math.min(rawDepth, 45));
+  const dx        = Math.round(depth * 0.85);
+  const dy        = Math.round(depth * 0.55);
+
+  // Color de la cara según construcción y material
+  let faceColor = "#ffffff";
+  let glowCSS   = "none";
+  const isLit   = tipoCons === "cajon_luz" || tipoCons === "retro_halo" || tipoCons === "abierta_luz";
+
+  if (tipoCons === "abierta_luz") {
+    faceColor = "transparent";
+  } else if (tipoCons === "retro_halo" || tipoCons === "sin_luz") {
+    faceColor = matCaraId.includes("espejo") ? "#cdd5e0" : "#b0bccb";
+  } else {
+    // cajon_luz — acrílico
+    if (matCaraId.includes("espejo"))      faceColor = "#d8dce8";
+    else if (matCaraId.includes("colores")) faceColor = "#f5a623";
+    else if (matCaraId.includes("translucido")) faceColor = "rgba(210,235,255,0.9)";
+    else                                    faceColor = "#f0f4ff"; // blanco translúcido
+  }
+
+  if (isLit && faceColor !== "transparent") {
+    const gc = tipoCons === "cajon_luz" ? "rgba(180,210,255,0.55)" : "rgba(255,200,100,0.4)";
+    glowCSS = `drop-shadow(0 0 10px ${gc}) drop-shadow(0 0 22px ${gc})`;
+  }
+
+  const cerchaColor = "#4a5868";
+  const cerchaStroke = "#2e3a48";
+
+  box.innerHTML = `
+    <div style="background:linear-gradient(150deg,#1c2a3a,#0e1720);
+                border-radius:8px;min-height:300px;
+                display:flex;align-items:center;justify-content:center;
+                position:relative;padding:36px 20px;overflow:hidden">
+
+      <!-- Cuadrícula sutil de fondo -->
+      <div style="position:absolute;inset:0;pointer-events:none;opacity:.06;
+                  background-image:linear-gradient(rgba(255,255,255,1) 1px,transparent 1px),
+                                   linear-gradient(90deg,rgba(255,255,255,1) 1px,transparent 1px);
+                  background-size:28px 28px"></div>
+
+      <!-- Grupo 3D centrado -->
+      <div style="position:relative;width:${displayW}px;max-width:92%">
+
+        <!-- Capa cercha (offset → simula retorno lateral) -->
+        <div id="layer-cercha" style="position:absolute;top:${dy}px;left:${dx}px;width:100%">
+          ${currentSvgText}
+        </div>
+
+        <!-- Líneas laterales de unión (canvas superpuesto) -->
+        <canvas id="canvas-3d" style="position:absolute;inset:0;width:100%;height:100%;
+                                       pointer-events:none"></canvas>
+
+        <!-- Cara frontal -->
+        <div id="layer-face" style="position:relative;filter:${glowCSS}">
+          ${currentSvgText}
+        </div>
+      </div>
+
+      <!-- Etiqueta info -->
+      <div style="position:absolute;bottom:8px;left:10px;
+                  font-size:10px;font-family:monospace;color:rgba(255,255,255,.35)">
+        Vista 3D · cercha ${cercha} cm${isLit ? " · iluminada" : ""}
+      </div>
+    </div>`;
+
+  // — Colorear capa cercha (aluminio oscuro)
+  const svgEls = box.querySelectorAll("svg");
+  svgEls.forEach((svgEl, idx) => {
+    svgEl.style.cssText = "width:100%;height:auto;display:block;overflow:visible";
+    const elems = svgEl.querySelectorAll("path,rect,circle,ellipse,polygon,polyline");
+    elems.forEach(el => {
+      if (idx === 0) {
+        // cercha layer
+        el.style.fill   = cerchaColor;
+        el.style.stroke = cerchaStroke;
+        el.style.strokeWidth = "0.8";
+      } else {
+        // face layer
+        el.style.fill   = faceColor;
+        el.style.stroke = faceColor === "transparent" ? "none" : "rgba(255,255,255,0.18)";
+        el.style.strokeWidth = "0.5";
+      }
+    });
   });
+
+  // — Dibujar líneas laterales de conexión con canvas
+  const faceDiv  = document.getElementById("layer-face");
+  const fSvg     = faceDiv?.querySelector("svg");
+  if (fSvg) {
+    const canvas = document.getElementById("canvas-3d");
+    if (canvas) {
+      const bbox = fSvg.getBoundingClientRect();
+      const cont = canvas.parentElement.getBoundingClientRect();
+      canvas.width  = cont.width;
+      canvas.height = cont.height;
+      const ctx = canvas.getContext("2d");
+      ctx.strokeStyle = "#3a4a5a";
+      ctx.lineWidth   = 0.8;
+      // Dibujar bordes del offset (marco exterior)
+      const ox = canvas.getBoundingClientRect().left - cont.left;
+      const oy = canvas.getBoundingClientRect().top  - cont.top;
+      const fw = fSvg.clientWidth  || displayW;
+      const fh = fSvg.clientHeight || displayW * (svgViewboxH / svgViewboxW);
+      // Aristas: top, right (cara→cercha)
+      ctx.fillStyle = "#3d4e5e";
+      // Lado derecho
+      ctx.beginPath();
+      ctx.moveTo(fw, 0); ctx.lineTo(fw + dx, dy);
+      ctx.lineTo(fw + dx, fh + dy); ctx.lineTo(fw, fh);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      // Lado superior
+      ctx.beginPath();
+      ctx.moveTo(0, 0); ctx.lineTo(dx, dy);
+      ctx.lineTo(fw + dx, dy); ctx.lineTo(fw, 0);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+  }
+}
+
+function toggleAvanzadoLetras() {
+  const wrap  = document.getElementById("avanzado-letras-wrap");
+  const arrow = document.getElementById("avanzado-letras-arrow");
+  const btn   = document.getElementById("btn-avanzado-letras");
+  const open  = wrap.style.display === "none";
+  wrap.style.display  = open ? "block" : "none";
+  arrow.textContent   = open ? "▼" : "▶";
+  btn.style.color     = open ? "#e87c2a" : "#6b7d9c";
+}
+
+function toggleImgZone() {
+  const wrap = document.getElementById("img-zone-wrap");
+  const btn  = document.getElementById("btn-img-toggle");
+  const open = wrap.style.display === "none";
+  wrap.style.display = open ? "block" : "none";
+  btn.style.color = open ? "#e87c2a" : "#6b7d9c";
+  btn.textContent = open ? "↳ ocultar zona de imagen" : "↳ convertir desde imagen JPG / PNG";
+}
+
+function handleImgDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file) traceImage(file);
+}
+function handleImgFile(e) {
+  const file = e.target.files[0];
+  if (file) traceImage(file);
+  e.target.value = "";
+}
+
+let _retraceTimer = null;
+
+function syncSlider(sliderId, valId) {
+  document.getElementById(valId).textContent = document.getElementById(sliderId).value;
+  // Auto-retrace con debounce: espera 550ms después de que el usuario suelta el slider
+  if (!_traceFile) return;
+  clearTimeout(_retraceTimer);
+  const btn = document.getElementById("tm-btn-retrace");
+  if (btn) { btn.textContent = "⏳"; btn.disabled = true; }
+  _retraceTimer = setTimeout(() => {
+    retrace();
+    if (btn) { btn.textContent = "↺ Re-vectorizar"; btn.disabled = false; }
+  }, 800);
+}
+
+function openTraceModal() {
+  document.getElementById("trace-modal").classList.add("open");
+}
+function closeTraceModal() {
+  document.getElementById("trace-modal").classList.remove("open");
+}
+
+// ── Presets de vectorización ─────────────────────────────────────────────────
+const _VEC_PRESETS = {
+  logos:  { bgTol: 42, speckle: 8,  precision: 3, layerDiff: 48 },
+  texto:  { bgTol: 46, speckle: 10, precision: 2, layerDiff: 56 },
+  foto:   { bgTol: 28, speckle: 4,  precision: 5, layerDiff: 32 },
+  lineal: { bgTol: 52, speckle: 6,  precision: 2, layerDiff: 52 },
+  neon:   { bgTol: 44, speckle: 8,  precision: 3, layerDiff: 44 },
+};
+
+function applyPreset(name, btn) {
+  const p = _VEC_PRESETS[name];
+  if (!p) return;
+  document.getElementById("tr-bg-tol").value        = p.bgTol;
+  document.getElementById("tr-speckle").value       = p.speckle;
+  document.getElementById("tr-color-prec").value    = p.precision;
+  document.getElementById("tr-layer-diff").value    = p.layerDiff;
+  document.getElementById("tr-bg-tol-val").textContent     = p.bgTol;
+  document.getElementById("tr-speckle-val").textContent    = p.speckle;
+  document.getElementById("tr-color-prec-val").textContent = p.precision;
+  document.getElementById("tr-layer-diff-val").textContent = p.layerDiff;
+  document.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
+  if (btn) btn.classList.add("active");
+  if (_traceFile) {
+    clearTimeout(_retraceTimer);
+    _retraceTimer = setTimeout(retrace, 500);
+  }
+}
+
+function _buildVectorizeParams() {
+  const bgTol        = parseInt(document.getElementById("tr-bg-tol")?.value     ?? 38);
+  const speckle      = parseInt(document.getElementById("tr-speckle")?.value    ?? 8);
+  const precision    = parseInt(document.getElementById("tr-color-prec")?.value ?? 3);
+  const layerDiff    = parseInt(document.getElementById("tr-layer-diff")?.value ?? 48);
+  return { bgTol, speckle, precision, layerDiff };
+}
+
+async function traceImage(file) {
+  if (!file.type.startsWith("image/")) {
+    showToast("Solo se aceptan imágenes (JPG, PNG, WEBP)", "err");
+    return;
+  }
+  _traceFile        = file;
+  _tracedSvg        = null;
+  _traceSessionData = null;
+
+  // Mostrar original en el panel izquierdo
+  const origImg = document.getElementById("tm-orig-img");
+  if (origImg) {
+    if (origImg._objUrl) URL.revokeObjectURL(origImg._objUrl);
+    origImg._objUrl = URL.createObjectURL(file);
+    origImg.src     = origImg._objUrl;
+    origImg.style.display = "";
+  }
+  const origEmpty = document.getElementById("tm-orig-empty");
+  if (origEmpty) origEmpty.style.display = "none";
+
+  // Limpiar panel derecho y mostrar spinner
+  const vecImgEl = document.getElementById("tm-vec-img");
+  if (vecImgEl) vecImgEl.style.display = "none";
+  document.getElementById("tm-loading").style.display    = "";
+  const vecEmpty = document.getElementById("tm-vec-empty");
+  if (vecEmpty) vecEmpty.style.display = "none";
+
+  document.getElementById("tm-filename").textContent     = file.name;
+  document.getElementById("img-drop-label").textContent  = "Vectorizando…";
+  document.getElementById("img-drop-zone").classList.remove("ok");
+  document.getElementById("img-trace-preview").style.display = "none";
+  document.getElementById("tm-paths-info").style.display = "none";
+
+  openTraceModal();
+  await _runVectorize(file);
+}
+
+async function retrace() {
+  if (!_traceFile) return;
+  document.getElementById("tm-loading").style.display = "";
+  const _vi = document.getElementById("tm-vec-img");
+  if (_vi) _vi.style.display = "none";
+  document.getElementById("tm-paths-info").style.display = "none";
+  await _runVectorize(_traceFile);
+}
+
+async function _runVectorize(file) {
+  const { bgTol, speckle, precision, layerDiff } = _buildVectorizeParams();
+  const params = `bg_tol=${bgTol}&filter_speckle=${speckle}&color_precision=${precision}&layer_difference=${layerDiff}`;
+  const form   = new FormData();
+  form.append("file", file);
+
+  try {
+    const res  = await fetch(`/api/vectorize?${params}`, { method: "POST", body: form });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Error del servidor");
+
+    _tracedSvg        = data.svg_text;
+    _traceSessionData = data;
+
+    // Aspect ratio para cálculo automático de dimensiones
+    const vb_w = data.viewbox_w || 0;
+    const vb_h = data.viewbox_h || 0;
+    _traceAspectRatio = (vb_w > 0 && vb_h > 0) ? vb_w / vb_h : 0;
+
+    // Mostrar SVG en panel derecho como <img> vía blob URL
+    document.getElementById("tm-loading").style.display = "none";
+    if (vecEmpty) vecEmpty.style.display = "none";
+    const vecImg = document.getElementById("tm-vec-img");
+    if (vecImg) {
+      if (vecImg._objUrl) URL.revokeObjectURL(vecImg._objUrl);
+      const blob = new Blob([_tracedSvg], { type: "image/svg+xml" });
+      vecImg._objUrl = URL.createObjectURL(blob);
+      vecImg.src     = vecImg._objUrl;
+      vecImg.style.display = "";
+    }
+
+    // Info de paths detectados
+    const infoEl = document.getElementById("tm-paths-info");
+    if (infoEl && data.paths) {
+      const closed = data.paths.filter(p => p.is_closed).length;
+      infoEl.textContent = `${data.paths.length} paths detectados · ${closed} cerrados`;
+      infoEl.style.display = "";
+    }
+
+    // Thumbnail en sidebar
+    const thumb = document.getElementById("img-trace-thumb");
+    thumb.innerHTML = _tracedSvg;
+    const tsvg = thumb.querySelector("svg");
+    if (tsvg) { tsvg.style.maxWidth = "100%"; tsvg.style.maxHeight = "54px"; }
+
+    document.getElementById("img-trace-preview").style.display = "";
+    document.getElementById("img-drop-zone").classList.add("ok");
+    document.getElementById("img-drop-label").textContent = `✓ ${file.name}`;
+
+    // Completar dimensión faltante si ya hay una
+    const anchoEl = document.getElementById("tm-ancho-cm");
+    const altoEl  = document.getElementById("tm-alto-cm");
+    if (anchoEl.value && !altoEl.value) _syncTraceDims("ancho");
+    else if (altoEl.value && !anchoEl.value) _syncTraceDims("alto");
+
+  } catch (err) {
+    document.getElementById("tm-loading").style.display = "none";
+    document.getElementById("img-drop-label").textContent = "Error — intenta de nuevo";
+    showToast("Error al vectorizar: " + err.message, "err");
+  }
+}
+
+let _traceAltoCm = 0;    // Alto real declarado en el modal de trazado
+let _traceAspectRatio = 0; // w/h del SVG trazado (px), para calcular dimensión faltante
+
+function _syncTraceDims(changed) {
+  if (!_traceAspectRatio) return;
+  const anchoEl = document.getElementById("tm-ancho-cm");
+  const altoEl  = document.getElementById("tm-alto-cm");
+  if (changed === "ancho") {
+    const w = parseFloat(anchoEl.value);
+    if (w > 0) altoEl.value = (w / _traceAspectRatio).toFixed(1);
+    else altoEl.value = "";
+  } else {
+    const h = parseFloat(altoEl.value);
+    if (h > 0) anchoEl.value = (h * _traceAspectRatio).toFixed(1);
+    else anchoEl.value = "";
+  }
+}
+
+function usarSvgTrazado() {
+  if (!_tracedSvg || !_traceSessionData) {
+    showToast("Primero vectoriza una imagen", "err"); return;
+  }
+  const anchoCm = parseFloat(document.getElementById("tm-ancho-cm").value);
+  if (!anchoCm || anchoCm <= 0) {
+    showToast("Ingresa el ancho real en cm antes de continuar", "err");
+    document.getElementById("tm-ancho-cm").focus();
+    return;
+  }
+  _traceAltoCm = parseFloat(document.getElementById("tm-alto-cm").value) || 0;
+
+  // Aplicar datos directamente sin re-subir (la sesión ya está creada en el servidor)
+  const data     = _traceSessionData;
+  sessionId      = data.session_id;
+  svgMaxHeightPx = data.max_letter_height_px || 0;
+  svgViewboxW    = data.viewbox_w  || 0;
+  svgViewboxH    = data.viewbox_h  || 0;
+  svgArtboardWCm = data.artboard_w_cm || 0;
+  svgPathsRaw    = data.paths || [];
+  currentSvgText = data.svg_text || null;
+  _svgFromVectorizer = true;
+
+  document.getElementById("ancho-real").value  = anchoCm;
+  document.getElementById("pared-ancho").value = "";
+  document.getElementById("pared-alto").value  = "";
+
+  renderWallPreview();
+  renderPathCards(svgPathsRaw, 0, 0);
+
+  const dz = document.getElementById("drop-zone");
+  dz.classList.add("ok");
+  document.getElementById("drop-label").textContent =
+    `✓ vectorizado (${data.paths.length} paths)`;
+  document.getElementById("btn-calc").disabled = false;
+  const btnPlano = document.getElementById("btn-plano");
+  if (btnPlano) { btnPlano.disabled = false; btnPlano.style.opacity = "1"; }
+
+  actualizarAsesor(true);
+  switchTab("svg");
+  closeTraceModal();
+  showToast(`Vectorización lista: ${data.paths.length} paths detectados`, "ok");
+  openCfgModal();
+}
+
+// Colorear paths según tipo de producto y rol de cada path
+function colorizePaths(svgEl, paths) {
+  if (!svgEl) return;
+  paths = paths || svgPathsRaw || [];
+
+  const domPaths = [...svgEl.querySelectorAll("path, polyline, polygon, ellipse, circle, rect")];
+
+  // Reset all shapes to neutral
+  domPaths.forEach(el => {
+    el.style.fill        = "none";
+    el.style.stroke      = "rgba(180,180,180,0.35)";
+    el.style.strokeWidth = "1";
+    el.style.strokeDasharray = "";
+  });
+
+  if (!paths.length) return;
+
+  // Build id→element map; determine if we can use id-based matching
+  const byId = {};
+  domPaths.forEach(el => { if (el.id) byId[el.id] = el; });
+  const idHits = paths.filter(p => byId[p.svg_id]).length;
+  const useId  = idHits > 0 && idHits >= paths.length * 0.5;
+
+  // When id-matching fails fall back to DOM index (sorted by DOM order matches SVG document order)
+  const getEl = useId
+    ? (p, _i) => byId[p.svg_id] || null
+    : (_p, i)  => domPaths[i] || null;
+
+  if (tipoActual === "caja") {
+    const cajaPath = _findCajaOutline(paths);
+    const cajaId   = cajaPath?.svg_id || null;
+
+    paths.forEach((p, i) => {
+      const el = getEl(p, i);
+      if (!el) return;
+      const isCaja = useId ? (p.svg_id === cajaId) : (p === cajaPath);
+      if (isCaja) {
+        el.style.fill        = "rgba(120,120,120,0.08)";
+        el.style.stroke      = "#888";
+        el.style.strokeWidth = "1.5";
+      } else if (p.is_closed && p.area_px > 0) {
+        el.style.fill        = "rgba(39,174,96,0.22)";
+        el.style.stroke      = "#27ae60";
+        el.style.strokeWidth = "1.5";
+      } else {
+        el.style.fill            = "none";
+        el.style.stroke          = "#e87c2a";
+        el.style.strokeWidth     = "1.5";
+        el.style.strokeDasharray = "4 3";
+      }
+    });
+
+    _showSvgLegend([
+      { color:"#888",    fill:"rgba(120,120,120,0.08)", label:"Contorno caja" },
+      { color:"#27ae60", fill:"rgba(39,174,96,0.22)",   label:"Diseño / vinil" },
+      { color:"#e87c2a", fill:"none", dash:true,         label:"Trazos abiertos" },
+    ]);
+
+  } else {
+    let colorIdx = 0;
+    paths.forEach((p, i) => {
+      const el = getEl(p, i);
+      if (!el) return;
+      if (p.is_closed) {
+        const c = PATH_PALETTE[colorIdx % PATH_PALETTE.length];
+        colorIdx++;
+        el.style.fill        = c + "33";
+        el.style.stroke      = c;
+        el.style.strokeWidth = "1.5";
+      } else {
+        el.style.fill            = "none";
+        el.style.stroke          = "#bbb";
+        el.style.strokeWidth     = "1";
+        el.style.strokeDasharray = "3 3";
+      }
+    });
+
+    const legendItems = paths
+      .filter(p => p.is_closed)
+      .map((p, i) => ({ color: PATH_PALETTE[i % PATH_PALETTE.length], fill: PATH_PALETTE[i % PATH_PALETTE.length] + "33", label: p.id }))
+      .slice(0, 8);
+    if (paths.some(p => !p.is_closed)) {
+      legendItems.push({ color:"#bbb", fill:"none", dash:true, label:"Trazos abiertos" });
+    }
+    _showSvgLegend(legendItems);
+  }
+}
+
+function _showSvgLegend(items) {
+  const box = document.getElementById("svg-preview-box");
+  let leg = document.getElementById("svg-legend");
+  if (!leg) {
+    leg = document.createElement("div");
+    leg.id = "svg-legend";
+    leg.style.cssText = "position:absolute;bottom:10px;left:10px;background:rgba(255,255,255,.88);" +
+      "border:1px solid #ddd;border-radius:8px;padding:8px 12px;font-size:11px;line-height:1.8;" +
+      "pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.12);max-width:220px";
+    box.style.position = "relative";
+    box.appendChild(leg);
+  }
+  leg.innerHTML = items.map(it => `
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="display:inline-block;width:14px;height:14px;border-radius:3px;
+        background:${it.fill};border:2px ${it.dash ? "dashed" : "solid"} ${it.color};flex-shrink:0"></span>
+      <span style="color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${it.label}</span>
+    </div>
+  `).join("");
+}
+
+// Agrupa paths en filas horizontales fusionando intervalos Y solapados.
+function _groupPathsByRow(paths) {
+  if (!paths.length) return [];
+  const ordered = [...paths].sort((a, b) => (a.bbox?.y ?? 0) - (b.bbox?.y ?? 0));
+  const rows = [[ordered[0]]];
+  let curBottom = (ordered[0].bbox?.y ?? 0) + (ordered[0].bbox?.h ?? 0);
+  for (let i = 1; i < ordered.length; i++) {
+    const p = ordered[i];
+    const pTop = p.bbox?.y ?? 0;
+    if (pTop <= curBottom) {
+      rows[rows.length - 1].push(p);
+      curBottom = Math.max(curBottom, pTop + (p.bbox?.h ?? 0));
+    } else {
+      rows.push([p]);
+      curBottom = pTop + (p.bbox?.h ?? 0);
+    }
+  }
+  return rows;
+}
+
+// Identifica el contorno de la caja: el path con mayor área de bbox que sea
+// aproximadamente rectangular (perímetro ≈ 2*(w+h), ratio ≤ 2.5).
+// Devuelve null si ningún path pasa el criterio — el caller usa artboard/viewbox.
+function _findCajaOutline(paths) {
+  if (paths.length <= 1) return paths[0] || null;
+  let best = null, bestBboxArea = 0;
+  for (const c of paths) {
+    const cw = c.bbox?.w ?? 0, ch = c.bbox?.h ?? 0;
+    if (cw <= 0 || ch <= 0) continue;
+    const expPerim = 2 * (cw + ch);
+    if (expPerim > 0 && (c.perimeter_px || 0) / expPerim <= 2.5) {
+      const bboxArea = cw * ch;
+      if (bboxArea > bestBboxArea) { bestBboxArea = bboxArea; best = c; }
+    }
+  }
+  return best;  // null si ningún path es rectangular → usar artboard/viewbox
 }
 
 function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
@@ -1203,63 +2248,122 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
   const hasCm     = scaleFactor > 0;
   const hasCercha = hasCm && cerchaAlturaCm > 0;
 
-  // ── CAJA DE LUZ: una sola card con el bbox total del diseño ──────────────
+  // ── CAJA DE LUZ ──────────────────────────────────────────────────────────
   if (tipoActual === "caja") {
     if (!hasCm) {
       grid.innerHTML = `<div style="grid-column:1/-1;font-size:12px;color:#aaa">
         Ingresa el ancho real para ver medidas en cm</div>`;
       return;
     }
-    // Usar el path más grande (contorno de la caja) para las dimensiones reales
-    const mainPath  = paths.reduce((a, b) => ((a.area_px||0) >= (b.area_px||0) ? a : b), paths[0]);
-    let perimTotal = 0;
-    paths.forEach(p => { perimTotal += p.perimeter_px || 0; });
-    // Ancho = el que el usuario ingresó (autoritativo); alto = proporcional al path
-    const anchoReal  = parseFloat(document.getElementById("ancho-real")?.value) || 0;
-    const _bw        = mainPath.bbox?.w || 1;
-    const _bh        = mainPath.bbox?.h || 1;
+
+    const cajaPath    = _findCajaOutline(paths);
+    const designPaths = cajaPath ? paths.filter(p => p !== cajaPath) : [...paths];
+
+    // Dimensiones de la CARA — si hay contorno rectangular usar su aspecto ratio;
+    // si no (SVG sin rectángulo, ej. Illustrator artboard), usar viewBox
+    const anchoReal = parseFloat(document.getElementById("ancho-real")?.value) || 0;
+    let _bx, _by, _bw, _bh;
+    if (cajaPath) {
+      _bx = cajaPath.bbox?.x ?? 0; _by = cajaPath.bbox?.y ?? 0;
+      _bw = cajaPath.bbox?.w || 1;  _bh = cajaPath.bbox?.h || 1;
+    } else {
+      // Sin contorno rectangular → usar viewBox como referencia del artboard
+      _bx = 0; _by = 0;
+      _bw = svgViewboxW || 1; _bh = svgViewboxH || 1;
+    }
     const anchoTotal = anchoReal > 0 ? anchoReal.toFixed(1) : (_bw * scaleFactor).toFixed(1);
     const altoTotal  = anchoReal > 0 ? (anchoReal * (_bh / _bw)).toFixed(1) : (_bh * scaleFactor).toFixed(1);
     const areaTotal  = (parseFloat(anchoTotal) * parseFloat(altoTotal)).toFixed(1);
-    const perimCm    = (perimTotal * scaleFactor).toFixed(1);
-    const vinilArea  = (parseFloat(areaTotal) / 10000).toFixed(3);
+    const perimCaja  = (2 * (parseFloat(anchoTotal) + parseFloat(altoTotal))).toFixed(1);
+    const caraArea   = (parseFloat(areaTotal) / 10000).toFixed(3);
+
+    // Dimensiones del DISEÑO / VINIL DE CORTE por filas
+    // Solo paths cerrados con área (excluye trazos/contornos abiertos)
+    let vinilHtml = "";
+    const filledDesign = designPaths.filter(p => p.is_closed && (p.area_px || 0) > 0);
+    const srcPaths = filledDesign.length > 0 ? filledDesign : designPaths;
+    if (srcPaths.length > 0) {
+      const scalePx = parseFloat(anchoTotal) / _bw;
+      const rows = _groupPathsByRow(srcPaths);
+      const rowDims = rows.map(rPaths => {
+        const rMinX = Math.max(Math.min(...rPaths.map(p => p.bbox?.x ?? 0)), _bx);
+        const rMinY = Math.max(Math.min(...rPaths.map(p => p.bbox?.y ?? 0)), _by);
+        const rMaxX = Math.min(Math.max(...rPaths.map(p => (p.bbox?.x ?? 0) + (p.bbox?.w ?? 0))), _bx + _bw);
+        const rMaxY = Math.min(Math.max(...rPaths.map(p => (p.bbox?.y ?? 0) + (p.bbox?.h ?? 0))), _by + _bh);
+        return {
+          w: Math.max(0, (rMaxX - rMinX) * scalePx),
+          h: Math.max(0, (rMaxY - rMinY) * scalePx),
+        };
+      });
+      const overallW = Math.max(...rowDims.map(r => r.w));
+      const overallH = Math.max(...rowDims.map(r => r.h));
+      // Mostrar sección de vinil si hay >1 fila o si el diseño difiere del tamaño total de cara
+      if (rowDims.length > 1 || Math.abs(overallW - parseFloat(anchoTotal)) > 0.5 || Math.abs(overallH - parseFloat(altoTotal)) > 0.5) {
+        const rowsHtml = rowDims.map((r, i) => {
+          const label = rowDims.length > 1 ? `Vinil fila ${i + 1}` : "Diseño / Vinil de corte";
+          return `<div class="row" style="color:#2d5986;font-weight:700">
+              <span>${label}</span><span>${r.w.toFixed(1)} × ${r.h.toFixed(1)} cm</span>
+            </div>`;
+        }).join("");
+        const totalAreaM2 = (rowDims.reduce((s, r) => s + r.w * r.h, 0) / 10000).toFixed(3);
+        vinilHtml = `
+          <div style="margin-top:5px;padding-top:5px;border-top:1px solid #eee">
+            ${rowsHtml}
+            <div class="row" style="color:#2d5986">
+              <span>Área vinil total</span>
+              <span>${totalAreaM2} m²</span>
+            </div>
+          </div>`;
+      }
+    }
 
     grid.innerHTML = `
       <div style="grid-column:1/-1;font-size:12px;color:#666;margin-bottom:4px">
         Caja de luz — diseño completo (${paths.length} elementos)
       </div>
-      <div class="path-card" style="grid-column:1/-1;max-width:340px">
-        <div class="name">Diseño completo</div>
+      <div class="path-card" style="grid-column:1/-1;max-width:340px;border:2px solid #888;background:rgba(136,136,136,0.09)">
+        <div class="name" style="color:#444">Diseño completo</div>
         <div class="row"><span>Ancho</span><span>${anchoTotal} cm</span></div>
         <div class="row"><span>Alto</span><span>${altoTotal} cm</span></div>
         <div class="row"><span>Área cara</span><span>${areaTotal} cm²</span></div>
-        <div class="row"><span>Perímetro total</span><span>${perimCm} cm</span></div>
+        <div class="row"><span>Perímetro caja</span><span>${perimCaja} cm</span></div>
         <div style="margin-top:5px;padding-top:5px;border-top:1px solid #eee">
           <div class="row" style="color:#e87c2a;font-weight:700">
-            <span>Lona / Vinil / Acrílico</span>
+            <span>Cara (Lona / Acrílico)</span>
             <span>${anchoTotal} × ${altoTotal} cm</span>
           </div>
           <div class="row" style="color:#e87c2a">
             <span>Área material cara</span>
-            <span>${vinilArea} m²</span>
+            <span>${caraArea} m²</span>
           </div>
         </div>
+        ${vinilHtml}
       </div>`;
     return;
   }
 
   // ── LETRAS / PLANAS: una card por path ───────────────────────────────────
+  // Asignar colores igual que colorizePaths: cerrado→paleta en orden, abierto→gris
+  let _colorIdx = 0;
+  const pathColors = paths.map(p => {
+    if (p.is_closed) {
+      const c = PATH_PALETTE[_colorIdx % PATH_PALETTE.length];
+      _colorIdx++;
+      return c;
+    }
+    return "#aaa";
+  });
+
   const header = hasCm
     ? `<div style="grid-column:1/-1;font-size:12px;color:#666;margin-bottom:4px">
          Medidas en <strong>cm</strong> · cercha ${cerchaAlturaCm} cm
-         &nbsp;·&nbsp;<span style="color:#2d5986">■</span> Cerrado
-         &nbsp;<span style="color:#e87c2a">■</span> Abierto
        </div>`
     : `<div style="grid-column:1/-1;font-size:12px;color:#aaa;margin-bottom:4px">
          Ingresa el ancho real o la altura para ver medidas en cm
        </div>`;
 
-  const cards = paths.map(p => {
+  const cards = paths.map((p, idx) => {
+    const c         = pathColors[idx];
     const perim_cm  = hasCm ? (p.perimeter_px * scaleFactor).toFixed(1) : "—";
     const area_cm2  = hasCm ? (p.area_px * scaleFactor * scaleFactor).toFixed(1) : "—";
     const ancho_cm  = hasCm ? ((p.bbox?.w || 0) * scaleFactor).toFixed(1) : "—";
@@ -1267,8 +2371,11 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
     const tira_neta = hasCercha ? (p.perimeter_px * scaleFactor).toFixed(1) : "—";
     const tira_mas  = hasCercha ? (p.perimeter_px * scaleFactor * 1.10).toFixed(1) : "—";
 
-    return `<div class="path-card">
-      <div class="name">${p.id}</div>
+    return `<div class="path-card" style="border:2px solid ${c};background:${c}22">
+      <div class="name" style="color:${c};display:flex;align-items:center;gap:6px">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};flex-shrink:0"></span>
+        ${p.id}
+      </div>
       <div style="margin-bottom:5px">
         <span class="badge ${p.is_closed ? 'closed' : 'open'}">
           ${p.is_closed ? '✓ Cerrado' : '→ Abierto'}
@@ -1306,7 +2413,7 @@ async function calcular() {
     const anchoReal  = parseFloat(document.getElementById("ancho-real").value)  || 60;
     const uso        = document.getElementById("uso").value;
     const margen     = parseFloat(document.getElementById("margen").value) / 100 || 0.35;
-    const cliente    = "";
+    const cliente    = document.getElementById("cliente-input")?.value?.trim() || "";
 
     let url, body;
 
@@ -1325,6 +2432,7 @@ async function calcular() {
         margen_ganancia:    margen,
         tipo_multiplicador: document.getElementById("tipo-multiplicador").value,
         ajuste_pct:         parseFloat(document.getElementById("ajuste-pct").value) || 0,
+        vinil_cercha_id:    document.getElementById("vinil-cercha-id").value,
         cliente,
         ..._instBody(),
       };
@@ -1365,8 +2473,15 @@ async function calcular() {
     if (!res.ok) throw new Error(data.detail || "Error en cálculo");
 
     quoteId = data.quote_id;
+    // Pre-fill pdf-cliente from sidebar input
+    const _cli = document.getElementById("cliente-input")?.value?.trim();
+    if (_cli) setTimeout(() => {
+      const el = document.getElementById("pdf-cliente");
+      if (el && !el.value) el.value = _cli;
+    }, 50);
     renderResult(data);
     await renderRecomendaciones(data);
+    _v3dAutoRender(data);
     switchTab("result");
     showToast("Cotización lista", "ok");
 
@@ -1519,10 +2634,17 @@ function renderResult(d) {
       ${stat("Watts", il.watts_total+" W", il.fuente)}
       ${stat("Material cara", mats.cara.nombre+(mats.cara.base ? " / "+mats.cara.base : ""), mats.cara.laminas+" lám.")}
       ${stat("Material cercha", mats.cercha.nombre, mats.cercha.laminas+" lám.")}
-      ${mats.cara.vinil_ancho_cm != null ? stat(
-          "Vinil de corte",
-          mats.cara.vinil_ancho_cm+" × "+mats.cara.vinil_alto_cm+" cm",
-          (mats.cara.vinil_area_m2||0).toFixed(3)+" m²"
+      ${(mats.cara.vinil_filas||[]).map((f, i, arr) =>
+          stat(
+            arr.length > 1 ? `Vinil corte fila ${i+1}` : "Vinil de corte",
+            `${f.ancho_cm} × ${f.alto_cm} cm`,
+            `${f.area_m2.toFixed(3)} m²`
+          )
+        ).join("")}
+      ${(mats.cara.vinil_filas||[]).length > 1 ? stat(
+          "Área vinil total",
+          `${(mats.cara.vinil_area_m2||0).toFixed(3)} m²`,
+          `${(mats.cara.vinil_filas||[]).length} filas`
         ) : ""}
     </div>
 
@@ -1695,10 +2817,11 @@ async function renderRecomendaciones(d) {
 
 // ─── HELPERS UI ──────────────────────────────────────────────────────────────
 function switchTab(name) {
-  const names = ["svg","result","rec","catalog"];
+  const names = ["svg","result","3d","rec","catalog"];
   document.querySelectorAll(".tab").forEach((t,i) => t.classList.toggle("active", names[i] === name));
   document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
   document.getElementById("tab-"+name).classList.add("active");
+  if (name === "3d") requestAnimationFrame(() => window._v3dResize?.());
 }
 
 function showToast(msg, type) {
@@ -1723,6 +2846,7 @@ async function loadCatalog(force=false) {
     renderAllCatalog();
     populateGruas();
     populateLedsCaja();
+    populateVinilCercha();
   } catch(e) {
     showToast("Error cargando catálogo", "err");
   }
@@ -2471,9 +3595,14 @@ function actualizarAsesor(autoFillAltura = false) {
 
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("altura-letra").addEventListener("input",  () => { actualizarAsesor(); _updateFormulaPreview(); });
-  document.getElementById("cercha-manual").addEventListener("input", () => actualizarAsesor());
-  document.getElementById("ancho-real").addEventListener("input",    () => { actualizarAsesor(); _updateFormulaPreview(); });
+  document.getElementById("cercha-manual").addEventListener("input", () => { actualizarAsesor(); if (previewMode === "3d") render3D(); });
+  document.getElementById("mat-cara")?.addEventListener("change", () => { if (previewMode === "3d") render3D(); });
+  document.getElementById("tipo-construccion")?.addEventListener("change", () => { if (previewMode === "3d") render3D(); });
+  document.getElementById("ancho-real").addEventListener("input",    () => { actualizarAsesor(); _updateFormulaPreview(); renderWallPreview(); });
   document.getElementById("tipo-multiplicador").addEventListener("change", _updateFormulaPreview);
+  // Mostrar ajuste-section para el tipo por defecto (letras)
+  const ajusteSection = document.getElementById("ajuste-section");
+  if (ajusteSection) ajusteSection.style.display = "";
   // Sincronizar multiplicador con el tipo de construcción por defecto al cargar
   onTipoConstruccionChange();
 });
@@ -2504,6 +3633,22 @@ function _pdfParams() {
   return p.toString();
 }
 
+function abrirPlano() {
+  if (!sessionId) { showToast("Primero sube un SVG", "err"); return; }
+  const ancho  = parseFloat(document.getElementById("ancho-real")?.value || 0);
+  const cli    = document.getElementById("cliente")?.value?.trim() || "";
+  // Si ya hay una cotización guardada, usa su folio; si no, cadena vacía
+  const folioEl = document.querySelector("#result-content [data-folio]");
+  const folio   = folioEl ? folioEl.dataset.folio : "";
+  const params  = new URLSearchParams({
+    session_id: sessionId,
+    ancho_cm:   ancho || 60,
+    folio:      folio,
+    cliente:    cli,
+  });
+  window.open(`/api/plano?${params}`, "_blank");
+}
+
 function actualizarPdfUrl(quoteId) {
   const qs  = _pdfParams();
   const url = `/api/pdf/${quoteId}` + (qs ? `?${qs}` : "");
@@ -2520,9 +3665,12 @@ function actualizarDocUrl(tipo, quoteId) {
 
 // ─── MODAL CONFIGURADOR ───────────────────────────────────────────────────────
 
-function openCfgModal() {
+async function openCfgModal() {
   const overlay = document.getElementById("cfg-overlay");
   if (!overlay) return;
+
+  // Garantiza que el catálogo esté cargado antes de poblar selects del modal
+  await loadCatalog();
 
   // Mostrar sección correcta según tipo activo
   document.getElementById("cfg-sec-letras").style.display = tipoActual === "letras" ? "" : "none";
@@ -2537,14 +3685,54 @@ function openCfgModal() {
   document.getElementById("cfg-title").textContent = titulos[tipoActual]?.[0] || "Configurar anuncio";
   document.getElementById("cfg-sub").textContent   = titulos[tipoActual]?.[1] || "";
 
-  // Pre-popular altura desde el form principal
+  // Calcular alto total del diseño = bbox combinado de todos los paths
+  const anchoReal  = parseFloat(document.getElementById("ancho-real")?.value) || 0;
   const alturaMain = parseFloat(document.getElementById("altura-letra")?.value) || 0;
-  if (alturaMain > 0) {
-    const cfgAltura = document.getElementById("cfg-altura");
-    if (cfgAltura) cfgAltura.value = alturaMain.toFixed(0);
-    const cfgAlturaPlana = document.getElementById("cfg-altura-plana");
-    if (cfgAlturaPlana) cfgAlturaPlana.value = alturaMain.toFixed(0);
+
+  let alturaDetectada = 0;
+  let hintMsg = "";
+
+  if (svgPathsRaw.length > 0 && anchoReal > 0 && svgViewboxW > 0) {
+    // Bounding box ajustado de TODOS los paths juntos
+    const minY         = Math.min(...svgPathsRaw.map(p => p.bbox.y));
+    const maxY         = Math.max(...svgPathsRaw.map(p => p.bbox.y + p.bbox.h));
+    const minX         = Math.min(...svgPathsRaw.map(p => p.bbox.x));
+    const maxX         = Math.max(...svgPathsRaw.map(p => p.bbox.x + p.bbox.w));
+    const totalAltoPx  = maxY - minY;
+    const totalAnchoPx = maxX - minX;
+
+    const sf = anchoReal / svgViewboxW;
+    alturaDetectada = parseFloat((totalAltoPx * sf).toFixed(1));
+    const anchoDiseno = parseFloat((totalAnchoPx * sf).toFixed(1));
+
+    hintMsg = `<span style="color:#1f9d57">✓ Detectado del SVG:</span> el diseño completo mide
+      <strong>${anchoDiseno} × ${alturaDetectada} cm</strong>
+      (ancho × alto total, todos los elementos).`;
+  } else if (anchoReal === 0) {
+    hintMsg = `<span style="color:#e87c2a">↑ Ingresa primero el ancho del diseño</span> para calcular la altura automáticamente.`;
   }
+
+  // Si el usuario declaró el alto en el modal de trazado, usarlo directamente
+  if (_traceAltoCm > 0) {
+    alturaDetectada = _traceAltoCm;
+    hintMsg = `<span style="color:#e87c2a">📐 Alto declarado en trazado:</span>
+      <strong>${_traceAltoCm} cm</strong> × ancho ${anchoReal} cm.`;
+    _traceAltoCm = 0; // consumir una sola vez
+  }
+
+  const setAltura = (id, hintId) => {
+    const el   = document.getElementById(id);
+    const hint = document.getElementById(hintId);
+    if (!el) return;
+    if (alturaDetectada > 0) {
+      el.value = alturaDetectada;
+    } else if (alturaMain > 0) {
+      el.value = alturaMain.toFixed(0);
+    }
+    if (hint) hint.innerHTML = hintMsg;
+  };
+  setAltura("cfg-altura",       "cfg-altura-hint");
+  setAltura("cfg-altura-plana", "cfg-altura-plana-hint");
 
   // Pre-popular tipo de construcción
   const tipoMain = document.getElementById("tipo-construccion")?.value;
@@ -2561,6 +3749,20 @@ function openCfgModal() {
   if (slider) slider.value = cerchaMain > 0 ? cerchaMain : cerchaRec;
 
   renderCfgCerchaRec();
+
+  // Pre-popular vinil cercha desde el select oculto del sidebar
+  const vinilMain = document.getElementById("vinil-cercha-id")?.value || "";
+  const vcCards   = document.querySelectorAll("#cfg-vinil-cercha-cards .cfg-card");
+  vcCards.forEach(c => c.classList.toggle("active", c.dataset.val === (vinilMain ? "si" : "no")));
+  const vcOpts = document.getElementById("cfg-vinil-cercha-opts");
+  if (vcOpts) vcOpts.style.display = vinilMain ? "" : "none";
+  // Siempre poblar el select del modal con el catálogo disponible
+  populateVinilCercha();
+  const cfgVcSel = document.getElementById("cfg-vinil-cercha-sel");
+  if (cfgVcSel && vinilMain) {
+    cfgVcSel.value = vinilMain;
+    onCfgVinilCerchaSelChange();
+  }
 
   // Profundidad caja
   const profMain = parseFloat(document.getElementById("profundidad")?.value) || 15;
@@ -2745,6 +3947,15 @@ function aplicarConfiguracion() {
       const inp = document.getElementById("cercha-manual");
       if (inp) inp.value = cercha;
     }
+
+    // Vinil cercha: leer del modal → copiar al select oculto del sidebar
+    const vinilCardVal = _cfgCardVal("cfg-vinil-cercha-cards");
+    const vinilId = vinilCardVal === "si"
+      ? (document.getElementById("cfg-vinil-cercha-sel")?.value || "")
+      : "";
+    const hidSel = document.getElementById("vinil-cercha-id");
+    if (hidSel) hidSel.value = vinilId;
+
     actualizarAsesor();
 
   } else if (tipoActual === "caja") {
@@ -2784,7 +3995,1191 @@ function aplicarConfiguracion() {
 
   closeCfgModal();
   showToast("Configuración aplicada", "ok");
+  if (previewMode === "3d") render3D();
 }
 </script>
+
+<!-- ══════════════════ CLIENTES MODAL ══════════════════ -->
+<div id="clientes-modal" style="display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.65);z-index:2100;overflow-y:auto;padding:24px 16px">
+  <div style="max-width:640px;margin:0 auto;background:#fff;border-radius:12px;
+              overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.35)">
+
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#13203a,#1a2b4a);color:#eef3fb;
+                padding:18px 24px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:16px;font-weight:700">👤 Catálogo de Clientes</div>
+        <div style="font-size:11px;color:#9fb0cb;margin-top:3px">
+          Busca, agrega o edita clientes para autocompletar cotizaciones
+        </div>
+      </div>
+      <button onclick="cerrarClientes()"
+        style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+               color:#eef3fb;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer">
+        ✕ Cerrar
+      </button>
+    </div>
+
+    <!-- Buscador + nuevo -->
+    <div style="padding:14px 24px;background:#f5f7fa;border-bottom:1px solid #e4e8ef;
+                display:flex;gap:10px;align-items:center">
+      <input id="cli-search" type="text" placeholder="Buscar cliente..."
+        oninput="cargarClientes()"
+        style="flex:1;height:34px;padding:0 12px;border:1px solid #cdd0d6;
+               border-radius:6px;font-size:13px;font-family:inherit">
+      <button onclick="abrirFormCliente()" style="height:34px;padding:0 14px;
+        background:#1a6e3c;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer">
+        + Nuevo cliente
+      </button>
+    </div>
+
+    <!-- Formulario (oculto por defecto) -->
+    <div id="cli-form-box" style="display:none;padding:16px 24px;border-bottom:1px solid #e4e8ef;background:#fffbf0">
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px" id="cli-form-title">Nuevo cliente</div>
+      <input type="hidden" id="cli-edit-id">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div>
+          <label style="font-size:11px;color:#555">Nombre *</label>
+          <input id="cli-nombre" type="text" placeholder="Nombre completo o razón social"
+            style="width:100%;box-sizing:border-box;height:32px;padding:0 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;color:#555">RFC</label>
+          <input id="cli-rfc" type="text" placeholder="RFC"
+            style="width:100%;box-sizing:border-box;height:32px;padding:0 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;color:#555">Email</label>
+          <input id="cli-email" type="email" placeholder="correo@ejemplo.com"
+            style="width:100%;box-sizing:border-box;height:32px;padding:0 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;color:#555">Teléfono</label>
+          <input id="cli-tel" type="text" placeholder="614 000 0000"
+            style="width:100%;box-sizing:border-box;height:32px;padding:0 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;font-family:inherit">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="guardarCliente()" style="height:32px;padding:0 16px;background:#13203a;color:#fff;
+          border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:600">💾 Guardar</button>
+        <button onclick="cancelarFormCliente()" style="height:32px;padding:0 14px;background:#ddd;color:#333;
+          border:none;border-radius:6px;font-size:13px;cursor:pointer">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- Lista -->
+    <div id="clientes-lista" style="padding:16px 24px;min-height:180px"></div>
+  </div>
+</div>
+
+<!-- ══════════════════ HISTORIAL MODAL ══════════════════ -->
+<div id="historial-modal" style="display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.65);z-index:2000;overflow-y:auto;padding:24px 16px">
+  <div style="max-width:940px;margin:0 auto;background:#fff;border-radius:12px;
+              overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.35)">
+
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#13203a,#1a2b4a);color:#eef3fb;
+                padding:18px 24px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:16px;font-weight:700">📋 Historial de Cotizaciones</div>
+        <div style="font-size:11px;color:#9fb0cb;margin-top:3px">
+          Las cotizaciones se guardan automáticamente en la base de datos local
+        </div>
+      </div>
+      <button onclick="cerrarHistorial()"
+        style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+               color:#eef3fb;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer">
+        ✕ Cerrar
+      </button>
+    </div>
+
+    <!-- Filtros -->
+    <div style="padding:14px 24px;background:#f5f7fa;border-bottom:1px solid #e4e8ef;
+                display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input id="hist-search" type="text" placeholder="Buscar por cliente..."
+        oninput="filtrarHistorial()"
+        style="flex:1;min-width:180px;height:34px;padding:0 12px;border:1px solid #cdd0d6;
+               border-radius:6px;font-size:13px;font-family:inherit">
+      <select id="hist-tipo" onchange="filtrarHistorial()"
+        style="height:34px;padding:0 12px;border:1px solid #cdd0d6;border-radius:6px;
+               font-size:13px;font-family:inherit;background:#fff">
+        <option value="">Todos los tipos</option>
+        <option value="letras_3d">Letras 3D</option>
+        <option value="caja_luz">Caja de luz</option>
+        <option value="letras_planas">Letras planas</option>
+      </select>
+      <button onclick="cargarHistorial()" style="height:34px;padding:0 14px;
+        background:#2d5986;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer">
+        Actualizar
+      </button>
+    </div>
+
+    <!-- Lista -->
+    <div id="historial-lista" style="padding:16px 24px;min-height:220px"></div>
+  </div>
+</div>
+
+<script>
+// ─── HISTORIAL ────────────────────────────────────────────────────────────────
+
+async function abrirHistorial() {
+  document.getElementById("historial-modal").style.display = "block";
+  await cargarHistorial();
+}
+
+function cerrarHistorial() {
+  document.getElementById("historial-modal").style.display = "none";
+}
+
+async function cargarHistorial() {
+  const cliente = document.getElementById("hist-search")?.value || "";
+  const tipo    = document.getElementById("hist-tipo")?.value   || "";
+  const params  = new URLSearchParams();
+  if (cliente) params.append("cliente", cliente);
+  if (tipo)    params.append("tipo", tipo);
+  document.getElementById("historial-lista").innerHTML =
+    `<div style="color:#aaa;text-align:center;padding:40px;font-size:13px">Cargando...</div>`;
+  try {
+    const res   = await fetch(`/api/quotes?${params}`);
+    const lista = await res.json();
+    renderHistorial(lista);
+  } catch(e) {
+    document.getElementById("historial-lista").innerHTML =
+      `<div style="color:#e53935;text-align:center;padding:40px;font-size:13px">Error al cargar: ${e.message}</div>`;
+  }
+}
+
+function filtrarHistorial() {
+  clearTimeout(window._histTimer);
+  window._histTimer = setTimeout(cargarHistorial, 300);
+}
+
+function renderHistorial(lista) {
+  const cont = document.getElementById("historial-lista");
+  if (!lista.length) {
+    cont.innerHTML = `<div style="color:#aaa;text-align:center;padding:50px;font-size:13px">
+      No hay cotizaciones guardadas aún</div>`;
+    return;
+  }
+  const label = {letras_3d:"Letras 3D", caja_luz:"Caja de luz", letras_planas:"Letras planas"};
+  const rows  = lista.map(q => `
+    <tr style="border-bottom:1px solid #f0f2f5">
+      <td style="padding:10px 12px;font-family:var(--mono);font-weight:600;color:#1a2b4a;
+                 font-size:12px;white-space:nowrap">${q.folio}</td>
+      <td style="padding:10px 12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;
+                 white-space:nowrap">${q.cliente || '<span style="color:#aaa">—</span>'}</td>
+      <td style="padding:10px 12px">
+        <span style="background:#e8f0fe;color:#1a2b4a;padding:2px 8px;border-radius:10px;
+                     font-size:11px;font-weight:600">${label[q.tipo] || q.tipo}</span>
+      </td>
+      <td style="padding:10px 12px;color:#666;font-size:12px;white-space:nowrap">${q.fecha}</td>
+      <td style="padding:10px 12px;text-align:right;font-weight:700;color:#1a2b4a;
+                 white-space:nowrap">$${(q.precio_final||0).toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+      <td style="padding:10px 12px;white-space:nowrap">
+        <button onclick="reabrirCotizacion('${q.id}')"
+          style="background:#2d5986;color:#fff;border:none;border-radius:5px;
+                 padding:5px 11px;font-size:12px;cursor:pointer;margin-right:4px">
+          Abrir
+        </button>
+        <button onclick="eliminarCotizacion('${q.id}',this)"
+          style="background:#fff;color:#e53935;border:1px solid #e53935;border-radius:5px;
+                 padding:5px 9px;font-size:12px;cursor:pointer">✕</button>
+      </td>
+    </tr>`).join("");
+
+  cont.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:13px;font-family:var(--sans)">
+      <thead>
+        <tr style="border-bottom:2px solid #e4e8ef;text-align:left;color:#6b7d9c;
+                   font-size:11px;text-transform:uppercase;letter-spacing:.05em">
+          <th style="padding:8px 12px">Folio</th>
+          <th style="padding:8px 12px">Cliente</th>
+          <th style="padding:8px 12px">Tipo</th>
+          <th style="padding:8px 12px">Fecha</th>
+          <th style="padding:8px 12px;text-align:right">Precio final</th>
+          <th style="padding:8px 12px"></th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="color:#aaa;font-size:11px;text-align:right;margin-top:10px">
+      ${lista.length} cotización${lista.length!==1?'es':''} encontrada${lista.length!==1?'s':''}
+    </div>`;
+}
+
+async function reabrirCotizacion(qid) {
+  const btn = event?.target;
+  if (btn) { btn.textContent = "..."; btn.disabled = true; }
+  try {
+    const res = await fetch(`/api/quotes/${qid}/open`);
+    if (!res.ok) throw new Error((await res.json()).detail || "Error");
+    const data = await res.json();
+
+    // ── Restaurar estado SVG ───────────────────────────────────────────────
+    sessionId      = data.session_id;
+    svgPathsRaw    = data.paths  || [];
+    svgViewboxW    = data.viewbox_w        || 0;
+    svgViewboxH    = data.viewbox_h        || 0;
+    svgArtboardWCm = data.artboard_w_cm    || 0;
+    svgMaxHeightPx = data.max_letter_height_px || 0;
+    quoteId        = data.quote_id;
+    currentSvgText = data.svg_text || null;
+    _svgFromVectorizer = false;
+
+    // ── Restaurar tipo de producto ─────────────────────────────────────────
+    const tipoMap = {letras_3d:"letras", caja_luz:"caja", letras_planas:"planas"};
+    const tipoKey = tipoMap[data.tipo] || "letras";
+    const tipoBtn = document.querySelector(`.tipo-btn[data-tipo="${tipoKey}"]`);
+    if (tipoBtn) setTipo(tipoKey, tipoBtn);
+
+    // ── Restaurar parámetros del formulario ───────────────────────────────
+    const p   = data.params || {};
+    const set = (id, val) => {
+      if (val === undefined || val === null) return;
+      const el = document.getElementById(id);
+      if (el) el.value = val;
+    };
+    set("ancho-real",      p.real_width_cm);
+    set("altura-letra",    p.altura_letra_cm);
+    set("cercha-manual",   p.cercha_cm);
+    set("ajuste-pct",      p.ajuste_pct);
+    set("margen",          p.margen_ganancia != null ? Math.round(p.margen_ganancia * 100) : undefined);
+    set("mo-horas",        p.mo_horas);
+    set("mo-tarifa",       p.mo_tarifa);
+    set("uso",             p.uso);
+    set("profundidad",     p.profundidad_cm);
+    set("vistas",          p.vistas);
+    set("mat-plana",       p.material_id);
+    if (p.cliente) set("cliente-input", p.cliente);
+
+    if (p.tipo_construccion) {
+      const el = document.getElementById("tipo-construccion");
+      if (el) { el.value = p.tipo_construccion; onTipoConstruccionChange(); }
+    }
+    if (p.tipo_multiplicador) {
+      const el = document.getElementById("tipo-multiplicador");
+      if (el) el.value = p.tipo_multiplicador;
+    }
+    if (p.vinil_cercha_id !== undefined) {
+      const el = document.getElementById("vinil-cercha-id");
+      if (el) { el.value = p.vinil_cercha_id; onVinilCerchaChange(); }
+    }
+    if (p.base_cara_vinil) {
+      const el = document.getElementById("base-cara-caja");
+      if (el) { el.value = p.base_cara_vinil; onBaseCaraCajaChange(p.base_cara_vinil); }
+    }
+
+    // ── Mostrar resultado y cerrar modal ──────────────────────────────────
+    renderResult(data);
+    _v3dAutoRender(data);
+    cerrarHistorial();
+    switchTab("result");
+
+    // Actualizar path cards con la escala del resultado
+    if (svgPathsRaw.length) {
+      lastCerchaAltura = data.medidas?.cercha_altura_cm || 0;
+      lastScaleFactor  = getScaleFactor();
+      renderPathCards(svgPathsRaw, lastScaleFactor, lastCerchaAltura);
+      const svgEl = document.getElementById("svg-preview-box")?.querySelector("svg");
+      if (svgEl) colorizePaths(svgEl, svgPathsRaw);
+    }
+
+    // Habilitar btn-calc
+    const btnCalc = document.getElementById("btn-calc");
+    if (btnCalc) btnCalc.disabled = !sessionId;
+
+    showToast(`Cotización ${data.folio} cargada`, "ok");
+  } catch(e) {
+    showToast("Error al cargar: " + e.message, "error");
+    if (btn) { btn.textContent = "Abrir"; btn.disabled = false; }
+  }
+}
+
+async function eliminarCotizacion(qid, btn) {
+  if (!confirm("¿Eliminar esta cotización? Esta acción no se puede deshacer.")) return;
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/quotes/${qid}`, {method:"DELETE"});
+    if (!res.ok) throw new Error("Error al eliminar");
+    await cargarHistorial();
+  } catch(e) {
+    showToast("Error al eliminar: " + e.message, "error");
+    btn.disabled = false;
+  }
+}
+
+// Cerrar modal al hacer clic fuera
+document.getElementById("historial-modal").addEventListener("click", e => {
+  if (e.target === document.getElementById("historial-modal")) cerrarHistorial();
+});
+document.getElementById("clientes-modal").addEventListener("click", e => {
+  if (e.target === document.getElementById("clientes-modal")) cerrarClientes();
+});
+
+// ─── CLIENTES ────────────────────────────────────────────────────────────────
+
+let _cliTimer = null;
+
+function abrirClientes() {
+  document.getElementById("clientes-modal").style.display = "block";
+  cargarClientes();
+}
+
+function cerrarClientes() {
+  document.getElementById("clientes-modal").style.display = "none";
+  cancelarFormCliente();
+}
+
+async function cargarClientes() {
+  const q = document.getElementById("cli-search")?.value?.trim() || "";
+  const cont = document.getElementById("clientes-lista");
+  cont.innerHTML = `<div style="color:#888;font-size:13px;text-align:center;padding:20px">Cargando...</div>`;
+  try {
+    const res = await fetch(`/api/clients?q=${encodeURIComponent(q)}`);
+    const lista = await res.json();
+    renderClientes(lista);
+  } catch(e) {
+    cont.innerHTML = `<div style="color:#c62828;font-size:13px;padding:20px">Error: ${e.message}</div>`;
+  }
+}
+
+function renderClientes(lista) {
+  const cont = document.getElementById("clientes-lista");
+  if (!lista.length) {
+    cont.innerHTML = `<div style="color:#888;font-size:13px;text-align:center;padding:20px">
+      No se encontraron clientes. <a href="javascript:abrirFormCliente()" style="color:#2d5986">Agrega el primero.</a>
+    </div>`;
+    return;
+  }
+  cont.innerHTML = lista.map(c => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f0f0f0">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px;color:#13203a;cursor:pointer"
+          onclick="seleccionarCliente('${c.nombre.replace(/'/g,"\\'")}')">
+          ${c.nombre}
+        </div>
+        <div style="font-size:11px;color:#888;margin-top:2px">
+          ${[c.rfc, c.email, c.telefono].filter(Boolean).join(' · ') || '—'}
+        </div>
+      </div>
+      <button onclick="editarCliente(${c.id},'${c.nombre.replace(/'/g,"\\'")}','${(c.rfc||'').replace(/'/g,"\\'")}','${(c.email||'').replace(/'/g,"\\'")}','${(c.telefono||'').replace(/'/g,"\\'")}')"
+        style="height:28px;padding:0 10px;background:#e8f0fe;color:#1a56b0;border:none;border-radius:5px;font-size:12px;cursor:pointer">
+        ✏ Editar
+      </button>
+      <button onclick="eliminarCliente(${c.id}, this)"
+        style="height:28px;padding:0 10px;background:#fdecea;color:#c62828;border:none;border-radius:5px;font-size:12px;cursor:pointer">
+        🗑
+      </button>
+    </div>
+  `).join("");
+}
+
+function seleccionarCliente(nombre) {
+  document.getElementById("cliente-input").value = nombre;
+  cerrarClientes();
+}
+
+function abrirFormCliente() {
+  document.getElementById("cli-form-title").textContent = "Nuevo cliente";
+  document.getElementById("cli-edit-id").value = "";
+  document.getElementById("cli-nombre").value = "";
+  document.getElementById("cli-rfc").value = "";
+  document.getElementById("cli-email").value = "";
+  document.getElementById("cli-tel").value = "";
+  document.getElementById("cli-form-box").style.display = "block";
+  document.getElementById("cli-nombre").focus();
+}
+
+function editarCliente(id, nombre, rfc, email, tel) {
+  document.getElementById("cli-form-title").textContent = "Editar cliente";
+  document.getElementById("cli-edit-id").value = id;
+  document.getElementById("cli-nombre").value = nombre;
+  document.getElementById("cli-rfc").value = rfc;
+  document.getElementById("cli-email").value = email;
+  document.getElementById("cli-tel").value = tel;
+  document.getElementById("cli-form-box").style.display = "block";
+  document.getElementById("cli-nombre").focus();
+}
+
+function cancelarFormCliente() {
+  document.getElementById("cli-form-box").style.display = "none";
+}
+
+async function guardarCliente() {
+  const nombre = document.getElementById("cli-nombre").value.trim();
+  if (!nombre) { showToast("El nombre es obligatorio", "err"); return; }
+  const id = document.getElementById("cli-edit-id").value;
+  const body = {
+    nombre,
+    rfc:      document.getElementById("cli-rfc").value.trim(),
+    email:    document.getElementById("cli-email").value.trim(),
+    telefono: document.getElementById("cli-tel").value.trim(),
+  };
+  if (id) body.id = parseInt(id);
+  try {
+    const res = await fetch("/api/clients", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || "Error al guardar");
+    cancelarFormCliente();
+    await cargarClientes();
+    showToast(id ? "Cliente actualizado" : "Cliente guardado", "ok");
+  } catch(e) {
+    showToast("Error: " + e.message, "err");
+  }
+}
+
+async function eliminarCliente(id, btn) {
+  if (!confirm("¿Eliminar este cliente?")) return;
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/clients/${id}`, {method:"DELETE"});
+    if (!res.ok) throw new Error("Error al eliminar");
+    await cargarClientes();
+  } catch(e) {
+    showToast("Error: " + e.message, "err");
+    btn.disabled = false;
+  }
+}
+
+// ─── AUTOCOMPLETE CLIENTE ────────────────────────────────────────────────────
+
+let _autoTimer = null;
+
+function buscarClienteAuto(q) {
+  clearTimeout(_autoTimer);
+  _autoTimer = setTimeout(async () => {
+    const dd = document.getElementById("cliente-dropdown");
+    if (!q || q.length < 1) { dd.style.display = "none"; return; }
+    try {
+      const res = await fetch(`/api/clients?q=${encodeURIComponent(q)}`);
+      const lista = await res.json();
+      if (!lista.length) { dd.style.display = "none"; return; }
+      dd.innerHTML = lista.slice(0, 8).map(c => `
+        <div onclick="elegirClienteAuto('${c.nombre.replace(/'/g,"\\'")}', '${(c.email||'').replace(/'/g,"\\'")}', '${(c.rfc||'').replace(/'/g,"\\'")}')"
+          style="padding:8px 12px;cursor:pointer;font-size:13px;color:#eef3fb;border-bottom:1px solid #2a4068"
+          onmouseover="this.style.background='#2a4068'" onmouseout="this.style.background=''">
+          <span style="font-weight:600">${c.nombre}</span>
+          ${c.email ? `<span style="font-size:11px;color:#9fb0cb;margin-left:6px">${c.email}</span>` : ''}
+        </div>
+      `).join("");
+      dd.style.display = "block";
+    } catch(_) { dd.style.display = "none"; }
+  }, 200);
+}
+
+function elegirClienteAuto(nombre, email, rfc) {
+  document.getElementById("cliente-input").value = nombre;
+  document.getElementById("cliente-dropdown").style.display = "none";
+  // Pre-fill pdf-cliente too if it exists and is empty
+  const pdfCli = document.getElementById("pdf-cliente");
+  if (pdfCli && !pdfCli.value) pdfCli.value = nombre;
+}
+
+// Cerrar dropdown al hacer clic fuera
+document.addEventListener("click", e => {
+  const inp = document.getElementById("cliente-input");
+  const dd  = document.getElementById("cliente-dropdown");
+  if (dd && inp && !inp.contains(e.target) && !dd.contains(e.target)) {
+    dd.style.display = "none";
+  }
+});
+
+// ─── HELPER: dispara render 3D en background ────────────────────────────────
+function _v3dAutoRender(data) {
+  if (!window._v3dReady || !window.v3d_render || !currentSvgText) return;
+  try {
+    window.v3d_render({
+      svgText:          currentSvgText,
+      depthCm:          data.medidas?.cercha_altura_cm || 15,
+      tipo:             tipoActual,
+      tipoConstruccion: data.costos?.tipo_construccion,
+      realWidthCm:      parseFloat(document.getElementById("ancho-real")?.value) || 60,
+      viewboxW:         svgViewboxW,
+      viewboxH:         svgViewboxH,
+      alturaLetraCm:    data.medidas?.altura_letra_cm || 0,
+      maxLetterHeightPx: svgMaxHeightPx,
+      artboardWCm:      svgArtboardWCm,
+    });
+  } catch(e) { console.warn("Vista 3D:", e); }
+}
+</script>
+
+<!-- ══════════════════ VISTA 3D — Three.js ES module ══════════════════ -->
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { SVGLoader }     from 'three/addons/loaders/SVGLoader.js';
+
+// ─── estado de escena ───────────────────────────────────────────────────────
+let S, CAM, REN, CTR, AID;
+let _explodeGroups = null;   // { frontGrp, depthSvg, exploded }
+const LDR = new SVGLoader();
+
+function initScene(canvas) {
+  if (REN) { REN.dispose(); }
+  if (AID) { cancelAnimationFrame(AID); }
+
+  const W = canvas.offsetWidth  || 900;
+  const H = canvas.offsetHeight || 560;
+
+  S   = new THREE.Scene();
+  S.background = new THREE.Color(0xf0f2f5);
+
+  CAM = new THREE.PerspectiveCamera(45, W / H, 0.1, 8000);
+
+  REN = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  REN.setPixelRatio(Math.min(devicePixelRatio, 2));
+  REN.setSize(W, H);
+  REN.shadowMap.enabled = true;
+  REN.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  CTR = new OrbitControls(CAM, REN.domElement);
+  CTR.enableDamping = true;
+  CTR.dampingFactor = 0.07;
+  CTR.enablePan = true;
+  CTR.minDistance = 1;
+  CTR.maxDistance = 2000;
+
+  // Iluminación
+  S.add(new THREE.AmbientLight(0xffffff, 0.85));
+
+  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+  sun.position.set(80, 140, 90);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far  = 800;
+  sun.shadow.camera.left = sun.shadow.camera.bottom = -300;
+  sun.shadow.camera.right = sun.shadow.camera.top   =  300;
+  S.add(sun);
+
+  const fill = new THREE.DirectionalLight(0x8899cc, 0.45);
+  fill.position.set(-80, 30, -70);
+  S.add(fill);
+
+  const back = new THREE.DirectionalLight(0x445577, 0.3);
+  back.position.set(0, -1, -1);
+  S.add(back);
+
+  // Grid
+  S.add(new THREE.GridHelper(600, 60, 0xaab0be, 0xd0d4dc));
+
+  // Plano receptor de sombras (invisible, solo sombras)
+  const sp = new THREE.Mesh(
+    new THREE.PlaneGeometry(800, 800),
+    new THREE.ShadowMaterial({ opacity: 0.25 })
+  );
+  sp.rotation.x = -Math.PI / 2;
+  sp.receiveShadow = true;
+  S.add(sp);
+
+  const loop = () => { AID = requestAnimationFrame(loop); CTR.update(); REN.render(S, CAM); };
+  loop();
+}
+
+// ─── limpiar meshes de cotizaciones anteriores ──────────────────────────────
+function clearMeshes() {
+  const rem = [];
+  S?.traverse(o => { if (o.userData.v3d) rem.push(o); });
+  rem.forEach(o => {
+    S.remove(o);
+    o.traverse(c => {
+      if (!c.isMesh && !c.isLine) return;
+      c.geometry?.dispose();
+      [c.material].flat().forEach(m => m?.dispose());
+    });
+  });
+  _explodeGroups = null;
+  const btn = document.getElementById('btn-explode');
+  if (btn) { btn.style.display = 'none'; btn.textContent = '💥 Explotar cara'; }
+}
+
+// ─── material helper ────────────────────────────────────────────────────────
+function mkMat(color, { trans = false, opac = 1, spec = 0x222222, shin = 40, side = THREE.DoubleSide } = {}) {
+  return new THREE.MeshPhongMaterial({ color, specular: spec, shininess: shin, transparent: trans, opacity: opac, side });
+}
+
+// ─── API pública ─────────────────────────────────────────────────────────────
+window._v3dReady = true;
+
+window.v3d_render = function({ svgText, depthCm, tipo, tipoConstruccion,
+                               realWidthCm, viewboxW, viewboxH,
+                               alturaLetraCm, maxLetterHeightPx, artboardWCm }) {
+  const canvas = document.getElementById('visor3d-canvas');
+  const empty  = document.getElementById('visor3d-empty');
+  if (!canvas) return;
+
+  canvas.style.display = 'block';
+  if (empty) empty.style.display = 'none';
+
+  if (!REN) initScene(canvas);
+  clearMeshes();
+
+  // Factor de escala (misma lógica que Python)
+  const PT_TO_CM = 2.54 / 72;
+  let sf;
+  if (alturaLetraCm > 0 && maxLetterHeightPx > 0) {
+    sf = alturaLetraCm / maxLetterHeightPx;
+  } else if (artboardWCm > 0) {
+    sf = (realWidthCm / artboardWCm) * PT_TO_CM;
+  } else {
+    sf = viewboxW > 0 ? realWidthCm / viewboxW : 1;
+  }
+
+  let grp;
+  try {
+    grp = (tipo === 'caja')
+      ? _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm)
+      : _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion);
+  } catch (e) {
+    console.warn('3D build error:', e);
+  }
+
+  if (!grp || !grp.children.length) {
+    if (empty) { empty.style.display = 'flex'; empty.querySelector('p').textContent = 'No se pudo generar la vista 3D'; }
+    return;
+  }
+
+  grp.userData.v3d = true;
+  S.add(grp);
+
+  // Ajustar cámara al grupo
+  const bb = new THREE.Box3().setFromObject(grp);
+  const sz = bb.getSize(new THREE.Vector3());
+  const ct = bb.getCenter(new THREE.Vector3());
+
+  // Sentar sobre la grilla
+  grp.position.y -= bb.min.y;
+  ct.y = sz.y / 2;
+
+  const diag = Math.max(sz.x, sz.y, sz.z);
+  const dist = diag * 2.4;
+  CAM.position.set(ct.x + dist * 0.55, ct.y + dist * 0.45, ct.z + dist * 0.85);
+  CAM.lookAt(ct);
+  CTR.target.copy(ct);
+  CTR.update();
+};
+
+window.v3d_setView = function(view) {
+  if (!CAM || !CTR) return;
+  const t = CTR.target;
+  const d = CAM.position.distanceTo(t) || 120;
+  const presets = {
+    iso:   [t.x + d * 0.55, t.y + d * 0.45, t.z + d * 0.85],
+    front: [t.x,             t.y,             t.z + d],
+    top:   [t.x,             t.y + d,         t.z + 0.01],
+    right: [t.x + d,         t.y,             t.z],
+    back:  [t.x,             t.y,             t.z - d],
+  };
+  const pos = presets[view]; if (!pos) return;
+  const from = CAM.position.clone();
+  const to   = new THREE.Vector3(...pos);
+  let t0 = null;
+  const dur = 480;
+  (function go(ts) {
+    if (!t0) t0 = ts;
+    const p = Math.min((ts - t0) / dur, 1);
+    const e = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p;
+    CAM.position.lerpVectors(from, to, e);
+    CTR.update();
+    if (p < 1) requestAnimationFrame(go);
+  })(performance.now());
+};
+
+window._v3dResize = function() {
+  const canvas = document.getElementById('visor3d-canvas');
+  if (!canvas || !REN || !CAM) return;
+  const w = canvas.offsetWidth, h = canvas.offsetHeight;
+  if (w > 0 && h > 0) {
+    CAM.aspect = w / h;
+    CAM.updateProjectionMatrix();
+    REN.setSize(w, h);
+  }
+};
+
+// ─── construir letras 3D / planas ─────────────────────────────────────────
+function _shapeBbox(shape) {
+  const pts = shape.getPoints(24);
+  if (!pts.length) return null;
+  let x0=pts[0].x, x1=pts[0].x, y0=pts[0].y, y1=pts[0].y;
+  for (const p of pts) {
+    if (p.x < x0) x0 = p.x; if (p.x > x1) x1 = p.x;
+    if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y;
+  }
+  return { x0, y0, w: x1-x0, h: y1-y0, area: (x1-x0)*(y1-y0) };
+}
+
+function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
+  const { paths } = LDR.parse(svgText);
+  if (!paths.length) return null;
+
+  const isPlana = tipo === 'planas';
+  const depthSvg = (isPlana ? Math.max(0.3, depthCm * 0.05) : depthCm) / sf;
+
+  // Detectar SVG con colores reales (e.g. vtracer)
+  const useRealColors = paths.filter(p => {
+    const f = p.userData?.style?.fill;
+    return f && f !== 'none' && f !== '#000000' && f !== 'black' && f !== '#ffffff' && f !== 'white';
+  }).length >= 2;
+
+  // Paleta de materiales según tipo de construcción (SVGs sin color)
+  const paleta = {
+    cajon_luz:   { face: 0xf2f4f8, cercha: 0x8fa8b8, fTrans: true,  fOpac: 0.82 },
+    retro_halo:  { face: 0xb0bec5, cercha: 0x78909c, fTrans: false, fOpac: 1.0  },
+    sin_luz:     { face: 0xbdbdbd, cercha: 0x757575, fTrans: false, fOpac: 1.0  },
+    abierta_luz: { face: null,     cercha: 0x8fa8b8, fTrans: false, fOpac: 1.0  },
+    plana:       { face: 0x3d8bcd, cercha: 0x2360b0, fTrans: false, fOpac: 1.0  },
+  };
+  const cfg = paleta[isPlana ? 'plana' : (tipoConstruccion || 'cajon_luz')] || paleta.cajon_luz;
+  const mCercha = mkMat(cfg.cercha, { spec: 0x667788, shin: 55 });
+  const mFace   = cfg.face != null
+    ? mkMat(cfg.face, { trans: cfg.fTrans, opac: cfg.fOpac, spec: 0xaaaacc, shin: 90 })
+    : null;
+
+  // Para SVGs de vtracer: calcular área total del diseño para filtrar el path de fondo
+  let totalArea = 0;
+  if (useRealColors) {
+    for (const p of paths) {
+      for (const sh of SVGLoader.createShapes(p)) {
+        const bb = _shapeBbox(sh);
+        if (bb && bb.area > totalArea) totalArea = bb.area;
+      }
+    }
+  }
+
+  const extCfg = { depth: depthSvg, bevelEnabled: false };
+  const grp = new THREE.Group();
+
+  for (const svgPath of paths) {
+    const shapes = SVGLoader.createShapes(svgPath);
+    if (!shapes.length) continue;
+
+    let faceMat, sideMat;
+    if (useRealColors) {
+      const fill = svgPath.userData?.style?.fill;
+      const col  = (fill && fill !== 'none') ? new THREE.Color(fill) : new THREE.Color(0x888888);
+      const emissiveCol = col.clone().multiplyScalar(0.35);
+      faceMat = new THREE.MeshPhongMaterial({
+        color: col, emissive: emissiveCol,
+        specular: new THREE.Color(0x444444), shininess: 40,
+        side: THREE.DoubleSide,
+      });
+      sideMat = faceMat;
+    } else {
+      faceMat = mCercha;
+      sideMat = mFace || mCercha;
+    }
+
+    for (const shape of shapes) {
+      // Omitir paths de fondo: aquellos cuya bbox cubre casi todo el diseño
+      if (useRealColors && totalArea > 0) {
+        const bb = _shapeBbox(shape);
+        if (bb && bb.area > totalArea * 0.90) continue;
+      }
+      const geom = new THREE.ExtrudeGeometry(shape, extCfg);
+      geom.computeVertexNormals();
+      const mesh = new THREE.Mesh(geom, [sideMat, faceMat]);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      grp.add(mesh);
+    }
+  }
+
+  if (!grp.children.length) return null;
+  grp.scale.set(sf, -sf, sf);
+  return grp;
+}
+
+// ─── construir caja de luz hueca (con soporte para vista explosionada) ───────
+function _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm) {
+  const { paths } = LDR.parse(svgText);
+  if (!paths.length) return null;
+
+  const depthSvg = depthCm / sf;
+  const wallSvg  = 1.5 / sf;   // grosor visual de lámina: 1.5 cm
+
+  // ── Detectar contorno de la caja ─────────────────────────────────────────
+  let outlineIdx = -1, bestArea = 0;
+  for (let i = 0; i < paths.length; i++) {
+    for (const sh of SVGLoader.createShapes(paths[i])) {
+      const pts = sh.getPoints(64);
+      if (pts.length < 3) continue;
+      const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+      const bw = Math.max(...xs) - Math.min(...xs);
+      const bh = Math.max(...ys) - Math.min(...ys);
+      if (bw <= 0 || bh <= 0) continue;
+      let perim = 0;
+      for (let j = 0; j < pts.length; j++) {
+        const nj = (j+1) % pts.length;
+        const dx = pts[nj].x-pts[j].x, dy = pts[nj].y-pts[j].y;
+        perim += Math.sqrt(dx*dx+dy*dy);
+      }
+      if (perim/(2*(bw+bh)) <= 2.5) {
+        const ba = bw*bh;
+        if (ba > bestArea) { bestArea = ba; outlineIdx = i; }
+      }
+    }
+  }
+  // Calcular bbox global de todos los paths (necesario para validar el outline y para el sintético)
+  let gMinX=Infinity, gMinY=Infinity, gMaxX=-Infinity, gMaxY=-Infinity;
+  for (let i = 0; i < paths.length; i++) {
+    for (const sh of SVGLoader.createShapes(paths[i])) {
+      sh.getPoints(8).forEach(p => {
+        if(p.x<gMinX)gMinX=p.x; if(p.x>gMaxX)gMaxX=p.x;
+        if(p.y<gMinY)gMinY=p.y; if(p.y>gMaxY)gMaxY=p.y;
+      });
+    }
+  }
+  const gArea = (gMaxX-gMinX) * (gMaxY-gMinY);
+
+  // Verificar que el outline detectado cubra ≥75% del bbox global.
+  // Si no (e.g. el "outline" es solo un círculo decorativo), descartarlo.
+  if (outlineIdx >= 0 && bestArea < gArea * 0.75) outlineIdx = -1;
+
+  // Si no hay outline válido, usar un rectángulo sintético como caja contenedora
+  // y tratar TODOS los paths como elementos de diseño.
+  let syntheticOutline = null, synthCx = 0, synthCy = 0;
+  if (outlineIdx < 0 && gMaxX > gMinX && gMaxY > gMinY) {
+    const pad = Math.min(gMaxX-gMinX, gMaxY-gMinY) * 0.05;
+    syntheticOutline = new THREE.Shape([
+      new THREE.Vector2(gMinX-pad, gMinY-pad),
+      new THREE.Vector2(gMaxX+pad, gMinY-pad),
+      new THREE.Vector2(gMaxX+pad, gMaxY+pad),
+      new THREE.Vector2(gMinX-pad, gMaxY+pad),
+    ]);
+    synthCx = (gMinX+gMaxX)/2;
+    synthCy = (gMinY+gMaxY)/2;
+  }
+
+  // ── Materiales ────────────────────────────────────────────────────────────
+  const mWall = mkMat(0x607d8b, { spec: 0xaabbcc, shin: 85 });   // aluminio (DoubleSide por default)
+  const mBack = new THREE.MeshPhongMaterial({                      // fondo interior emissive (LED)
+    color: new THREE.Color(0xfffde8), emissive: new THREE.Color(0xffcc44),
+    emissiveIntensity: 0.82, specular: new THREE.Color(0x221100),
+    shininess: 12, side: THREE.DoubleSide,
+  });
+  const mFace = new THREE.MeshPhongMaterial({                      // cara translúcida delantera
+    color: new THREE.Color(0xddeeff), transparent: true, opacity: 0.38,
+    specular: new THREE.Color(0xaaccff), shininess: 130,
+    side: THREE.DoubleSide, depthWrite: false,
+  });
+  const mDes = mkMat(0xe87c2a, { spec: 0x884400, shin: 70 });
+
+  // ── Geometría de anillo sin costura ──────────────────────────────────────
+  function buildRingGeom(outerPts, innerPts) {
+    const N = outerPts.length;
+    const v = [];
+    const D = depthSvg;
+    const quad = (ax,ay,az, bx,by,bz, cx,cy,cz, dx,dy,dz) => {
+      v.push(ax,ay,az, bx,by,bz, cx,cy,cz);
+      v.push(ax,ay,az, cx,cy,cz, dx,dy,dz);
+    };
+    for (let i = 0; i < N; i++) {
+      const j  = (i+1) % N;
+      const ox0=outerPts[i].x, oy0=outerPts[i].y;
+      const ox1=outerPts[j].x, oy1=outerPts[j].y;
+      const ix0=innerPts[i].x, iy0=innerPts[i].y;
+      const ix1=innerPts[j].x, iy1=innerPts[j].y;
+      quad(ox0,oy0,0, ox1,oy1,0, ox1,oy1,D, ox0,oy0,D);
+      quad(ix1,iy1,0, ix0,iy0,0, ix0,iy0,D, ix1,iy1,D);
+      quad(ox0,oy0,D, ox1,oy1,D, ix1,iy1,D, ix0,iy0,D);
+      quad(ox1,oy1,0, ox0,oy0,0, ix0,iy0,0, ix1,iy1,0);
+    }
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+    geom.computeVertexNormals();
+    return geom;
+  }
+
+  // ── Grupos para explosión ─────────────────────────────────────────────────
+  const bodyGrp  = new THREE.Group();
+  const frontGrp = new THREE.Group();
+  const grp      = new THREE.Group();
+  grp.add(bodyGrp, frontGrp);
+
+  // Shapes de contorno: solo si se detectó un path rectangular real.
+  // Sin outline real → no se dibuja caja; los paths se extruyen completos (como letras).
+  const outlineShapes = outlineIdx >= 0
+    ? SVGLoader.createShapes(paths[outlineIdx])
+    : [];
+
+  for (const sh of outlineShapes) {
+    const isSynthetic = outlineIdx < 0;
+    const outerPts = sh.getPoints(isSynthetic ? 4 : 80);
+    const cx = isSynthetic ? synthCx : outerPts.reduce((s,p) => s+p.x, 0) / outerPts.length;
+    const cy = isSynthetic ? synthCy : outerPts.reduce((s,p) => s+p.y, 0) / outerPts.length;
+
+    const minD = Math.min(...outerPts.map(p => Math.sqrt((p.x-cx)**2+(p.y-cy)**2)));
+    const wall = Math.min(wallSvg, minD * 0.45);
+    const innerPts = outerPts.map(p => {
+      const dx=p.x-cx, dy=p.y-cy, d=Math.sqrt(dx*dx+dy*dy);
+      return new THREE.Vector2(cx+dx*(d-wall)/d, cy+dy*(d-wall)/d);
+    });
+
+    const ringMesh = new THREE.Mesh(buildRingGeom(outerPts, innerPts), mWall);
+    ringMesh.castShadow = true;
+    bodyGrp.add(ringMesh);
+
+    const backGeom = new THREE.ShapeGeometry(sh);
+    backGeom.computeVertexNormals();
+    bodyGrp.add(new THREE.Mesh(backGeom, mBack));
+
+    const iLight = new THREE.PointLight(0xffdd88, 18, depthCm * 5);
+    iLight.position.set(cx, cy, depthSvg * 0.4);
+    grp.add(iLight);
+
+    const faceGeom = new THREE.ShapeGeometry(sh);
+    faceGeom.computeVertexNormals();
+    const faceMesh = new THREE.Mesh(faceGeom, mFace);
+    faceMesh.position.z = depthSvg;
+    faceMesh.renderOrder = 1;
+    frontGrp.add(faceMesh);
+  }
+
+  // ── Diseño / letras ──────────────────────────────────────────────────────
+  if (outlineIdx < 0) {
+    // Sin outline real → cada path es una letra hueca:
+    //   fondo luminoso  → bodyGrp (fijo)
+    //   paredes         → bodyGrp (fijo)
+    //   cara translúcida→ frontGrp (se mueve al explotar)
+    const gCx = (gMinX + gMaxX) / 2;
+    const gCy = (gMinY + gMaxY) / 2;
+    const iLight = new THREE.PointLight(0xffdd88, 18, depthCm * 5);
+    iLight.position.set(gCx, gCy, depthSvg * 0.4);
+    grp.add(iLight);
+
+    const mInvis = new THREE.MeshBasicMaterial({ visible: false });
+
+    for (let i = 0; i < paths.length; i++) {
+      const pathColor = paths[i].color;
+      const hex = pathColor ? pathColor.getHex() : 0;
+      const useColor = hex > 0x0a0a0a ? hex : 0xe87c2a;
+
+      const mWallColor = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(useColor), specular: new THREE.Color(0x333333),
+        shininess: 70, side: THREE.DoubleSide,
+      });
+      const mFaceColor = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(useColor), transparent: true, opacity: 0.42,
+        specular: new THREE.Color(0xffffff), shininess: 130,
+        side: THREE.DoubleSide, depthWrite: false,
+      });
+
+      let shapes = SVGLoader.createShapes(paths[i]);
+      if (!shapes.length) {
+        try { shapes = paths[i].toShapes(false) ?? []; } catch(_) { shapes = []; }
+      }
+
+      for (const sh of shapes) {
+        // Fondo luminoso (fijo)
+        const backGeom = new THREE.ShapeGeometry(sh);
+        backGeom.computeVertexNormals();
+        bodyGrp.add(new THREE.Mesh(backGeom, mBack));
+
+        // Paredes: ExtrudeGeometry con tapas invisibles y laterales de color (fijo)
+        let wallGeom = null;
+        try {
+          wallGeom = new THREE.ExtrudeGeometry(sh, { depth: depthSvg, bevelEnabled: false });
+          if ((wallGeom.getAttribute('position')?.count ?? 0) < 3) {
+            wallGeom.dispose(); wallGeom = null;
+          }
+        } catch(_) { wallGeom = null; }
+        if (wallGeom) {
+          wallGeom.computeVertexNormals();
+          bodyGrp.add(new THREE.Mesh(wallGeom, [mInvis, mWallColor]));
+        }
+
+        // Cara delantera translúcida (se aleja al explotar)
+        const faceGeom = new THREE.ShapeGeometry(sh);
+        faceGeom.computeVertexNormals();
+        const faceMesh = new THREE.Mesh(faceGeom, mFaceColor);
+        faceMesh.position.z = depthSvg;
+        faceMesh.renderOrder = 1;
+        frontGrp.add(faceMesh);
+      }
+    }
+  } else {
+    // Con outline real → los paths son elementos de diseño sobre la cara de la caja
+    const desDepth = depthSvg * 0.35;
+    for (let i = 0; i < paths.length; i++) {
+      if (i === outlineIdx) continue;
+
+      const pathColor = paths[i].color;
+      const hex = pathColor ? pathColor.getHex() : 0;
+      const useColor = hex > 0x0a0a0a ? hex : 0xe87c2a;
+      const mat = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(useColor), emissive: new THREE.Color(useColor),
+        emissiveIntensity: 0.15, specular: new THREE.Color(0x222222),
+        shininess: 55, side: THREE.DoubleSide,
+      });
+
+      let shapes = SVGLoader.createShapes(paths[i]);
+      if (!shapes.length) {
+        try { shapes = paths[i].toShapes(false) ?? []; } catch(_) { shapes = []; }
+      }
+
+      for (const sh of shapes) {
+        let geom;
+        try {
+          geom = new THREE.ExtrudeGeometry(sh, { depth: desDepth, bevelEnabled: false });
+          if ((geom.getAttribute('position')?.count ?? 0) < 3) { geom.dispose(); geom = null; }
+        } catch(_) { geom = null; }
+        if (!geom) geom = new THREE.ShapeGeometry(sh);
+        geom.computeVertexNormals();
+        const m = new THREE.Mesh(geom, mat);
+        m.position.z = depthSvg;
+        m.castShadow = true;
+        frontGrp.add(m);
+      }
+    }
+  }
+
+  if (!bodyGrp.children.length && !frontGrp.children.length) return null;
+
+  grp.scale.set(sf, -sf, sf);
+
+  _explodeGroups = { frontGrp, depthSvg, exploded: false };
+  const btn = document.getElementById('btn-explode');
+  if (btn) { btn.style.display = ''; btn.textContent = '💥 Explotar cara'; }
+
+  return grp;
+}
+
+// ─── animar vista explosionada ────────────────────────────────────────────────
+window.v3d_explode = function() {
+  if (!_explodeGroups) return;
+  const { frontGrp, depthSvg } = _explodeGroups;
+  const btn = document.getElementById('btn-explode');
+
+  const from = frontGrp.position.z;
+  // Explotar: alejar la cara 80% de la profundidad extra; colapsar: volver a 0
+  const to = _explodeGroups.exploded ? 0 : depthSvg * 0.85;
+  _explodeGroups.exploded = !_explodeGroups.exploded;
+  if (btn) btn.textContent = _explodeGroups.exploded ? '🔗 Juntar' : '💥 Explotar cara';
+
+  const dur = 580;
+  let t0 = null;
+  (function anim(ts) {
+    if (!t0) t0 = ts;
+    const p = Math.min((ts - t0) / dur, 1);
+    const e = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p; // ease-in-out quad
+    frontGrp.position.z = from + (to - from) * e;
+    if (p < 1) requestAnimationFrame(anim);
+  })(performance.now());
+};
+
+</script>
+<!-- ═══ MODAL TRAZADO DE IMAGEN ══════════════════════════════════════════════ -->
+<div id="trace-modal">
+  <div class="tm-box" style="max-width:1080px">
+
+    <!-- Header -->
+    <div class="tm-header">
+      <div class="tm-header-text">
+        <h3>Vectorización profesional</h3>
+        <p id="tm-filename">—</p>
+      </div>
+      <button class="tm-close" onclick="closeTraceModal()">✕ Cerrar</button>
+    </div>
+
+    <!-- Split preview: original | vectorizado -->
+    <div class="tm-preview-split">
+      <div class="tm-preview-pane tm-pane-orig">
+        <span class="tm-pane-label">Original</span>
+        <span class="tm-pane-empty" id="tm-orig-empty">Sube una imagen para comenzar</span>
+        <img id="tm-orig-img" src="" alt="" style="display:none">
+      </div>
+      <div class="tm-preview-pane tm-pane-vec">
+        <span class="tm-pane-label">Vectorizado</span>
+        <span class="tm-pane-empty" id="tm-vec-empty">El resultado aparecerá aquí</span>
+        <img id="tm-vec-img" src="" alt="" style="display:none">
+        <div id="tm-loading" class="tm-vec-loading" style="display:none">
+          <div class="tm-spinner"></div>
+          <span>Vectorizando…</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Info de paths -->
+    <div id="tm-paths-info" style="display:none"></div>
+
+    <!-- Controles en 2 columnas -->
+    <div class="tm-controls">
+
+
+      <!-- Quitar fondo -->
+      <div>
+        <div class="tm-ctrl-label">Quitar fondo <span>Agresividad</span></div>
+        <div class="trace-slider-row">
+          <span>Suave</span>
+          <input type="range" id="tr-bg-tol" min="12" max="68" value="38"
+                 oninput="syncSlider('tr-bg-tol','tr-bg-tol-val')">
+          <span>Fuerte</span>
+        </div>
+        <div class="tm-ctrl-val" id="tr-bg-tol-val">38</div>
+      </div>
+
+      <!-- Filtro manchas -->
+      <div>
+        <div class="tm-ctrl-label">Filtro manchas <span>Elimina fragmentos</span></div>
+        <div class="trace-slider-row">
+          <span>Conservar</span>
+          <input type="range" id="tr-speckle" min="1" max="30" value="8"
+                 oninput="syncSlider('tr-speckle','tr-speckle-val')">
+          <span>Limpiar</span>
+        </div>
+        <div class="tm-ctrl-val" id="tr-speckle-val">8</div>
+      </div>
+
+      <!-- Precisión colores -->
+      <div>
+        <div class="tm-ctrl-label">Precisión colores <span>Bits por capa</span></div>
+        <div class="trace-slider-row">
+          <span>Menos</span>
+          <input type="range" id="tr-color-prec" min="1" max="8" value="3"
+                 oninput="syncSlider('tr-color-prec','tr-color-prec-val')">
+          <span>Más</span>
+        </div>
+        <div class="tm-ctrl-val" id="tr-color-prec-val">3</div>
+      </div>
+
+      <!-- Separación capas -->
+      <div>
+        <div class="tm-ctrl-label">Separación capas <span>Fusiona colores similares</span></div>
+        <div class="trace-slider-row">
+          <span>Exacto</span>
+          <input type="range" id="tr-layer-diff" min="4" max="64" value="48"
+                 oninput="syncSlider('tr-layer-diff','tr-layer-diff-val')">
+          <span>Fusionar</span>
+        </div>
+        <div class="tm-ctrl-val" id="tr-layer-diff-val">48</div>
+      </div>
+
+    </div><!-- /tm-controls -->
+
+    <!-- Footer -->
+    <div class="tm-footer">
+      <div class="tm-dim">
+        <label>Ancho real (cm)</label>
+        <input type="number" id="tm-ancho-cm" min="1" step="0.5" placeholder="ej. 390"
+               oninput="_syncTraceDims('ancho')">
+      </div>
+      <div class="tm-dim">
+        <label>Alto real (cm)</label>
+        <input type="number" id="tm-alto-cm" min="1" step="0.5" placeholder="ej. 138"
+               oninput="_syncTraceDims('alto')">
+      </div>
+      <button id="tm-btn-retrace" onclick="retrace()">↺ Re-vectorizar</button>
+      <button id="tm-btn-usar"    onclick="usarSvgTrazado()">✓ Usar en cotizador</button>
+    </div>
+
+  </div>
+</div>
+
 </body>
 </html>

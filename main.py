@@ -1,40 +1,217 @@
+import asyncio
+import dataclasses
 import json
+import logging
+import re
+import shutil
+import time
 import uuid
 import io
 import os
+from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import datetime
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
+import db
 from calculator import parse_svg, cotizar_letras, cotizar_caja, cotizar_planas, QuoteResult
-from pdf_gen import generar_pdf, generar_pdf_ot, generar_pdf_entrega
+from pdf_gen import generar_pdf, generar_pdf_ot, generar_pdf_entrega, generar_pdf_plano
 from catalog_data import (
     LAMINAS, LEDS_CANAL, LEDS_CAJA, FUENTES, PEGAMENTOS,
     catalog_to_dict, catalog_save, catalog_apply, GRUAS,
 )
 
-app = FastAPI(title="Cotizador SGI - Letras y Anuncios")
-
 BASE = Path(__file__).parent
 STATIC = BASE / "static"
 STATIC.mkdir(exist_ok=True)
 
-app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+# Cargar variables de .env (parser mínimo, sin dependencias extra)
+_ENV_FILE = BASE / ".env"
+if _ENV_FILE.exists():
+    for _line in _ENV_FILE.read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if not _line or _line.startswith("#") or "=" not in _line:
+            continue
+        _k, _v = _line.split("=", 1)
+        _v = _v.strip().strip('"').strip("'")
+        if _v:
+            os.environ.setdefault(_k.strip(), _v)
+
+# ─── LOGGING ─────────────────────────────────────────────────────────────────
+
+LOG_FILE = BASE / "server.log"
+_log_handler = RotatingFileHandler(
+    LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
+)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[_log_handler, logging.StreamHandler()],
+)
+log = logging.getLogger("cotizador")
+
+# Sentry: solo se activa si SENTRY_DSN está definido. No falla si el paquete no
+# está instalado (es opcional en requirements).
+_SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+if _SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.logging import LoggingIntegration
+
+        sentry_sdk.init(
+            dsn=_SENTRY_DSN,
+            environment=os.environ.get("SENTRY_ENV", "production"),
+            traces_sample_rate=float(os.environ.get("SENTRY_TRACES_RATE", "0.0")),
+            send_default_pii=False,
+            integrations=[
+                FastApiIntegration(),
+                LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
+            ],
+        )
+        log.info("Sentry inicializado")
+    except ImportError:
+        log.warning("SENTRY_DSN definido pero sentry-sdk no está instalado")
+    except Exception:
+        log.exception("Error inicializando Sentry")
+
+# ─── CACHES EN MEMORIA ───────────────────────────────────────────────────────
 
 # Almacén en memoria de SVGs parseados (por sesión simple)
 _svg_store: dict[str, dict] = {}
+# Caché en memoria de cotizaciones (QuoteResult + meta) — respaldado por SQLite
 _quote_store: dict[str, QuoteResult] = {}
+
+# Timestamps de último acceso por clave (para TTL)
+_svg_touch:   dict[str, float] = {}
+_quote_touch: dict[str, float] = {}
+
+SVG_TTL_SECONDS   = 24 * 3600        # 24 h — SVGs son re-subibles, expiran rápido
+QUOTE_TTL_SECONDS = 7 * 24 * 3600    # 7 d  — cotizaciones se recargan desde SQLite si hace falta
+CLEANUP_INTERVAL  = 3600             # 1 h
+
+
+def _touch_svg(sid: str) -> None:
+    _svg_touch[sid] = time.time()
+
+
+def _touch_quote(qid: str) -> None:
+    _quote_touch[qid] = time.time()
+
+
+def _purge_expired_caches() -> None:
+    now = time.time()
+    svg_dead = [k for k, t in list(_svg_touch.items()) if now - t > SVG_TTL_SECONDS]
+    for k in svg_dead:
+        _svg_store.pop(k, None)
+        _svg_touch.pop(k, None)
+    q_dead = [k for k, t in list(_quote_touch.items()) if now - t > QUOTE_TTL_SECONDS]
+    for k in q_dead:
+        _quote_store.pop(k, None)
+        _quote_store.pop(k + "_meta", None)
+        _quote_touch.pop(k, None)
+    if svg_dead or q_dead:
+        log.info("TTL purge: %d svgs, %d quotes", len(svg_dead), len(q_dead))
+
+# ─── BACKUP DE DB ────────────────────────────────────────────────────────────
+
+BACKUP_DIR = BASE / "backups"
+DB_FILE    = BASE / "cotizador.db"
+BACKUP_RETENTION_DAYS = 30
+BACKUP_INTERVAL = 24 * 3600  # diario
+
+
+def _backup_db() -> None:
+    if not DB_FILE.exists():
+        return
+    BACKUP_DIR.mkdir(exist_ok=True)
+    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = BACKUP_DIR / f"cotizador_{ts}.db"
+    try:
+        shutil.copy2(DB_FILE, dest)
+        log.info("Backup creado: %s", dest.name)
+    except Exception:
+        log.exception("Backup de DB falló")
+        return
+    cutoff = time.time() - BACKUP_RETENTION_DAYS * 86400
+    for old in BACKUP_DIR.glob("cotizador_*.db"):
+        try:
+            if old.stat().st_mtime < cutoff:
+                old.unlink()
+        except Exception:
+            pass
+
+# ─── LIFESPAN ────────────────────────────────────────────────────────────────
+
+async def _periodic_cleanup() -> None:
+    while True:
+        await asyncio.sleep(CLEANUP_INTERVAL)
+        try:
+            _purge_expired_caches()
+        except Exception:
+            log.exception("Cleanup de caches falló")
+
+
+async def _periodic_backup() -> None:
+    while True:
+        await asyncio.sleep(BACKUP_INTERVAL)
+        try:
+            _backup_db()
+        except Exception:
+            log.exception("Backup periódico falló")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    log.info("Cotizador SGI iniciando…")
+    app.state.started_at = datetime.now().isoformat(timespec="seconds")
+    db.init_db()
+    _backup_db()
+    cleanup_task = asyncio.create_task(_periodic_cleanup())
+    backup_task  = asyncio.create_task(_periodic_backup())
+    try:
+        yield
+    finally:
+        log.info("Cotizador SGI deteniéndose…")
+        cleanup_task.cancel()
+        backup_task.cancel()
+
+
+app = FastAPI(title="Cotizador SGI - Letras y Anuncios", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 
 # ─── HTML PRINCIPAL ──────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    return (STATIC / "index.html").read_text(encoding="utf-8")
+    content = (STATIC / "index.html").read_text(encoding="utf-8")
+    return HTMLResponse(content=content, headers={"Cache-Control": "no-store"})
+
+
+# ─── HEALTHCHECK ─────────────────────────────────────────────────────────────
+
+@app.get("/health")
+async def health():
+    """Verifica DB y caches. Devuelve 503 si la DB no responde."""
+    db_ok = db.ping()
+    body = {
+        "status": "ok" if db_ok else "degraded",
+        "db":     "ok" if db_ok else "error",
+        "caches": {
+            "svgs":   len(_svg_store),
+            "quotes": len(_quote_touch),
+        },
+        "started_at": getattr(app.state, "started_at", None),
+    }
+    return JSONResponse(body, status_code=200 if db_ok else 503)
 
 
 # ─── PARSEAR SVG ─────────────────────────────────────────────────────────────
@@ -44,6 +221,8 @@ async def api_parse_svg(file: UploadFile = File(...)):
     content = await file.read()
     if not content:
         raise HTTPException(400, "Archivo vacío")
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"Archivo demasiado grande (máximo {MAX_UPLOAD_BYTES // (1024*1024)} MB)")
 
     try:
         svg_data = parse_svg(content)
@@ -55,10 +234,12 @@ async def api_parse_svg(file: UploadFile = File(...)):
         "bytes": content.decode("utf-8", errors="replace"),
         "svg_data": svg_data,
     }
+    _touch_svg(sid)
 
     paths_info = [
         {
             "id": p.id,
+            "svg_id": p.svg_id,
             "perimeter_px": round(p.perimeter_px, 2),
             "area_px": round(p.area_px, 2),
             "is_closed": p.is_closed,
@@ -104,6 +285,7 @@ class LetrasRequest(_InstMixin):
     tipo_construccion: str = "cajon_luz"
     tipo_multiplicador: str = "acrilico_con_luz_std"
     ajuste_pct: float = 0.0
+    vinil_cercha_id: str = ""
     cliente: str = ""
     notas: str = ""
 
@@ -149,6 +331,58 @@ def _apply_instalacion(result: QuoteResult, req: _InstMixin) -> QuoteResult:
     return result
 
 
+# ─── HELPERS DE PERSISTENCIA ─────────────────────────────────────────────────
+
+_QUOTE_FIELDS = {f.name for f in dataclasses.fields(QuoteResult)}
+
+
+def _load_quote_from_db(quote_id: str) -> bool:
+    """Carga una cotización de SQLite al caché en memoria. Devuelve True si se encontró."""
+    row = db.get_quote(quote_id)
+    if not row:
+        return False
+    try:
+        result_data = json.loads(row["result_json"])
+        result = QuoteResult(**{k: v for k, v in result_data.items() if k in _QUOTE_FIELDS})
+        _quote_store[quote_id] = result
+        _touch_quote(quote_id)
+        try:
+            fecha_display = datetime.strptime(row["fecha"], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y")
+        except Exception:
+            fecha_display = row["fecha"]
+        _quote_store[quote_id + "_meta"] = {
+            "cliente": row["cliente"],
+            "notas":   row["notas"],
+            "fecha":   fecha_display,
+            "folio":   row["folio"],
+            "tipo":    row["tipo"],
+        }
+    except Exception:
+        return False
+    return True
+
+
+def _ensure_quote_in_memory(quote_id: str) -> QuoteResult | None:
+    """Devuelve QuoteResult desde caché o SQLite. None si no existe."""
+    if quote_id not in _quote_store:
+        _load_quote_from_db(quote_id)
+    return _quote_store.get(quote_id)
+
+
+def _save_to_db(qid: str, folio: str, tipo: str,
+                result: QuoteResult, req, svg_text: str):
+    """Persiste cotización a SQLite."""
+    result_dict  = dataclasses.asdict(result)
+    params_dict  = req.model_dump(exclude={"session_id"})
+    db.save_quote(
+        qid, folio, tipo,
+        getattr(req, "cliente", ""),
+        getattr(req, "notas", ""),
+        result_dict, params_dict,
+        svg_text, result.precio_final,
+    )
+
+
 # ─── COTIZAR LETRAS 3D ───────────────────────────────────────────────────────
 
 @app.post("/api/cotizar/letras")
@@ -173,20 +407,25 @@ async def api_cotizar_letras(req: LetrasRequest):
             tipo_construccion=req.tipo_construccion,
             tipo_multiplicador=req.tipo_multiplicador,
             ajuste_pct=req.ajuste_pct,
+            vinil_cercha_id=req.vinil_cercha_id,
         )
     except Exception as e:
         raise HTTPException(500, f"Error en cálculo: {e}")
 
     _apply_instalacion(result, req)
-    qid = str(uuid.uuid4())
+
+    folio = db.next_folio()
+    qid   = str(uuid.uuid4())
     _quote_store[qid] = result
+    _touch_quote(qid)
     _quote_store[qid + "_meta"] = {
         "cliente": req.cliente,
-        "notas": req.notas,
-        "fecha": datetime.now().strftime("%d/%m/%Y"),
-        "folio": qid[:8].upper(),
-        "tipo": "letras_3d",
+        "notas":   req.notas,
+        "fecha":   datetime.now().strftime("%d/%m/%Y"),
+        "folio":   folio,
+        "tipo":    "letras_3d",
     }
+    _save_to_db(qid, folio, "letras_3d", result, req, store["bytes"])
 
     return _result_to_dict(result, qid)
 
@@ -217,15 +456,19 @@ async def api_cotizar_caja(req: CajaRequest):
         raise HTTPException(500, f"Error en cálculo: {e}")
 
     _apply_instalacion(result, req)
-    qid = str(uuid.uuid4())
+
+    folio = db.next_folio()
+    qid   = str(uuid.uuid4())
     _quote_store[qid] = result
+    _touch_quote(qid)
     _quote_store[qid + "_meta"] = {
         "cliente": req.cliente,
-        "notas": req.notas,
-        "fecha": datetime.now().strftime("%d/%m/%Y"),
-        "folio": qid[:8].upper(),
-        "tipo": "caja_luz",
+        "notas":   req.notas,
+        "fecha":   datetime.now().strftime("%d/%m/%Y"),
+        "folio":   folio,
+        "tipo":    "caja_luz",
     }
+    _save_to_db(qid, folio, "caja_luz", result, req, store["bytes"])
 
     return _result_to_dict(result, qid)
 
@@ -251,61 +494,169 @@ async def api_cotizar_planas(req: PlanasRequest):
         raise HTTPException(500, f"Error en cálculo: {e}")
 
     _apply_instalacion(result, req)
-    qid = str(uuid.uuid4())
+
+    folio = db.next_folio()
+    qid   = str(uuid.uuid4())
     _quote_store[qid] = result
+    _touch_quote(qid)
     _quote_store[qid + "_meta"] = {
         "cliente": req.cliente,
-        "notas": req.notas,
-        "fecha": datetime.now().strftime("%d/%m/%Y"),
-        "folio": qid[:8].upper(),
-        "tipo": "letras_planas",
+        "notas":   req.notas,
+        "fecha":   datetime.now().strftime("%d/%m/%Y"),
+        "folio":   folio,
+        "tipo":    "letras_planas",
     }
+    _save_to_db(qid, folio, "letras_planas", result, req, store["bytes"])
+
     return _result_to_dict(result, qid)
+
+
+# ─── HISTORIAL DE COTIZACIONES ───────────────────────────────────────────────
+
+@app.get("/api/quotes")
+async def api_list_quotes(
+    cliente: str = Query(""),
+    tipo:    str = Query(""),
+    limit:   int = Query(150),
+    offset:  int = Query(0),
+):
+    return db.list_quotes(cliente=cliente, tipo=tipo, limit=limit, offset=offset)
+
+
+@app.get("/api/quotes/{quote_id}/open")
+async def api_open_quote(quote_id: str):
+    row = db.get_quote(quote_id)
+    if not row:
+        raise HTTPException(404, "Cotización no encontrada")
+
+    # Reconstruir QuoteResult en memoria
+    if not _load_quote_from_db(quote_id):
+        raise HTTPException(500, "No se pudo reconstruir la cotización")
+    result = _quote_store[quote_id]
+
+    # Re-parsear SVG para crear nueva sesión válida
+    new_sid      = None
+    paths_info   = []
+    vb_w = vb_h  = 0.0
+    artboard_cm  = 0.0
+    max_h_px     = 0.0
+
+    svg_text = row.get("svg_text") or ""
+    if svg_text:
+        try:
+            svg_data = parse_svg(svg_text.encode("utf-8"))
+            new_sid = str(uuid.uuid4())
+            _svg_store[new_sid] = {"bytes": svg_text, "svg_data": svg_data}
+            _touch_svg(new_sid)
+            vb_w        = svg_data.viewbox_w
+            vb_h        = svg_data.viewbox_h
+            artboard_cm = svg_data.artboard_w_cm
+            max_h_px    = svg_data.max_letter_height_px
+            paths_info  = [
+                {
+                    "id":           p.id,
+                    "svg_id":       p.svg_id,
+                    "perimeter_px": round(p.perimeter_px, 2),
+                    "area_px":      round(p.area_px, 2),
+                    "is_closed":    p.is_closed,
+                    "bbox":         p.bbox,
+                }
+                for p in svg_data.paths
+            ]
+        except Exception:
+            pass
+
+    params = json.loads(row["params_json"])
+
+    return {
+        "session_id":        new_sid,
+        "params":            params,
+        "paths":             paths_info,
+        "viewbox_w":         vb_w,
+        "viewbox_h":         vb_h,
+        "artboard_w_cm":     artboard_cm,
+        "max_letter_height_px": max_h_px,
+        "svg_text":          svg_text,
+        **_result_to_dict(result, quote_id),
+    }
+
+
+@app.delete("/api/quotes/{quote_id}")
+async def api_delete_quote(quote_id: str):
+    if not db.get_quote(quote_id):
+        raise HTTPException(404, "Cotización no encontrada")
+    db.delete_quote(quote_id)
+    _quote_store.pop(quote_id, None)
+    _quote_store.pop(quote_id + "_meta", None)
+    return {"ok": True}
 
 
 # ─── GENERAR PDF ─────────────────────────────────────────────────────────────
 
 @app.get("/api/ot/{quote_id}")
 async def api_ot(quote_id: str, cliente: str = "", notas: str = ""):
-    result = _quote_store.get(quote_id)
+    result = _ensure_quote_in_memory(quote_id)
     meta   = dict(_quote_store.get(quote_id + "_meta", {}))
     if not result:
         raise HTTPException(404, "Cotización no encontrada")
     if cliente: meta["cliente"] = cliente
     if notas:   meta["notas"]   = notas
     pdf_bytes = generar_pdf_ot(result, meta)
-    filename  = f"OT_{meta.get('folio','SGI')}_{meta.get('cliente','cliente')}.pdf"
+    filename  = f"OT_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
     return FileResponse(path=_write_tmp(pdf_bytes, filename), filename=filename, media_type="application/pdf")
 
 
 @app.get("/api/entrega/{quote_id}")
 async def api_entrega(quote_id: str, cliente: str = "", notas: str = ""):
-    result = _quote_store.get(quote_id)
+    result = _ensure_quote_in_memory(quote_id)
     meta   = dict(_quote_store.get(quote_id + "_meta", {}))
     if not result:
         raise HTTPException(404, "Cotización no encontrada")
     if cliente: meta["cliente"] = cliente
     if notas:   meta["notas"]   = notas
     pdf_bytes = generar_pdf_entrega(result, meta)
-    filename  = f"Entrega_{meta.get('folio','SGI')}_{meta.get('cliente','cliente')}.pdf"
+    filename  = f"Entrega_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
     return FileResponse(path=_write_tmp(pdf_bytes, filename), filename=filename, media_type="application/pdf")
+
+
+@app.get("/api/plano")
+async def api_plano(session_id: str = "", ancho_cm: float = 0,
+                    folio: str = "", cliente: str = "", notas: str = ""):
+    """Genera plano de medidas desde la sesión activa (sin necesidad de quote_id)."""
+    store = _svg_store.get(session_id)
+    if not store:
+        raise HTTPException(404, "Sesión no encontrada — sube el SVG de nuevo")
+
+    svg_text  = store.get("bytes", "")
+    svg_data  = store.get("svg_data")
+    viewbox_w = svg_data.viewbox_w if svg_data else 0
+    viewbox_h = svg_data.viewbox_h if svg_data else 0
+    paths     = svg_data.paths     if svg_data else []
+
+    real_w = ancho_cm or (svg_data.artboard_w_cm if svg_data else 0) or 60.0
+    meta = {
+        "folio":   folio   or "—",
+        "cliente": cliente or "—",
+        "notas":   notas,
+        "fecha":   datetime.now().strftime("%Y-%m-%d"),
+    }
+    pdf_bytes = generar_pdf_plano(meta, svg_text, real_w, viewbox_w, viewbox_h, paths)
+    fname = f"Plano_{_safe_part(folio)}_{_safe_part(cliente, default='diseno')}.pdf"
+    return FileResponse(path=_write_tmp(pdf_bytes, fname), filename=fname, media_type="application/pdf")
 
 
 @app.get("/api/pdf/{quote_id}")
 async def api_pdf(quote_id: str, cliente: str = "", notas: str = ""):
-    result = _quote_store.get(quote_id)
+    result = _ensure_quote_in_memory(quote_id)
     meta   = dict(_quote_store.get(quote_id + "_meta", {}))
     if not result:
         raise HTTPException(404, "Cotización no encontrada")
 
-    if cliente:
-        meta["cliente"] = cliente
-    if notas:
-        meta["notas"] = notas
+    if cliente: meta["cliente"] = cliente
+    if notas:   meta["notas"]   = notas
 
     pdf_bytes = generar_pdf(result, meta)
-    nombre_cliente = meta.get("cliente") or "cliente"
-    filename  = f"Cotizacion_{meta.get('folio','SGI')}_{nombre_cliente}.pdf"
+    filename  = f"Cotizacion_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
 
     return FileResponse(
         path=_write_tmp(pdf_bytes, filename),
@@ -316,10 +667,22 @@ async def api_pdf(quote_id: str, cliente: str = "", notas: str = ""):
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
 
+def _safe_part(s: str, default: str = "SGI", max_len: int = 60) -> str:
+    """Sanitiza un fragmento de nombre de archivo: elimina separadores de ruta,
+    caracteres de control e inyección de headers. Limita longitud."""
+    if not s:
+        return default
+    cleaned = re.sub(r"[^\w\s.-]", "", str(s), flags=re.UNICODE).strip()
+    cleaned = re.sub(r"\s+", "_", cleaned)
+    return (cleaned[:max_len] or default)
+
+
 def _write_tmp(data: bytes, name: str) -> str:
     p = BASE / "tmp"
     p.mkdir(exist_ok=True)
-    out = p / name
+    safe_name = Path(name).name
+    safe_name = re.sub(r"[^\w.\-]", "_", safe_name)[:120] or "documento.pdf"
+    out = p / safe_name
     out.write_bytes(data)
     return str(out)
 
@@ -343,9 +706,8 @@ def _result_to_dict(r: QuoteResult, qid: str) -> dict:
             "cara": {
                 "nombre": r.material_cara.get("nombre"),
                 "base": r.material_cara.get("base"),
-                "vinil_ancho_cm": r.material_cara.get("vinil_ancho_cm"),
-                "vinil_alto_cm":  r.material_cara.get("vinil_alto_cm"),
-                "vinil_area_m2":  r.material_cara.get("vinil_area_m2"),
+                "vinil_filas":   r.material_cara.get("vinil_filas"),
+                "vinil_area_m2": r.material_cara.get("vinil_area_m2"),
                 "laminas": r.laminas_cara,
                 "costo": round(r.costo_material_cara, 2),
             },
@@ -371,6 +733,11 @@ def _result_to_dict(r: QuoteResult, qid: str) -> dict:
         "pegamento": {
             "nombre": r.pegamento.get("nombre"),
             "costo": round(r.costo_pegamento, 2),
+        },
+        "vinil_cercha": {
+            "nombre": r.vinil_cercha.get("nombre", ""),
+            "metros": round(r.metros_vinil_cercha, 2),
+            "costo": round(r.costo_vinil_cercha, 2),
         },
         "costos": {
             "subtotal": round(r.subtotal, 2),
@@ -405,6 +772,31 @@ def _result_to_dict(r: QuoteResult, qid: str) -> dict:
     }
 
 
+# ─── CLIENTES ────────────────────────────────────────────────────────────────
+
+@app.get("/api/clients")
+async def api_list_clients(q: str = Query("")):
+    return db.list_clients(q)
+
+
+@app.post("/api/clients")
+async def api_upsert_client(data: dict):
+    client_id = db.save_client(
+        nombre=data.get("nombre", "").strip(),
+        rfc=data.get("rfc", "").strip(),
+        email=data.get("email", "").strip(),
+        telefono=data.get("telefono", "").strip(),
+        client_id=data.get("id"),
+    )
+    return {"ok": True, "id": client_id}
+
+
+@app.delete("/api/clients/{client_id}")
+async def api_delete_client(client_id: int):
+    db.delete_client(client_id)
+    return {"ok": True}
+
+
 # ─── CATÁLOGO ────────────────────────────────────────────────────────────────
 
 @app.get("/api/catalog")
@@ -412,14 +804,105 @@ async def api_get_catalog():
     return catalog_to_dict()
 
 
+class CatalogPayload(BaseModel):
+    """Valida el shape de primer nivel del catálogo. Bloquea typos y tipos
+    erróneos; no prescribe el schema interno (que cambia con frecuencia)."""
+    model_config = ConfigDict(extra="forbid")
+
+    laminas:            dict | None = None
+    leds_canal:         list | None = None
+    leds_caja:          dict | None = None
+    fuentes:            list | None = None
+    pegamentos:         dict | None = None
+    precios_base:       dict | None = None
+    precios_caja_m2:    dict | None = None
+    silvatrim:          list | None = None
+    vinilos:            list | None = None
+    vinilos_cercha:     list | None = None
+    tipos_construccion: dict | None = None
+    gruas:              dict | None = None
+
+
 @app.post("/api/catalog")
-async def api_save_catalog(data: dict):
-    catalog_apply(data)
-    catalog_save()
-    return {"ok": True}
+async def api_save_catalog(payload: CatalogPayload):
+    data = payload.model_dump(exclude_none=True)
+    if not data:
+        raise HTTPException(400, "Catálogo vacío: no se aplicaron cambios")
+    try:
+        catalog_apply(data)
+        catalog_save()
+    except Exception:
+        log.exception("Error al aplicar catálogo")
+        raise HTTPException(400, "Catálogo inválido: revisa la estructura")
+    log.info("Catálogo actualizado: claves=%s", list(data.keys()))
+    return {"ok": True, "claves_actualizadas": list(data.keys())}
+
+
+# ─── VECTORIZAR IMAGEN ────────────────────────────────────────────────────────
+
+@app.post("/api/vectorize")
+async def api_vectorize(
+    file:             UploadFile = File(...),
+    bg_tol:           int = Query(38, ge=10, le=70),
+    filter_speckle:   int = Query(8,  ge=1,  le=30),
+    color_precision:  int = Query(3,  ge=1,  le=8),
+    layer_difference: int = Query(48, ge=4,  le=64),
+):
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Archivo vacío")
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"Archivo demasiado grande (máximo {MAX_UPLOAD_BYTES // (1024*1024)} MB)")
+
+    try:
+        from vectorizer import vectorize as _vec
+        svg_text = _vec(
+            content,
+            bg_tol=bg_tol,
+            filter_speckle=filter_speckle,
+            color_precision=color_precision,
+            layer_difference=layer_difference,
+        )
+    except ImportError as e:
+        raise HTTPException(500, f"Dependencia faltante: {e}. Ejecuta: pip install opencv-python vtracer")
+    except Exception as e:
+        raise HTTPException(400, f"Error al vectorizar: {e}")
+
+    try:
+        svg_data = parse_svg(svg_text.encode("utf-8"))
+    except Exception as e:
+        raise HTTPException(400, f"SVG generado inválido: {e}")
+
+    sid = str(uuid.uuid4())
+    _svg_store[sid] = {"bytes": svg_text, "svg_data": svg_data}
+    _touch_svg(sid)
+
+    paths_info = [
+        {
+            "id":           p.id,
+            "svg_id":       p.svg_id,
+            "perimeter_px": round(p.perimeter_px, 2),
+            "area_px":      round(p.area_px, 2),
+            "is_closed":    p.is_closed,
+            "bbox":         p.bbox,
+        }
+        for p in svg_data.paths
+    ]
+
+    return {
+        "session_id":           sid,
+        "paths":                paths_info,
+        "viewbox_w":            svg_data.viewbox_w,
+        "viewbox_h":            svg_data.viewbox_h,
+        "svg_unit":             svg_data.svg_unit,
+        "svg_text":             svg_text,
+        "max_letter_height_px": round(svg_data.max_letter_height_px, 2),
+        "artboard_w_cm":        round(svg_data.artboard_w_cm, 2),
+    }
 
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8080))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    reload = os.environ.get("DEV_RELOAD", "").lower() in ("1", "true", "yes")
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=reload)

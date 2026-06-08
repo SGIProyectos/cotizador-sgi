@@ -1,0 +1,39 @@
+.git
+.github
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.coverage
+coverage.xml
+.vscode
+.vs
+
+# Datos locales que no deben entrar a la imagen
+cotizador.db
+*.db
+backups/
+tmp/
+server.log*
+.env
+.env.*
+!.env.example
+
+# Artefactos del repo local
+*.zip
+*.png
+*.jpg
+*.pdf
+*.svg
+*.xlsx
+*.txt
+!requirements*.txt
+TRABAJOS/
+
+# Tests no van en producción
+tests/
+pytest.ini
+requirements-dev.txt

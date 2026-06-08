@@ -4,3 +4,7 @@ python-multipart>=0.0.9
 svgpathtools>=1.6.1
 reportlab>=4.1.0
 numpy>=1.26.0
+svglib>=1.5.1
+opencv-python>=4.9.0
+rembg>=2.0.50
+vtracer>=0.6.0
