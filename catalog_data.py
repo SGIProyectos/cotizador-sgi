@@ -1,5 +1,8 @@
 import json
+import logging
 from pathlib import Path
+
+log = logging.getLogger("cotizador.catalog")
 
 _CATALOG_FILE = Path(__file__).parent / "catalog.json"
 
@@ -946,7 +949,10 @@ def catalog_load():
         try:
             _catalog_merge(json.loads(_CATALOG_FILE.read_text(encoding="utf-8")))
         except Exception:
-            pass
+            log.exception(
+                "catalog.json no se pudo cargar — se usarán los precios por defecto. "
+                "Revisa el archivo si los precios mostrados son los antiguos."
+            )
 
 
 catalog_load()

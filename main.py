@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import shutil
+import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -85,6 +86,14 @@ if _SENTRY_DSN:
         log.exception("Error inicializando Sentry")
 
 # ─── CACHES EN MEMORIA ───────────────────────────────────────────────────────
+#
+# Estos diccionarios son estado mutable compartido entre handlers async,
+# handlers sync (thread-pool de FastAPI) y la tarea de purga periódica.
+# `_state_lock` los protege contra interleaving DENTRO del mismo proceso.
+# Para correr múltiples workers de uvicorn hace falta externalizar a Redis u
+# otro store — un Lock de threading no cruza procesos.
+
+_state_lock = threading.RLock()
 
 # Almacén en memoria de SVGs parseados (por sesión simple)
 _svg_store: dict[str, dict] = {}
@@ -101,24 +110,27 @@ CLEANUP_INTERVAL  = 3600             # 1 h
 
 
 def _touch_svg(sid: str) -> None:
-    _svg_touch[sid] = time.time()
+    with _state_lock:
+        _svg_touch[sid] = time.time()
 
 
 def _touch_quote(qid: str) -> None:
-    _quote_touch[qid] = time.time()
+    with _state_lock:
+        _quote_touch[qid] = time.time()
 
 
 def _purge_expired_caches() -> None:
     now = time.time()
-    svg_dead = [k for k, t in list(_svg_touch.items()) if now - t > SVG_TTL_SECONDS]
-    for k in svg_dead:
-        _svg_store.pop(k, None)
-        _svg_touch.pop(k, None)
-    q_dead = [k for k, t in list(_quote_touch.items()) if now - t > QUOTE_TTL_SECONDS]
-    for k in q_dead:
-        _quote_store.pop(k, None)
-        _quote_store.pop(k + "_meta", None)
-        _quote_touch.pop(k, None)
+    with _state_lock:
+        svg_dead = [k for k, t in _svg_touch.items() if now - t > SVG_TTL_SECONDS]
+        for k in svg_dead:
+            _svg_store.pop(k, None)
+            _svg_touch.pop(k, None)
+        q_dead = [k for k, t in _quote_touch.items() if now - t > QUOTE_TTL_SECONDS]
+        for k in q_dead:
+            _quote_store.pop(k, None)
+            _quote_store.pop(k + "_meta", None)
+            _quote_touch.pop(k, None)
     if svg_dead or q_dead:
         log.info("TTL purge: %d svgs, %d quotes", len(svg_dead), len(q_dead))
 
@@ -138,8 +150,8 @@ def _rotate_backups(prefix: str) -> None:
         try:
             if old.stat().st_mtime < cutoff:
                 old.unlink()
-        except Exception:
-            pass
+        except OSError:
+            log.warning("No se pudo borrar backup antiguo %s", old.name, exc_info=True)
 
 
 def _backup_file(src: Path, prefix: str) -> None:
@@ -249,11 +261,13 @@ async def api_parse_svg(file: UploadFile = File(...)):
         raise HTTPException(400, f"Error al parsear SVG: {e}")
 
     sid = str(uuid.uuid4())
-    _svg_store[sid] = {
-        "bytes": content.decode("utf-8", errors="replace"),
-        "svg_data": svg_data,
-    }
-    _touch_svg(sid)
+    svg_text_decoded = content.decode("utf-8", errors="replace")
+    with _state_lock:
+        _svg_store[sid] = {
+            "bytes": svg_text_decoded,
+            "svg_data": svg_data,
+        }
+        _svg_touch[sid] = time.time()
 
     paths_info = [
         {
@@ -273,7 +287,7 @@ async def api_parse_svg(file: UploadFile = File(...)):
         "viewbox_w": svg_data.viewbox_w,
         "viewbox_h": svg_data.viewbox_h,
         "svg_unit": svg_data.svg_unit,
-        "svg_text": _svg_store[sid]["bytes"],
+        "svg_text": svg_text_decoded,
         "max_letter_height_px": round(svg_data.max_letter_height_px, 2),
         "artboard_w_cm": round(svg_data.artboard_w_cm, 2),
     }
@@ -363,29 +377,35 @@ def _load_quote_from_db(quote_id: str) -> bool:
     try:
         result_data = json.loads(row["result_json"])
         result = QuoteResult(**{k: v for k, v in result_data.items() if k in _QUOTE_FIELDS})
-        _quote_store[quote_id] = result
-        _touch_quote(quote_id)
         try:
             fecha_display = datetime.strptime(row["fecha"], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y")
-        except Exception:
+        except ValueError:
             fecha_display = row["fecha"]
-        _quote_store[quote_id + "_meta"] = {
-            "cliente": row["cliente"],
-            "notas":   row["notas"],
-            "fecha":   fecha_display,
-            "folio":   row["folio"],
-            "tipo":    row["tipo"],
-        }
+        with _state_lock:
+            _quote_store[quote_id] = result
+            _quote_store[quote_id + "_meta"] = {
+                "cliente": row["cliente"],
+                "notas":   row["notas"],
+                "fecha":   fecha_display,
+                "folio":   row["folio"],
+                "tipo":    row["tipo"],
+            }
+            _quote_touch[quote_id] = time.time()
     except Exception:
+        log.exception("Error cargando cotización %s desde DB", quote_id)
         return False
     return True
 
 
 def _ensure_quote_in_memory(quote_id: str) -> QuoteResult | None:
     """Devuelve QuoteResult desde caché o SQLite. None si no existe."""
-    if quote_id not in _quote_store:
+    with _state_lock:
+        cached = _quote_store.get(quote_id)
+    if cached is None:
         _load_quote_from_db(quote_id)
-    return _quote_store.get(quote_id)
+        with _state_lock:
+            cached = _quote_store.get(quote_id)
+    return cached
 
 
 def _save_to_db(qid: str, folio: str, tipo: str,
@@ -406,7 +426,8 @@ def _save_to_db(qid: str, folio: str, tipo: str,
 
 @app.post("/api/cotizar/letras")
 async def api_cotizar_letras(req: LetrasRequest):
-    store = _svg_store.get(req.session_id)
+    with _state_lock:
+        store = _svg_store.get(req.session_id)
     if not store:
         raise HTTPException(404, "Sesión no encontrada, sube el SVG de nuevo")
 
@@ -435,15 +456,16 @@ async def api_cotizar_letras(req: LetrasRequest):
 
     folio = db.next_folio()
     qid   = str(uuid.uuid4())
-    _quote_store[qid] = result
-    _touch_quote(qid)
-    _quote_store[qid + "_meta"] = {
-        "cliente": req.cliente,
-        "notas":   req.notas,
-        "fecha":   datetime.now().strftime("%d/%m/%Y"),
-        "folio":   folio,
-        "tipo":    "letras_3d",
-    }
+    with _state_lock:
+        _quote_store[qid] = result
+        _quote_store[qid + "_meta"] = {
+            "cliente": req.cliente,
+            "notas":   req.notas,
+            "fecha":   datetime.now().strftime("%d/%m/%Y"),
+            "folio":   folio,
+            "tipo":    "letras_3d",
+        }
+        _quote_touch[qid] = time.time()
     _save_to_db(qid, folio, "letras_3d", result, req, store["bytes"])
 
     return _result_to_dict(result, qid)
@@ -453,7 +475,8 @@ async def api_cotizar_letras(req: LetrasRequest):
 
 @app.post("/api/cotizar/caja")
 async def api_cotizar_caja(req: CajaRequest):
-    store = _svg_store.get(req.session_id)
+    with _state_lock:
+        store = _svg_store.get(req.session_id)
     if not store:
         raise HTTPException(404, "Sesión no encontrada")
 
@@ -478,15 +501,16 @@ async def api_cotizar_caja(req: CajaRequest):
 
     folio = db.next_folio()
     qid   = str(uuid.uuid4())
-    _quote_store[qid] = result
-    _touch_quote(qid)
-    _quote_store[qid + "_meta"] = {
-        "cliente": req.cliente,
-        "notas":   req.notas,
-        "fecha":   datetime.now().strftime("%d/%m/%Y"),
-        "folio":   folio,
-        "tipo":    "caja_luz",
-    }
+    with _state_lock:
+        _quote_store[qid] = result
+        _quote_store[qid + "_meta"] = {
+            "cliente": req.cliente,
+            "notas":   req.notas,
+            "fecha":   datetime.now().strftime("%d/%m/%Y"),
+            "folio":   folio,
+            "tipo":    "caja_luz",
+        }
+        _quote_touch[qid] = time.time()
     _save_to_db(qid, folio, "caja_luz", result, req, store["bytes"])
 
     return _result_to_dict(result, qid)
@@ -496,7 +520,8 @@ async def api_cotizar_caja(req: CajaRequest):
 
 @app.post("/api/cotizar/planas")
 async def api_cotizar_planas(req: PlanasRequest):
-    store = _svg_store.get(req.session_id)
+    with _state_lock:
+        store = _svg_store.get(req.session_id)
     if not store:
         raise HTTPException(404, "Sesión no encontrada")
     svg_data = store["svg_data"]
@@ -516,15 +541,16 @@ async def api_cotizar_planas(req: PlanasRequest):
 
     folio = db.next_folio()
     qid   = str(uuid.uuid4())
-    _quote_store[qid] = result
-    _touch_quote(qid)
-    _quote_store[qid + "_meta"] = {
-        "cliente": req.cliente,
-        "notas":   req.notas,
-        "fecha":   datetime.now().strftime("%d/%m/%Y"),
-        "folio":   folio,
-        "tipo":    "letras_planas",
-    }
+    with _state_lock:
+        _quote_store[qid] = result
+        _quote_store[qid + "_meta"] = {
+            "cliente": req.cliente,
+            "notas":   req.notas,
+            "fecha":   datetime.now().strftime("%d/%m/%Y"),
+            "folio":   folio,
+            "tipo":    "letras_planas",
+        }
+        _quote_touch[qid] = time.time()
     _save_to_db(qid, folio, "letras_planas", result, req, store["bytes"])
 
     return _result_to_dict(result, qid)
@@ -551,7 +577,8 @@ async def api_open_quote(quote_id: str):
     # Reconstruir QuoteResult en memoria
     if not _load_quote_from_db(quote_id):
         raise HTTPException(500, "No se pudo reconstruir la cotización")
-    result = _quote_store[quote_id]
+    with _state_lock:
+        result = _quote_store[quote_id]
 
     # Re-parsear SVG para crear nueva sesión válida
     new_sid      = None
@@ -565,8 +592,9 @@ async def api_open_quote(quote_id: str):
         try:
             svg_data = parse_svg(svg_text.encode("utf-8"))
             new_sid = str(uuid.uuid4())
-            _svg_store[new_sid] = {"bytes": svg_text, "svg_data": svg_data}
-            _touch_svg(new_sid)
+            with _state_lock:
+                _svg_store[new_sid] = {"bytes": svg_text, "svg_data": svg_data}
+                _svg_touch[new_sid] = time.time()
             vb_w        = svg_data.viewbox_w
             vb_h        = svg_data.viewbox_h
             artboard_cm = svg_data.artboard_w_cm
@@ -583,7 +611,7 @@ async def api_open_quote(quote_id: str):
                 for p in svg_data.paths
             ]
         except Exception:
-            pass
+            log.exception("Re-parse del SVG falló al re-abrir cotización %s", quote_id)
 
     params = json.loads(row["params_json"])
 
@@ -605,17 +633,24 @@ async def api_delete_quote(quote_id: str):
     if not db.get_quote(quote_id):
         raise HTTPException(404, "Cotización no encontrada")
     db.delete_quote(quote_id)
-    _quote_store.pop(quote_id, None)
-    _quote_store.pop(quote_id + "_meta", None)
+    with _state_lock:
+        _quote_store.pop(quote_id, None)
+        _quote_store.pop(quote_id + "_meta", None)
+        _quote_touch.pop(quote_id, None)
     return {"ok": True}
 
 
 # ─── GENERAR PDF ─────────────────────────────────────────────────────────────
 
+def _get_meta(quote_id: str) -> dict:
+    with _state_lock:
+        return dict(_quote_store.get(quote_id + "_meta", {}))
+
+
 @app.get("/api/ot/{quote_id}")
 async def api_ot(quote_id: str, cliente: str = "", notas: str = ""):
     result = _ensure_quote_in_memory(quote_id)
-    meta   = dict(_quote_store.get(quote_id + "_meta", {}))
+    meta   = _get_meta(quote_id)
     if not result:
         raise HTTPException(404, "Cotización no encontrada")
     if cliente: meta["cliente"] = cliente
@@ -628,7 +663,7 @@ async def api_ot(quote_id: str, cliente: str = "", notas: str = ""):
 @app.get("/api/entrega/{quote_id}")
 async def api_entrega(quote_id: str, cliente: str = "", notas: str = ""):
     result = _ensure_quote_in_memory(quote_id)
-    meta   = dict(_quote_store.get(quote_id + "_meta", {}))
+    meta   = _get_meta(quote_id)
     if not result:
         raise HTTPException(404, "Cotización no encontrada")
     if cliente: meta["cliente"] = cliente
@@ -642,7 +677,8 @@ async def api_entrega(quote_id: str, cliente: str = "", notas: str = ""):
 async def api_plano(session_id: str = "", ancho_cm: float = 0,
                     folio: str = "", cliente: str = "", notas: str = ""):
     """Genera plano de medidas desde la sesión activa (sin necesidad de quote_id)."""
-    store = _svg_store.get(session_id)
+    with _state_lock:
+        store = _svg_store.get(session_id)
     if not store:
         raise HTTPException(404, "Sesión no encontrada — sube el SVG de nuevo")
 
@@ -667,7 +703,7 @@ async def api_plano(session_id: str = "", ancho_cm: float = 0,
 @app.get("/api/pdf/{quote_id}")
 async def api_pdf(quote_id: str, cliente: str = "", notas: str = ""):
     result = _ensure_quote_in_memory(quote_id)
-    meta   = dict(_quote_store.get(quote_id + "_meta", {}))
+    meta   = _get_meta(quote_id)
     if not result:
         raise HTTPException(404, "Cotización no encontrada")
 
@@ -688,7 +724,7 @@ async def api_pdf(quote_id: str, cliente: str = "", notas: str = ""):
 async def api_excel(quote_id: str, cliente: str = "", notas: str = ""):
     """Exporta la cotización a .xlsx con hojas Resumen / Letras / Desglose."""
     result = _ensure_quote_in_memory(quote_id)
-    meta   = dict(_quote_store.get(quote_id + "_meta", {}))
+    meta   = _get_meta(quote_id)
     if not result:
         raise HTTPException(404, "Cotización no encontrada")
     if cliente: meta["cliente"] = cliente
@@ -726,7 +762,8 @@ def _write_tmp(data: bytes, name: str) -> str:
 
 
 def _result_to_dict(r: QuoteResult, qid: str) -> dict:
-    meta = _quote_store.get(qid + "_meta", {})
+    with _state_lock:
+        meta = _quote_store.get(qid + "_meta", {})
     return {
         "quote_id": qid,
         "folio": meta.get("folio", ""),
@@ -914,8 +951,9 @@ async def api_vectorize(
         raise HTTPException(400, f"SVG generado inválido: {e}")
 
     sid = str(uuid.uuid4())
-    _svg_store[sid] = {"bytes": svg_text, "svg_data": svg_data}
-    _touch_svg(sid)
+    with _state_lock:
+        _svg_store[sid] = {"bytes": svg_text, "svg_data": svg_data}
+        _svg_touch[sid] = time.time()
 
     paths_info = [
         {

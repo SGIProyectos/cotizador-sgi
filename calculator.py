@@ -1,4 +1,5 @@
 import io
+import logging
 import math
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -22,6 +23,8 @@ from catalog_data import (
     recomendar_led_caja,
     silvatrim_recomendado,
 )
+
+log = logging.getLogger("cotizador.calculator")
 
 # ─── ESTRUCTURAS DE DATOS ────────────────────────────────────────────────────
 
@@ -173,6 +176,7 @@ def parse_svg(svg_bytes: bytes) -> SVGData:
     try:
         paths_raw, attrs, svg_attrs = svg2paths2(io.StringIO(svg_text))
     except Exception:
+        log.warning("svg2paths2 falló — el SVG no se pudo parsear; devolviendo lista vacía", exc_info=True)
         paths_raw, attrs = [], []
         svg_attrs = {}
 

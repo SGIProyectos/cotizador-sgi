@@ -9,18 +9,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Install dependencies (Python 3.10+)
+# Install runtime dependencies (Python 3.10+)
 pip install -r requirements.txt
+
+# Install dev dependencies (pytest, ruff, pip-tools, httpx)
+pip install -r requirements-dev.txt
 
 # Run development server — preferred method (kills existing :8080, activates .venv if present, auto-opens browser)
 run.bat
-# Equivalent (no auto-reload in run.bat):
-uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+# Equivalent (no auto-reload):
+uvicorn main:app --host 0.0.0.0 --port 8080
+# Auto-reload only in dev (controlled by env var, NOT a CLI flag in prod):
+#   set DEV_RELOAD=true   then re-run
 
 # Server runs at http://localhost:8080
+
+# Tests + lint (matches what CI runs)
+python -m ruff check .
+python -m pytest tests/ --cov=calculator --cov=main --cov=db --cov-report=term --cov-fail-under=70
+
+# Run a single test
+python -m pytest tests/test_calculator.py::test_<name> -v
+
+# Regenerate requirements.lock from requirements.txt
+pip-compile requirements.txt -o requirements.lock
 ```
 
-No tests or linting configuration in this project.
+Lint config: `pyproject.toml` (ruff, line-length 100, py310 target, rule sets E/W/F/I/B/UP/SIM). Tests live in `tests/` (pytest, 64 tests as of last count). CI: `.github/workflows/test.yml` runs ruff + pytest with coverage gate of 70% on push/PR to `main`.
 
 ## Deployment
 
@@ -32,7 +47,7 @@ Deployed to Render.com via `render.yaml` (Python 3.11, `uvicorn main:app --host 
 
 1. **Upload SVG** → `POST /api/parse-svg` → `calculator.parse_svg()` extracts paths with perimeter, area, and bounding box in SVG pixels → stored in `_svg_store[session_id]` (in-memory; SVG is small and re-uploadable so RAM-only is fine)
 2. **Quote** → `POST /api/cotizar/letras|caja|planas` → calls `cotizar_letras()` / `cotizar_caja()` / `cotizar_planas()`, which scale px→cm, select materials from catalog, compute costs → result written to SQLite via `db.save_quote()` and cached in `_quote_store[quote_id]`; metadata (cliente, notas, folio) cached at `_quote_store[quote_id + "_meta"]`
-3. **PDF** → `GET /api/pdf/{quote_id}?cliente=X&notas=Y` (cotización), `/api/ot/{quote_id}` (orden de trabajo), `/api/entrega/{quote_id}` (acta de entrega + garantía), `/api/plano?session_id=X&ancho_cm=Y&folio=Z&cliente=W` (measurement plan — no quote_id needed, works from active session) — all PDFs written to `tmp/` directory
+3. **PDF / Excel** → `GET /api/pdf/{quote_id}?cliente=X&notas=Y` (cotización), `/api/ot/{quote_id}` (orden de trabajo), `/api/entrega/{quote_id}` (acta de entrega + garantía), `/api/plano?session_id=X&ancho_cm=Y&folio=Z&cliente=W` (measurement plan — no quote_id needed, works from active session), `/api/excel/{quote_id}` (XLSX export) — all written to `tmp/` directory
 4. **History** → `GET /api/quotes` (list with filters), `GET /api/quotes/{id}/open` (re-open: rebuilds session + QuoteResult from DB), `DELETE /api/quotes/{id}`
 5. **Clients** → `GET /api/clients?q=` (search), `POST /api/clients` (upsert), `DELETE /api/clients/{id}`
 6. **Catalog** → `GET /api/catalog` returns current in-memory catalog; `POST /api/catalog` calls `catalog_apply()` + `catalog_save()` to persist to `catalog.json`
@@ -46,6 +61,7 @@ Deployed to Render.com via `render.yaml` (Python 3.11, `uvicorn main:app --host 
 | `db.py` | SQLite persistence: `init_db()`, `save_quote()`, `list_quotes()`, `get_quote()`, `next_folio()` (SGI-YYYY-NNNN), client CRUD |
 | `catalog_data.py` | All pricing data (LAMINAS, LEDS_CANAL, LEDS_CAJA, FUENTES, PEGAMENTOS, PRECIOS_BASE, TIPOS_CONSTRUCCION, GRUAS), auto-selection functions, catalog persistence |
 | `pdf_gen.py` | ReportLab PDF generation for all three document types; purely presentational |
+| `excel_gen.py` | openpyxl XLSX export of a `QuoteResult` (Resumen + Letras + Desglose sheets) |
 | `static/index.html` | Single-file SPA (vanilla JS + inline CSS); no build step |
 | `catalog.json` | Runtime price overrides; loaded at startup by `catalog_load()`, updated via `POST /api/catalog` |
 | `cotizador.db` | SQLite database file (quotes, folio_seq, clients tables); auto-created by `db.init_db()` on startup |
@@ -195,21 +211,19 @@ Beyond basic cost fields, `QuoteResult` includes:
 
 These are agreed improvements not yet implemented, ordered by priority.
 
-Already shipped: SQLite persistence (#1), quote history/list (#2), re-open quote (#3), client catalog (#4), sequential folio SGI-YYYY-NNNN (#6).
+Already shipped: SQLite persistence, quote history/list, re-open quote, client catalog, sequential folio `SGI-YYYY-NNNN`, **Excel export** (`/api/excel/{quote_id}`), **automated catalog + DB backups** (startup + every 24h + on every `POST /api/catalog`, retention 30 days), SQLite indexes on `quotes(fecha, cliente, folio, tipo)` and `clients(nombre)`.
 
 ### Important — daily operations
 1. **SVG preview in UI** — display the uploaded SVG with paths color-coded (face = orange, vinyl = blue, caja outline = gray) so the user can verify detection before quoting.
 
 ### Useful — productivity
-2. **Excel export** — export quote breakdown as `.xlsx` (openpyxl) for clients who need an editable table.
-3. **Multi-SVG per quote** — support quoting multiple signs in one project (different SVGs, each with its own dimensions).
-4. **Company info in PDFs** — address, phone, RFC, logo image embedded in all PDF types. Currently PDFs have no company branding.
-5. **Catalog backup** — on every `POST /api/catalog` write a timestamped copy to `backups/catalog_YYYYMMDD_HHMMSS.json`.
+2. **Multi-SVG per quote** — support quoting multiple signs in one project (different SVGs, each with its own dimensions).
+3. **Company info in PDFs** — address, phone, RFC, logo image embedded in all PDF types. Currently PDFs have no company branding.
 
 ### Lower priority
-6. Authentication (multi-user over network).
-7. Email quote to client directly from the app.
-8. Integration API for ERP/invoicing systems.
+4. Authentication (multi-user over network).
+5. Email quote to client directly from the app.
+6. Integration API for ERP/invoicing systems.
 
 ---
 
@@ -293,7 +307,7 @@ Análisis honesto del estado actual. Marcado por criticidad.
 | G4 | `except Exception` genéricos. | Parcial — `_safe_part` y validación catalog ya loguean. Resto en Fase 2. |
 | G5 | Sin logging estructurado. | ✅ Cerrado (`RotatingFileHandler` + `logger 'cotizador'`) |
 | G6 | Sin Alembic. | Pendiente (cuando migremos a PostgreSQL en Fase 2) |
-| G7 | Sin índices en `quotes`. | Pendiente |
+| G7 | Sin índices en `quotes`. | ✅ Cerrado (`idx_quotes_fecha`, `_cliente`, `_folio`, `_tipo` + `idx_clients_nombre` en `db.init_db()`) |
 | G8 | Sin healthcheck. | ✅ Cerrado (`GET /health`) |
 
 ### Deuda técnica — afecta velocidad de desarrollo
@@ -305,7 +319,7 @@ Análisis honesto del estado actual. Marcado por criticidad.
 | D4 | Sin `requirements.lock`. | ✅ Cerrado (`requirements.lock` con pip-tools) |
 | D5 | Sin Dockerfile. | ✅ Cerrado |
 | D6 | Sin CI/CD. | ✅ Cerrado (`.github/workflows/test.yml`) |
-| D7 | Sin formatter/type checker. | Pendiente |
+| D7 | Sin formatter/type checker. | Parcial — ruff (lint + format) configurado en `pyproject.toml` y corre en CI; type checker (mypy/pyright) pendiente |
 
 ### Falta para SaaS comercial
 - Sistema de pagos (Stripe / MercadoPago)

@@ -33,3 +33,25 @@ ignore = [
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+# ─── mypy (type checker) ─────────────────────────────────────────────────────
+# Modo gradual: solo los módulos críticos al inicio, el resto se ignora hasta
+# que vayan tipándose. La meta es subir el listón con el tiempo, no bloquear
+# desarrollo hoy.
+[tool.mypy]
+python_version = "3.10"
+files = ["calculator.py", "db.py", "excel_gen.py", "main.py"]
+exclude = ["tests/", "tmp/", "backups/", "TRABAJOS/", "static/"]
+# Reglas base — empezamos suaves, subimos con el tiempo:
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+# Stubs/libs sin tipos — silencia los "missing imports" hasta que existan stubs.
+ignore_missing_imports = true
+
+# Por-módulo: pdf_gen y vectorizer son verbose con reportlab/cv2/etc., los
+# excluimos del strict pass por ahora.
+[[tool.mypy.overrides]]
+module = ["pdf_gen", "vectorizer", "catalog_data"]
+ignore_errors = true

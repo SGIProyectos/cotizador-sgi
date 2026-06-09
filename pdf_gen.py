@@ -1,4 +1,6 @@
 import io
+import logging
+import xml.etree.ElementTree as _ET
 from datetime import datetime
 
 from reportlab.lib import colors
@@ -15,6 +17,8 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
+
+log = logging.getLogger("cotizador.pdf")
 
 # Página carta: 21.59 cm ancho. Márgenes 2 cm c/lado → útil = 17.59 cm
 PW = 17.59 * cm
@@ -554,7 +558,7 @@ def _un_ano(fecha_str: str) -> str:
     try:
         d = datetime.strptime(fecha_str, "%d/%m/%Y")
         return d.replace(year=d.year + 1).strftime("%d/%m/%Y")
-    except Exception:
+    except (ValueError, TypeError):
         return "—"
 
 
@@ -605,7 +609,6 @@ def generar_pdf_plano(meta: dict, svg_text: str,
     def _try_svg_groups(svg_str, path_infos):
         """Lee grupos <g> del SVG y fusiona bboxes de sus paths. Retorna None si no hay grupos reales."""
         try:
-            import xml.etree.ElementTree as ET
             id_map = {}
             for p in (path_infos or []):
                 sid = getattr(p, "svg_id", None) or getattr(p, "id", None) or ""
@@ -613,8 +616,9 @@ def generar_pdf_plano(meta: dict, svg_text: str,
                     id_map[sid] = p
             if not id_map:
                 return None
-            root_el = ET.fromstring(svg_str)
-        except Exception:
+            root_el = _ET.fromstring(svg_str)
+        except _ET.ParseError:
+            log.debug("Sin grupos <g> parseables en el SVG del plano", exc_info=True)
             return None
 
         def ns(t):
@@ -766,6 +770,7 @@ def generar_pdf_plano(meta: dict, svg_text: str,
             rlg = svg2rlg(tmp.name)
             os.unlink(tmp.name)
         except Exception:
+            log.warning("svg2rlg falló al renderizar SVG en el plano — se omite el dibujo", exc_info=True)
             rlg = None
         if rlg and rlg.width > 0 and rlg.height > 0:
             sc     = min(avail_w / rlg.width, avail_h / rlg.height)
@@ -792,14 +797,13 @@ def generar_pdf_plano(meta: dict, svg_text: str,
     vb_ox, vb_oy = 0.0, 0.0
     if svg_text:
         try:
-            import xml.etree.ElementTree as _ET
             _svgr = _ET.fromstring(svg_text)
             _vbs  = _svgr.get("viewBox") or _svgr.get("viewbox") or ""
             _vbp  = _vbs.replace(",", " ").split()
             if len(_vbp) == 4:
                 vb_ox, vb_oy = float(_vbp[0]), float(_vbp[1])
-        except Exception:
-            pass
+        except (_ET.ParseError, ValueError):
+            log.debug("No se pudo extraer viewBox para offset del plano", exc_info=True)
 
     def to_pdf(bb):
         """bbox SVG → (px1, px2, py_bot, py_top) en pts PDF, corrigiendo offset viewBox."""
