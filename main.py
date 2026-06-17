@@ -27,7 +27,7 @@ from catalog_data import (
     catalog_to_dict,
 )
 from excel_gen import generar_xlsx
-from pdf_gen import generar_pdf, generar_pdf_entrega, generar_pdf_ot, generar_pdf_plano
+from pdf_gen import generar_pdf, generar_pdf_entrega, generar_pdf_ot
 
 BASE = Path(__file__).parent
 STATIC = BASE / "static"
@@ -319,6 +319,7 @@ class LetrasRequest(_InstMixin):
     tipo_multiplicador: str = "acrilico_con_luz_std"
     ajuste_pct: float = 0.0
     vinil_cercha_id: str = ""
+    led_id: str = "auto"
     cliente: str = ""
     notas: str = ""
 
@@ -448,6 +449,7 @@ async def api_cotizar_letras(req: LetrasRequest):
             tipo_multiplicador=req.tipo_multiplicador,
             ajuste_pct=req.ajuste_pct,
             vinil_cercha_id=req.vinil_cercha_id,
+            led_id=req.led_id,
         )
     except Exception as e:
         raise HTTPException(500, f"Error en cálculo: {e}")
@@ -655,6 +657,7 @@ async def api_ot(quote_id: str, cliente: str = "", notas: str = ""):
         raise HTTPException(404, "Cotización no encontrada")
     if cliente: meta["cliente"] = cliente
     if notas:   meta["notas"]   = notas
+
     pdf_bytes = generar_pdf_ot(result, meta)
     filename  = f"OT_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
     return FileResponse(path=_write_tmp(pdf_bytes, filename), filename=filename, media_type="application/pdf")
@@ -671,33 +674,6 @@ async def api_entrega(quote_id: str, cliente: str = "", notas: str = ""):
     pdf_bytes = generar_pdf_entrega(result, meta)
     filename  = f"Entrega_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
     return FileResponse(path=_write_tmp(pdf_bytes, filename), filename=filename, media_type="application/pdf")
-
-
-@app.get("/api/plano")
-async def api_plano(session_id: str = "", ancho_cm: float = 0,
-                    folio: str = "", cliente: str = "", notas: str = ""):
-    """Genera plano de medidas desde la sesión activa (sin necesidad de quote_id)."""
-    with _state_lock:
-        store = _svg_store.get(session_id)
-    if not store:
-        raise HTTPException(404, "Sesión no encontrada — sube el SVG de nuevo")
-
-    svg_text  = store.get("bytes", "")
-    svg_data  = store.get("svg_data")
-    viewbox_w = svg_data.viewbox_w if svg_data else 0
-    viewbox_h = svg_data.viewbox_h if svg_data else 0
-    paths     = svg_data.paths     if svg_data else []
-
-    real_w = ancho_cm or (svg_data.artboard_w_cm if svg_data else 0) or 60.0
-    meta = {
-        "folio":   folio   or "—",
-        "cliente": cliente or "—",
-        "notas":   notas,
-        "fecha":   datetime.now().strftime("%Y-%m-%d"),
-    }
-    pdf_bytes = generar_pdf_plano(meta, svg_text, real_w, viewbox_w, viewbox_h, paths)
-    fname = f"Plano_{_safe_part(folio)}_{_safe_part(cliente, default='diseno')}.pdf"
-    return FileResponse(path=_write_tmp(pdf_bytes, fname), filename=fname, media_type="application/pdf")
 
 
 @app.get("/api/pdf/{quote_id}")
@@ -776,6 +752,9 @@ def _result_to_dict(r: QuoteResult, qid: str) -> dict:
             "perimetro_total_cm": round(r.perimetro_total_cm, 2),
             "cercha_altura_cm": round(r.cercha_altura_cm, 1),
             "cercha_area_cm2": round(r.cercha_area_cm2, 2),
+            "cercha_min_cm": getattr(r, "cercha_min_cm", 0.0),
+            "cercha_max_cm": getattr(r, "cercha_max_cm", 0.0),
+            "categoria_letra": getattr(r, "categoria_letra", ""),
         },
         "materiales": {
             "cara": {

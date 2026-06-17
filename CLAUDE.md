@@ -47,10 +47,11 @@ Deployed to Render.com via `render.yaml` (Python 3.11, `uvicorn main:app --host 
 
 1. **Upload SVG** → `POST /api/parse-svg` → `calculator.parse_svg()` extracts paths with perimeter, area, and bounding box in SVG pixels → stored in `_svg_store[session_id]` (in-memory; SVG is small and re-uploadable so RAM-only is fine)
 2. **Quote** → `POST /api/cotizar/letras|caja|planas` → calls `cotizar_letras()` / `cotizar_caja()` / `cotizar_planas()`, which scale px→cm, select materials from catalog, compute costs → result written to SQLite via `db.save_quote()` and cached in `_quote_store[quote_id]`; metadata (cliente, notas, folio) cached at `_quote_store[quote_id + "_meta"]`
-3. **PDF / Excel** → `GET /api/pdf/{quote_id}?cliente=X&notas=Y` (cotización), `/api/ot/{quote_id}` (orden de trabajo), `/api/entrega/{quote_id}` (acta de entrega + garantía), `/api/plano?session_id=X&ancho_cm=Y&folio=Z&cliente=W` (measurement plan — no quote_id needed, works from active session), `/api/excel/{quote_id}` (XLSX export) — all written to `tmp/` directory
+3. **PDF / Excel** → `GET /api/pdf/{quote_id}?cliente=X&notas=Y` (cotización), `/api/ot/{quote_id}` (orden de trabajo), `/api/entrega/{quote_id}` (acta de entrega + garantía), `/api/excel/{quote_id}` (XLSX export) — all written to `tmp/` directory
 4. **History** → `GET /api/quotes` (list with filters), `GET /api/quotes/{id}/open` (re-open: rebuilds session + QuoteResult from DB), `DELETE /api/quotes/{id}`
 5. **Clients** → `GET /api/clients?q=` (search), `POST /api/clients` (upsert), `DELETE /api/clients/{id}`
 6. **Catalog** → `GET /api/catalog` returns current in-memory catalog; `POST /api/catalog` calls `catalog_apply()` + `catalog_save()` to persist to `catalog.json`
+7. **Raster → SVG** → `POST /api/vectorize` (uploads JPG/PNG, runs `vectorizer.vectorize()` — flood-fill background removal + vtracer → produces a synthetic SVG that is then re-fed through `parse_svg`, populating `_svg_store` as if the user had uploaded it directly). Only the raster→SVG `vectorize()` survives — the abandoned `vectorize_with_ai` experiment was removed (see §7).
 
 ### Module responsibilities
 
@@ -62,6 +63,7 @@ Deployed to Render.com via `render.yaml` (Python 3.11, `uvicorn main:app --host 
 | `catalog_data.py` | All pricing data (LAMINAS, LEDS_CANAL, LEDS_CAJA, FUENTES, PEGAMENTOS, PRECIOS_BASE, TIPOS_CONSTRUCCION, GRUAS), auto-selection functions, catalog persistence |
 | `pdf_gen.py` | ReportLab PDF generation for all three document types; purely presentational |
 | `excel_gen.py` | openpyxl XLSX export of a `QuoteResult` (Resumen + Letras + Desglose sheets) |
+| `vectorizer.py` | Raster→SVG pipeline: OpenCV flood-fill background removal + vtracer Bézier tracing. Only `vectorize()` is real; do NOT add LLM-based variants (see §7). |
 | `static/index.html` | Single-file SPA (vanilla JS + inline CSS); no build step |
 | `catalog.json` | Runtime price overrides; loaded at startup by `catalog_load()`, updated via `POST /api/catalog` |
 | `cotizador.db` | SQLite database file (quotes, folio_seq, clients tables); auto-created by `db.init_db()` on startup |
@@ -174,11 +176,10 @@ All three request models (`LetrasRequest`, `CajaRequest`, `PlanasRequest`) inher
 - Column widths must be `PW * fraction` (actual points), never percentage strings like `"15%"`
 - All `ParagraphStyle` objects are module-level constants with unique `sgi_*` prefixed names to prevent duplicate registration errors
 
-Four generators:
+Three generators:
 - `generar_pdf(result, meta)` — customer quote (Cotización)
-- `generar_pdf_ot(result, meta)` — internal work order (Orden de Trabajo)
+- `generar_pdf_ot(result, meta)` — internal work order (Orden de Trabajo, single-page portrait)
 - `generar_pdf_entrega(result, meta)` — delivery receipt + warranty (Acta de Entrega)
-- `generar_pdf_plano(meta, svg_text, real_width_cm, viewbox_w, viewbox_h, paths)` — engineering measurement plan in landscape A4; requires `svglib` (already in `requirements.txt`); renders the SVG scaled to fit and annotates per-path dimensions
 
 ### QuoteResult fields (key additions)
 
@@ -303,7 +304,7 @@ Análisis honesto del estado actual. Marcado por criticidad.
 |---|---|---|
 | G1 | Cero tests. | ✅ Cerrado (62 tests, 90% cobertura en `calculator.py`) |
 | G2 | Caches sin TTL. | ✅ Cerrado (24h SVG / 7d quote, purga horaria) |
-| G3 | Estado global no thread-safe. | Pendiente (asumir 1 worker uvicorn por ahora) |
+| G3 | Estado global no thread-safe. | ✅ Cerrado (`threading.RLock` en `_state_lock` protege caches en `main.py`) |
 | G4 | `except Exception` genéricos. | Parcial — `_safe_part` y validación catalog ya loguean. Resto en Fase 2. |
 | G5 | Sin logging estructurado. | ✅ Cerrado (`RotatingFileHandler` + `logger 'cotizador'`) |
 | G6 | Sin Alembic. | Pendiente (cuando migremos a PostgreSQL en Fase 2) |
@@ -319,7 +320,7 @@ Análisis honesto del estado actual. Marcado por criticidad.
 | D4 | Sin `requirements.lock`. | ✅ Cerrado (`requirements.lock` con pip-tools) |
 | D5 | Sin Dockerfile. | ✅ Cerrado |
 | D6 | Sin CI/CD. | ✅ Cerrado (`.github/workflows/test.yml`) |
-| D7 | Sin formatter/type checker. | Parcial — ruff (lint + format) configurado en `pyproject.toml` y corre en CI; type checker (mypy/pyright) pendiente |
+| D7 | Sin formatter/type checker. | ✅ Cerrado — ruff (lint + format) y mypy (modo gradual) configurados en `pyproject.toml` |
 
 ### Falta para SaaS comercial
 - Sistema de pagos (Stripe / MercadoPago)
@@ -435,25 +436,20 @@ Análisis honesto del estado actual. Marcado por criticidad.
 
 ---
 
-## 8. Estado actual del repositorio (snapshot al 2026-06-06)
+## 8. Estado actual del repositorio (snapshot al 2026-06-16)
 
-**Archivos modificados sin commit pendiente:**
-- `CLAUDE.md` (este archivo, sumando el informe)
-- `calculator.py`, `catalog_data.py`, `main.py`, `pdf_gen.py`, `static/index.html`, `requirements.txt` (cambios anteriores)
+Fase 1 de endurecimiento cerrada (commits `18155a3`, `7fd86c2`, `d9bf8a5`, `603f068`, `ed59cad`, `da8776e`, `e4cc9a1`, `e4e1d76`). Lo que sigue documentado como pendiente arriba ya **NO** está pendiente: Dockerfile, `requirements.lock`, CI, ruff, mypy, índices SQLite, backup automático, thread-safety, logging exhaustivo, Excel export, vectorización Claude removida — todo committed.
 
-**Archivos nuevos sin trackear:**
-- `vectorizer.py` (contiene función `vectorize` que SÍ sirve + `vectorize_with_ai` que NO sirve, pendiente decisión)
-- `db.py` (persistencia SQLite, ya integrado)
-- `cotizador.db` (DB SQLite local, NO debe commitearse)
-- `materiales.xlsx`, `.env`, `.env.example`
-- Varias imágenes de referencia en raíz y `TRABAJOS/`
-- `server_err.log`, `tmp_check.py` (debug)
+**Archivos siempre untracked (locales, NO commitear):**
+- `cotizador.db`, `server.log`, `server_err.log`, `tmp_check.py`
+- `.env`, `materiales.xlsx`
+- `EJEMPLOS/` (SVGs y PDFs de prueba que usa el propietario)
 
-**Recomendación al retomar:**
-1. Decidir qué hacer con vectorización IA (recomendado: quitar)
-2. Revisar `.gitignore` — asegurar que `cotizador.db`, `.env`, `*.log`, `tmp_check.py`, imágenes de prueba no se commiteen
-3. Commit limpio del estado funcional
-4. Empezar Fase 1 por el punto que el propietario priorice
+El `.gitignore` ya cubre estos casos — si aparece algo nuevo en `git status` que parezca personal/temporal, agrégalo al `.gitignore` antes de commitear.
+
+**Próximos pasos sugeridos al retomar:**
+1. Render con disco persistente (#13 / C11 — único pendiente de Fase 1, requiere config externa al repo).
+2. Empezar Fase 2 por el punto que el propietario priorice (auth, multi-tenant, migración a Postgres, o reescritura del frontend a Vue). Validar mercado **antes** de invertir en Fase 2 (decisión técnica #10).
 
 ---
 

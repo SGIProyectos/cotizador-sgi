@@ -695,7 +695,10 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
       <div class="info-tag" id="distanciadores-note" style="display:none;background:rgba(232,124,42,0.2);margin-bottom:4px">⚠ Requiere distanciadores de montaje</div>
       <label>Altura de la letra (cm)</label>
       <input type="number" id="altura-letra" value="15" min="1" step="1">
-      <div class="info-tag" id="cercha-auto-tag">Cercha automática: 5 cm</div>
+      <div class="info-tag" id="cercha-auto-tag" style="line-height:1.5">Cercha automática: 5 cm</div>
+      <div id="cercha-signalux-aviso" style="font-size:11px;color:#e87c2a;background:rgba(232,124,42,0.10);border-left:3px solid #e87c2a;padding:6px 10px;margin-top:4px;line-height:1.5;border-radius:3px">
+        SIGNALUX recomienda una cercha de <b>2 a 6 cm</b> para letras pequeñas.
+      </div>
 
       <!-- Avanzado colapsable -->
       <button onclick="toggleAvanzadoLetras()" id="btn-avanzado-letras"
@@ -709,6 +712,9 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
       <div id="avanzado-letras-wrap" style="display:none;margin-top:8px">
         <label>Cercha manual <span style="font-size:10px;opacity:.55">(0 = automático)</span></label>
         <input type="number" id="cercha-manual" value="0" min="0" step="0.5">
+        <div id="cercha-rango-hint" style="font-size:11px;color:#8fa3c4;margin-top:-6px;margin-bottom:8px;line-height:1.4">
+          📐 Ingresa altura de letra para ver el rango recomendado
+        </div>
         <label>Material de la cara</label>
         <select id="mat-cara">
           <option value="auto">Automático según altura</option>
@@ -747,6 +753,8 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
         <select id="vinil-cercha-id" style="display:none">
           <option value="">Sin vinil en cercha</option>
         </select>
+        <!-- LED forzado: oculto, se llena desde el modal de configuración -->
+        <input type="hidden" id="led-letras-id" value="">
       </div>
     </div>
 
@@ -934,15 +942,6 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
           <div class="icon">🎨</div>
           <p>Sube un archivo SVG para visualizarlo aquí</p>
         </div>
-      </div>
-      <div style="padding:8px 12px 4px; display:flex; justify-content:flex-end;">
-        <button id="btn-plano" onclick="abrirPlano()" disabled
-          style="padding:6px 14px; font-size:12px; background:#1a2b4a; color:#eef3fb;
-                 border:1px solid rgba(255,255,255,.18); border-radius:5px; cursor:pointer;
-                 opacity:.45; transition:.15s;"
-          title="Genera PDF con plano de medidas del diseño">
-          📐 Plano de medidas
-        </button>
       </div>
       <div class="paths-grid" id="paths-grid"></div>
     </div>
@@ -1164,7 +1163,6 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
             <span class="cfg-slider-lbl">20 cm</span>
             <span class="cfg-slider-val" id="cfg-cercha-val">8 cm</span>
           </div>
-          <div id="cfg-led-opts" class="cfg-led-list"></div>
 
           <!-- Vinil en cercha -->
           <div style="margin-top:14px;border-top:1px solid #e8ecf2;padding-top:12px">
@@ -1189,6 +1187,61 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
             </div>
           </div>
 
+        </div>
+
+        <!-- ══ Paso 4: Materiales y LEDs (ajustes opcionales) ══ -->
+        <div class="cfg-step" id="cfg-step-materiales">
+          <div class="cfg-step-label"><span class="cfg-step-num">4</span>Materiales y LED <span style="font-size:11px;font-weight:400;color:#8a94a6">— opcional, deja "Auto" si quieres recomendaciones</span></div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#4a5568;display:block;margin-bottom:4px">Material de la cara</label>
+              <select id="cfg-mat-cara" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid #c8d4e8;font-size:13px;background:#fff">
+                <option value="auto">Auto (según altura)</option>
+                <optgroup label="Acrílico">
+                  <option value="acrilico_3mm">Acrílico 3mm</option>
+                  <option value="acrilico_3mm_blanco">Acrílico Blanco 3mm</option>
+                  <option value="acrilico_3mm_colores">Acrílico Color 3mm</option>
+                  <option value="acrilico_3mm_translucido">Acrílico Translúcido 3mm</option>
+                  <option value="acrilico_3mm_espejo">Acrílico Espejo 3mm</option>
+                  <option value="acrilico_5mm">Acrílico 5mm</option>
+                  <option value="acrilico_6mm">Acrílico 6mm</option>
+                </optgroup>
+                <optgroup label="Alucom">
+                  <option value="alucom_base">Alucom Color Base</option>
+                  <option value="alucom_especial">Alucom Acabado Especial</option>
+                  <option value="alucom_espejo">Alucom Espejo</option>
+                </optgroup>
+                <optgroup label="Aluminio">
+                  <option value="aluminio_cal20">Aluminio Calibre 20</option>
+                  <option value="aluminio_cal18">Aluminio Calibre 18</option>
+                </optgroup>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#4a5568;display:block;margin-bottom:4px">Material / calibre de la cercha</label>
+              <select id="cfg-mat-cercha" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid #c8d4e8;font-size:13px;background:#fff">
+                <option value="auto">Auto (según altura)</option>
+                <option value="aluminio_cal22">Aluminio Calibre 22</option>
+                <option value="aluminio_cal20">Aluminio Calibre 20</option>
+                <option value="aluminio_cal18">Aluminio Calibre 18</option>
+                <option value="alucobon_3mm">Alucobon / Dibond 3mm</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr;gap:6px;margin-bottom:10px">
+            <label style="font-size:11px;font-weight:600;color:#4a5568">Espaciado entre módulos LED (cm)</label>
+            <div class="cfg-slider-row">
+              <span class="cfg-slider-lbl">3 cm</span>
+              <input type="range" id="cfg-espaciado-led" min="3" max="15" value="6" step="1" oninput="onCfgEspaciadoLedChange()">
+              <span class="cfg-slider-lbl">15 cm</span>
+              <span class="cfg-slider-val" id="cfg-espaciado-led-val">6 cm</span>
+            </div>
+          </div>
+
+          <div style="font-size:11px;font-weight:600;color:#4a5568;margin-top:8px;margin-bottom:4px">Tipo de LED <span style="font-weight:400;color:#8a94a6">— click para fijar uno, deja en blanco para automático</span></div>
+          <div id="cfg-led-opts" class="cfg-led-list"></div>
         </div>
 
       </div><!-- /cfg-sec-letras -->
@@ -1581,8 +1634,6 @@ async function uploadSVG(file) {
     dz.classList.add("ok");
     document.getElementById("drop-label").textContent = `✓ ${file.name}  (${data.paths.length} paths)`;
     document.getElementById("btn-calc").disabled = false;
-    const btnPlano = document.getElementById("btn-plano");
-    if (btnPlano) { btnPlano.disabled = false; btnPlano.style.opacity = "1"; }
 
     actualizarAsesor(true);   // actualiza sidebar, path cards y asesor
     switchTab("svg");
@@ -2073,6 +2124,9 @@ function usarSvgTrazado() {
   _svgFromVectorizer = true;
 
   document.getElementById("ancho-real").value  = anchoCm;
+  if (_traceAltoCm > 0) {
+    document.getElementById("altura-letra").value = _traceAltoCm;
+  }
   document.getElementById("pared-ancho").value = "";
   document.getElementById("pared-alto").value  = "";
 
@@ -2084,8 +2138,6 @@ function usarSvgTrazado() {
   document.getElementById("drop-label").textContent =
     `✓ vectorizado (${data.paths.length} paths)`;
   document.getElementById("btn-calc").disabled = false;
-  const btnPlano = document.getElementById("btn-plano");
-  if (btnPlano) { btnPlano.disabled = false; btnPlano.style.opacity = "1"; }
 
   actualizarAsesor(true);
   switchTab("svg");
@@ -2131,28 +2183,33 @@ function colorizePaths(svgEl, paths) {
       if (!el) return;
       const isCaja = useId ? (p.svg_id === cajaId) : (p === cajaPath);
       if (isCaja) {
+        // Contorno de caja — gris
         el.style.fill        = "rgba(120,120,120,0.08)";
         el.style.stroke      = "#888";
         el.style.strokeWidth = "1.5";
       } else if (p.is_closed && p.area_px > 0) {
-        el.style.fill        = "rgba(39,174,96,0.22)";
-        el.style.stroke      = "#27ae60";
+        // Vinil de corte / diseño interno — azul (spec roadmap)
+        el.style.fill        = "rgba(52,152,219,0.22)";
+        el.style.stroke      = "#3498db";
         el.style.strokeWidth = "1.5";
       } else {
+        // Trazos abiertos / problemáticos — rojo punteado (alerta)
         el.style.fill            = "none";
-        el.style.stroke          = "#e87c2a";
+        el.style.stroke          = "#e74c3c";
         el.style.strokeWidth     = "1.5";
         el.style.strokeDasharray = "4 3";
       }
     });
 
     _showSvgLegend([
-      { color:"#888",    fill:"rgba(120,120,120,0.08)", label:"Contorno caja" },
-      { color:"#27ae60", fill:"rgba(39,174,96,0.22)",   label:"Diseño / vinil" },
-      { color:"#e87c2a", fill:"none", dash:true,         label:"Trazos abiertos" },
+      { color:"#888",    fill:"rgba(120,120,120,0.08)", label:"Contorno de caja" },
+      { color:"#3498db", fill:"rgba(52,152,219,0.22)",  label:"Vinil / diseño interno" },
+      { color:"#e74c3c", fill:"none", dash:true,         label:"⚠ Trazo abierto (no se cortará)" },
     ]);
 
   } else {
+    // Letras 3D / planas: paleta naranja-cálida (cara material) por letra
+    // para distinguirlas individualmente sin perder el "naranja = cara" del spec
     let colorIdx = 0;
     paths.forEach((p, i) => {
       const el = getEl(p, i);
@@ -2164,19 +2221,29 @@ function colorizePaths(svgEl, paths) {
         el.style.stroke      = c;
         el.style.strokeWidth = "1.5";
       } else {
+        // Trazo abierto = alerta — no se cortará en producción
         el.style.fill            = "none";
-        el.style.stroke          = "#bbb";
-        el.style.strokeWidth     = "1";
+        el.style.stroke          = "#e74c3c";
+        el.style.strokeWidth     = "1.2";
         el.style.strokeDasharray = "3 3";
       }
     });
 
-    const legendItems = paths
-      .filter(p => p.is_closed)
-      .map((p, i) => ({ color: PATH_PALETTE[i % PATH_PALETTE.length], fill: PATH_PALETTE[i % PATH_PALETTE.length] + "33", label: p.id }))
-      .slice(0, 8);
-    if (paths.some(p => !p.is_closed)) {
-      legendItems.push({ color:"#bbb", fill:"none", dash:true, label:"Trazos abiertos" });
+    const closedCount = paths.filter(p => p.is_closed).length;
+    const openCount   = paths.length - closedCount;
+    const legendItems = [];
+    if (closedCount > 0) {
+      legendItems.push({
+        color: PATH_PALETTE[0],
+        fill:  PATH_PALETTE[0] + "33",
+        label: `${closedCount} letras detectadas (1 color por letra)`,
+      });
+    }
+    if (openCount > 0) {
+      legendItems.push({
+        color: "#e74c3c", fill: "none", dash: true,
+        label: `⚠ ${openCount} trazo(s) abierto(s) — no se cortarán`,
+      });
     }
     _showSvgLegend(legendItems);
   }
@@ -2433,6 +2500,7 @@ async function calcular() {
         tipo_multiplicador: document.getElementById("tipo-multiplicador").value,
         ajuste_pct:         parseFloat(document.getElementById("ajuste-pct").value) || 0,
         vinil_cercha_id:    document.getElementById("vinil-cercha-id").value,
+        led_id:             document.getElementById("led-letras-id")?.value || "auto",
         cliente,
         ..._instBody(),
       };
@@ -3496,12 +3564,19 @@ function _instBody() {
 
 // ─── ASESOR AUTOMÁTICO ───────────────────────────────────────────────────────
 
+// Rango oficial Signalux + heurística de fabricación (espejo de catalog_data.cercha_rango_cm).
+// Devuelve {min, max, rec, cat} o null si no hay altura.
+function _cerchaRango(alturaCm) {
+  if (!alturaCm || alturaCm <= 0) return null;
+  if (alturaCm <= 15)  return {min: 2,  max: 6,  rec: 4,  cat: "letra pequeña"};
+  if (alturaCm <= 30)  return {min: 4,  max: 10, rec: 6,  cat: "letra pequeña-mediana"};
+  if (alturaCm <= 60)  return {min: 8,  max: 15, rec: 10, cat: "letra mediana"};
+  if (alturaCm <= 120) return {min: 10, max: 20, rec: 15, cat: "letra grande"};
+  return {min: 12, max: 25, rec: 18, cat: "letra gigante"};
+}
 function cerchaParaAltura(h) {
-  if (h <= 10) return 3;
-  if (h <= 20) return 5;
-  if (h <= 35) return 8;
-  if (h <= 60) return 12;
-  return 15;
+  const r = _cerchaRango(h);
+  return r ? r.rec : 4;
 }
 
 // Devuelve el factor de escala correcto:
@@ -3544,6 +3619,19 @@ function actualizarAsesor(autoFillAltura = false) {
   document.getElementById("cercha-auto-tag").textContent =
     cerchaManual > 0 ? `Cercha manual: ${cerchaManual} cm` : `Cercha automática: ${cercha} cm`;
 
+  // Aviso explícito Signalux según altura
+  const _rng = _cerchaRango(alturaActual);
+  const _aviso = document.getElementById("cercha-signalux-aviso");
+  if (_aviso) {
+    if (!_rng) {
+      _aviso.innerHTML = `SIGNALUX: ingresa la altura de letra para ver el rango recomendado.`;
+    } else {
+      _aviso.innerHTML =
+        `SIGNALUX recomienda una cercha de <b>${_rng.min} a ${_rng.max} cm</b> para ${_rng.cat} ` +
+        `(altura ${alturaActual.toFixed(0)} cm).`;
+    }
+  }
+
   // ── 3. Actualizar path cards con medidas en cm ────────────────────────────
   lastScaleFactor  = sf;
   lastCerchaAltura = cercha;
@@ -3555,10 +3643,33 @@ function actualizarAsesor(autoFillAltura = false) {
 
   // ── 4. Panel asesor ───────────────────────────────────────────────────────
 
-  let categoria;
-  if (alturaActual <= 20) categoria = "Pequeñas";
-  else if (alturaActual <= 40) categoria = "Medianas";
-  else categoria = "Grandes";
+  const rango      = _cerchaRango(alturaActual);
+  const catActual  = rango ? rango.cat : "";
+  const valorActual = cerchaManual > 0 ? cerchaManual : cercha;
+  const fueraRango  = rango && (valorActual < rango.min || valorActual > rango.max);
+
+  // Tabla completa Signalux + cajas (siempre visible)
+  const tablaSignalux = [
+    {nombre: "Letra pequeña",         altura: "≤ 15 cm",     min: 2,  max: 6,  rec: 4,  cat: "letra pequeña"},
+    {nombre: "Letra pequeña-mediana", altura: "15 – 30 cm",  min: 4,  max: 10, rec: 6,  cat: "letra pequeña-mediana"},
+    {nombre: "Letra mediana",         altura: "30 – 60 cm",  min: 8,  max: 15, rec: 10, cat: "letra mediana"},
+    {nombre: "Letra grande",          altura: "60 – 120 cm", min: 10, max: 20, rec: 15, cat: "letra grande"},
+    {nombre: "Letra gigante",         altura: "> 120 cm",    min: 12, max: 25, rec: 18, cat: "letra gigante"},
+    {nombre: "Caja de luz interior",  altura: "—",           min: 6,  max: 18, rec: 10, cat: "caja interior"},
+    {nombre: "Caja de luz exterior",  altura: "—",           min: 8,  max: 20, rec: 12, cat: "caja exterior"},
+  ];
+  const filasTabla = tablaSignalux.map(r => {
+    const activa = r.cat === catActual;
+    const bg     = activa ? "background:#fff4e6;border-left:3px solid #e87c2a" : "";
+    const wt     = activa ? "font-weight:700;color:#1a2b4a" : "";
+    const flecha = activa ? "▸ " : "&nbsp;&nbsp;&nbsp;";
+    return `<tr style="${bg}">
+      <td style="padding:4px 6px;font-size:11px;${wt}">${flecha}${r.nombre}</td>
+      <td style="padding:4px 6px;font-size:11px;color:#6b7d9c">${r.altura}</td>
+      <td style="padding:4px 6px;font-size:11px;${wt};text-align:center">${r.min}–${r.max} cm</td>
+      <td style="padding:4px 6px;font-size:11px;${wt};text-align:center">${r.rec} cm</td>
+    </tr>`;
+  }).join("");
 
   const compatibles = (catalog?.leds_canal || []).filter(
     l => l.profundidad_min <= cercha && cercha <= l.profundidad_max
@@ -3583,23 +3694,53 @@ function actualizarAsesor(autoFillAltura = false) {
       <span class="asesor-val">${alturaActual.toFixed(1)} cm</span>
     </div>
     <div class="asesor-row">
-      <span class="asesor-label">Cercha recomendada</span>
-      <span class="asesor-val ok">${cercha} cm</span>
+      <span class="asesor-label">Cercha en uso</span>
+      <span class="asesor-val ${fueraRango ? '' : 'ok'}" style="${fueraRango ? 'color:#e87c2a;font-weight:700' : ''}">
+        ${valorActual} cm${fueraRango ? ' ⚠ fuera de rango' : ''}
+      </span>
     </div>
-    <div class="asesor-row">
-      <span class="asesor-label">Categoría</span>
-      <span style="font-size:11px;font-weight:600">Letras ${categoria}</span>
+
+    <div style="margin-top:14px;font-size:10px;color:#6b7d9c;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">
+      Recomendación Signalux — profundidad de cercha
     </div>
-    <div style="margin-top:10px;font-size:10px;opacity:.5;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">
+    <table style="width:100%;border-collapse:collapse;background:#f7f9fc;border-radius:4px;overflow:hidden">
+      <thead>
+        <tr style="background:#1a2b4a;color:#fff">
+          <th style="padding:5px 6px;font-size:10px;text-align:left">Categoría</th>
+          <th style="padding:5px 6px;font-size:10px;text-align:left">Altura letra</th>
+          <th style="padding:5px 6px;font-size:10px;text-align:center">Rango</th>
+          <th style="padding:5px 6px;font-size:10px;text-align:center">Sugerido</th>
+        </tr>
+      </thead>
+      <tbody>${filasTabla}</tbody>
+    </table>
+    <div style="margin-top:6px;font-size:10px;color:#6b7d9c;line-height:1.5">
+      Fuente: catálogo Signalux (profundidades de LED por aplicación) + heurística de fabricación.
+    </div>
+
+    <div style="margin-top:14px;font-size:10px;opacity:.5;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">
       LEDs compatibles — cercha ${cercha} cm
     </div>
     ${ledsHtml}
   `;
 }
 
+function _actualizarCerchaHint() {
+  const h = parseFloat(document.getElementById("altura-letra")?.value) || 0;
+  const hint = document.getElementById("cercha-rango-hint");
+  if (!hint) return;
+  const r = _cerchaRango(h);
+  if (!r) {
+    hint.innerHTML = "📐 Ingresa altura de letra para ver el rango recomendado";
+    return;
+  }
+  hint.innerHTML = `📐 Para ${h.toFixed(0)} cm de alto (<b>${r.cat}</b>): ` +
+                   `rango recomendado <b>${r.min}–${r.max} cm</b>, sugerido <b>${r.rec} cm</b>`;
+}
 document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("altura-letra").addEventListener("input",  () => { actualizarAsesor(); _updateFormulaPreview(); });
+  document.getElementById("altura-letra").addEventListener("input",  () => { actualizarAsesor(); _updateFormulaPreview(); _actualizarCerchaHint(); });
   document.getElementById("cercha-manual").addEventListener("input", () => { actualizarAsesor(); if (previewMode === "3d") render3D(); });
+  _actualizarCerchaHint();
   document.getElementById("mat-cara")?.addEventListener("change", () => { if (previewMode === "3d") render3D(); });
   document.getElementById("tipo-construccion")?.addEventListener("change", () => { if (previewMode === "3d") render3D(); });
   document.getElementById("ancho-real").addEventListener("input",    () => { actualizarAsesor(); _updateFormulaPreview(); renderWallPreview(); });
@@ -3635,22 +3776,6 @@ function _pdfParams() {
   if (cliente) p.set("cliente", cliente);
   if (notas)   p.set("notas",   notas);
   return p.toString();
-}
-
-function abrirPlano() {
-  if (!sessionId) { showToast("Primero sube un SVG", "err"); return; }
-  const ancho  = parseFloat(document.getElementById("ancho-real")?.value || 0);
-  const cli    = document.getElementById("cliente")?.value?.trim() || "";
-  // Si ya hay una cotización guardada, usa su folio; si no, cadena vacía
-  const folioEl = document.querySelector("#result-content [data-folio]");
-  const folio   = folioEl ? folioEl.dataset.folio : "";
-  const params  = new URLSearchParams({
-    session_id: sessionId,
-    ancho_cm:   ancho || 60,
-    folio:      folio,
-    cliente:    cli,
-  });
-  window.open(`/api/plano?${params}`, "_blank");
 }
 
 function actualizarPdfUrl(quoteId) {
@@ -3754,6 +3879,21 @@ async function openCfgModal() {
   const slider = document.getElementById("cfg-cercha-slider");
   if (slider) slider.value = cerchaMain > 0 ? cerchaMain : cerchaRec;
 
+  // Pre-popular paso 4 (material cara/cercha + espaciado LED) desde el sidebar
+  const cfgMatCara   = document.getElementById("cfg-mat-cara");
+  const cfgMatCercha = document.getElementById("cfg-mat-cercha");
+  const cfgEspLed    = document.getElementById("cfg-espaciado-led");
+  const cfgEspLedVal = document.getElementById("cfg-espaciado-led-val");
+  if (cfgMatCara)   cfgMatCara.value   = document.getElementById("mat-cara")?.value   || "auto";
+  if (cfgMatCercha) cfgMatCercha.value = document.getElementById("mat-cercha")?.value || "auto";
+  if (cfgEspLed) {
+    const esp = parseFloat(document.getElementById("espaciado-led")?.value) || 6;
+    cfgEspLed.value = esp;
+    if (cfgEspLedVal) cfgEspLedVal.textContent = `${esp} cm`;
+  }
+  // LED pre-seleccionado (si el sidebar ya tiene uno fijado)
+  cfgSelectedLedId = document.getElementById("led-letras-id")?.value || "";
+
   renderCfgCerchaRec();
 
   // Pre-popular vinil cercha desde el select oculto del sidebar
@@ -3797,27 +3937,38 @@ function renderCfgCerchaRec() {
   const altura   = parseFloat(document.getElementById("cfg-altura")?.value) || 15;
   const slider   = document.getElementById("cfg-cercha-slider");
   const valLabel = document.getElementById("cfg-cercha-val");
-  const rec      = cerchaParaAltura(altura);
+  const rng      = _cerchaRango(altura) || {min: 2, max: 6, rec: 4, cat: "letra pequeña"};
+  const rec      = rng.rec;
   const actual   = parseInt(slider?.value || rec);
 
   if (valLabel) valLabel.textContent = `${actual} cm`;
 
   const recBox = document.getElementById("cfg-cercha-rec");
   if (recBox) {
-    const diff = actual - rec;
-    let statusColor = "#16a34a", statusText = `✓ Profundidad recomendada para ${altura} cm de altura`;
-    if (Math.abs(diff) > 2) {
-      statusColor = diff > 0 ? "#d97706" : "#dc2626";
-      statusText  = diff > 0
-        ? `↑ ${actual} cm — más profunda de lo recomendado (${rec} cm)`
-        : `↓ ${actual} cm — más estrecha de lo recomendado (${rec} cm)`;
+    const dentroRango = actual >= rng.min && actual <= rng.max;
+    let statusColor, statusText;
+    if (dentroRango) {
+      statusColor = "#16a34a";
+      statusText  = `✓ ${actual} cm está dentro del rango Signalux para ${rng.cat}`;
+    } else if (actual > rng.max) {
+      statusColor = "#d97706";
+      statusText  = `↑ ${actual} cm — supera el rango Signalux (${rng.min}–${rng.max} cm)`;
+    } else {
+      statusColor = "#dc2626";
+      statusText  = `↓ ${actual} cm — por debajo del rango Signalux (${rng.min}–${rng.max} cm)`;
     }
     recBox.innerHTML = `
-      <div class="cfg-rec-title">Cercha recomendada: ${rec} cm</div>
-      <div class="cfg-rec-status" style="color:${statusColor}">${statusText}</div>`;
+      <div class="cfg-rec-title">
+        Cercha recomendada por el tipo de luz a utilizar de SIGNALUX:
+        profundidad entre <span style="color:#e87c2a">${rng.min} y ${rng.max} cm</span>
+      </div>
+      <div style="font-size:11px;color:#6b7d9c;margin-top:3px">
+        Sugerido para ${rng.cat} (altura ${altura.toFixed(0)} cm): <b>${rec} cm</b>
+      </div>
+      <div class="cfg-rec-status" style="color:${statusColor};margin-top:4px">${statusText}</div>`;
   }
 
-  // LEDs compatibles con la profundidad seleccionada
+  // LEDs compatibles con la profundidad seleccionada — clickables para fijar uno
   const ledsContainer = document.getElementById("cfg-led-opts");
   if (!ledsContainer) return;
   const leds = (catalog?.leds_canal || []).filter(
@@ -3825,17 +3976,44 @@ function renderCfgCerchaRec() {
   );
   if (!leds.length) {
     ledsContainer.innerHTML = `<div style="font-size:11px;opacity:.5;padding:6px 0">Sin LEDs en catálogo para esta profundidad</div>`;
+    cfgSelectedLedId = "";
     return;
   }
-  ledsContainer.innerHTML = leds.map((l, i) => `
-    <div class="cfg-led-item${i === 0 ? " best" : ""}">
-      <span class="cfg-led-badge">${i === 0 ? "Mejor" : l.ip}</span>
-      <div class="cfg-led-info">
-        <div class="cfg-led-name">${l.nombre}</div>
-        <div class="cfg-led-spec">${l.ip} · ${l.watts_modulo} W/mod${l.lumenes ? ` · ${l.lumenes} lm` : ""} · cada ${actual} cm</div>
-      </div>
-      <div class="cfg-led-price">$${(l.precio_modulo||0).toFixed(2)}/mod</div>
-    </div>`).join("");
+  // Si el LED seleccionado ya no es compatible con la nueva profundidad, reset a auto
+  if (cfgSelectedLedId && !leds.some(l => l.id === cfgSelectedLedId)) {
+    cfgSelectedLedId = "";
+  }
+  ledsContainer.innerHTML = leds.map((l, i) => {
+    const isSelected = (cfgSelectedLedId === l.id);
+    const isBest     = (i === 0 && !cfgSelectedLedId);
+    const cls        = "cfg-led-item" + (isBest ? " best" : "") + (isSelected ? " selected" : "");
+    const badge      = isSelected ? "Elegido" : (isBest ? "Mejor" : l.ip);
+    return `
+      <div class="${cls}" data-led-id="${l.id}" onclick="onCfgLedClick('${l.id}')"
+           style="cursor:pointer${isSelected ? ';border:2px solid var(--naranja);background:rgba(232,124,42,.08)' : ''}">
+        <span class="cfg-led-badge">${badge}</span>
+        <div class="cfg-led-info">
+          <div class="cfg-led-name">${l.nombre}</div>
+          <div class="cfg-led-spec">${l.ip} · ${l.watts_modulo} W/mod${l.lumenes ? ` · ${l.lumenes} lm` : ""} · cada ${actual} cm</div>
+        </div>
+        <div class="cfg-led-price">$${(l.precio_modulo||0).toFixed(2)}/mod</div>
+      </div>`;
+  }).join("");
+}
+
+// LED seleccionado en el modal (vacío = auto/recomendado)
+let cfgSelectedLedId = "";
+
+function onCfgLedClick(ledId) {
+  // Toggle: si ya estaba elegido, lo quitamos (vuelve a auto)
+  cfgSelectedLedId = (cfgSelectedLedId === ledId) ? "" : ledId;
+  renderCfgCerchaRec();
+}
+
+function onCfgEspaciadoLedChange() {
+  const slider   = document.getElementById("cfg-espaciado-led");
+  const valLabel = document.getElementById("cfg-espaciado-led-val");
+  if (valLabel && slider) valLabel.textContent = `${slider.value} cm`;
 }
 
 function onCfgAlturaChange() {
@@ -3961,6 +4139,19 @@ function aplicarConfiguracion() {
       : "";
     const hidSel = document.getElementById("vinil-cercha-id");
     if (hidSel) hidSel.value = vinilId;
+
+    // Paso 4: material cara, material cercha, espaciado LED, LED elegido
+    const matCaraVal   = document.getElementById("cfg-mat-cara")?.value   || "auto";
+    const matCerchaVal = document.getElementById("cfg-mat-cercha")?.value || "auto";
+    const espLedVal    = parseFloat(document.getElementById("cfg-espaciado-led")?.value) || 6;
+    const matCaraSel   = document.getElementById("mat-cara");
+    const matCerchaSel = document.getElementById("mat-cercha");
+    const espLedInp    = document.getElementById("espaciado-led");
+    const ledHidden    = document.getElementById("led-letras-id");
+    if (matCaraSel)   matCaraSel.value   = matCaraVal;
+    if (matCerchaSel) matCerchaSel.value = matCerchaVal;
+    if (espLedInp)    espLedInp.value    = espLedVal;
+    if (ledHidden)    ledHidden.value    = cfgSelectedLedId || "auto";
 
     actualizarAsesor();
 
