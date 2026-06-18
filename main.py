@@ -288,7 +288,9 @@ async def api_parse_svg(file: UploadFile = File(...)):
         "viewbox_h": svg_data.viewbox_h,
         "svg_unit": svg_data.svg_unit,
         "svg_text": svg_text_decoded,
-        "max_letter_height_px": round(svg_data.max_letter_height_px, 2),
+        "max_pieza_height_px": round(svg_data.max_pieza_height_px, 2),
+        # alias retro-compatible para clientes viejos que aún lean el nombre anterior
+        "max_letter_height_px": round(svg_data.max_pieza_height_px, 2),
         "artboard_w_cm": round(svg_data.artboard_w_cm, 2),
     }
 

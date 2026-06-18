@@ -1607,7 +1607,7 @@ async function uploadSVG(file) {
     if (!res.ok) throw new Error(data.detail || "Error");
 
     sessionId      = data.session_id;
-    svgMaxHeightPx = data.max_letter_height_px || 0;
+    svgMaxHeightPx = data.max_pieza_height_px || data.max_letter_height_px || 0;
     svgViewboxW    = data.viewbox_w || 0;
     svgViewboxH    = data.viewbox_h || 0;
     svgArtboardWCm = data.artboard_w_cm || 0;
@@ -2115,7 +2115,7 @@ function usarSvgTrazado() {
   // Aplicar datos directamente sin re-subir (la sesión ya está creada en el servidor)
   const data     = _traceSessionData;
   sessionId      = data.session_id;
-  svgMaxHeightPx = data.max_letter_height_px || 0;
+  svgMaxHeightPx = data.max_pieza_height_px || data.max_letter_height_px || 0;
   svgViewboxW    = data.viewbox_w  || 0;
   svgViewboxH    = data.viewbox_h  || 0;
   svgArtboardWCm = data.artboard_w_cm || 0;
@@ -4420,7 +4420,7 @@ async function reabrirCotizacion(qid) {
     svgViewboxW    = data.viewbox_w        || 0;
     svgViewboxH    = data.viewbox_h        || 0;
     svgArtboardWCm = data.artboard_w_cm    || 0;
-    svgMaxHeightPx = data.max_letter_height_px || 0;
+    svgMaxHeightPx = data.max_pieza_height_px || data.max_letter_height_px || 0;
     quoteId        = data.quote_id;
     currentSvgText = data.svg_text || null;
     _svgFromVectorizer = false;

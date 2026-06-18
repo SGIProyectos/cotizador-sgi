@@ -1,21 +1,22 @@
-import io
 import logging
 import math
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
-from svgpathtools import svg2paths2
+from svgpathtools import parse_path
 
 from catalog_data import (
     DISTANCIADORES,
     LAMINAS,
     LEDS_CAJA,
+    LEDS_CANAL,
     PEGAMENTOS,
     PRECIOS_BASE,
     PRECIOS_CAJA_M2,
     TIPOS_CONSTRUCCION,
     VINILOS_CERCHA,
-    cercha_recomendada_cm,
+    cercha_rango_cm,
     fuente_optima,
     led_recomendado,
     material_cara,
@@ -44,10 +45,14 @@ class SVGData:
     paths: list[PathInfo]
     viewbox_w: float
     viewbox_h: float
-    svg_unit: str           # "px" | "mm" | "cm" | "pt"
+    svg_unit: str           # "px" | "mm" | "cm" | "pt" | "in"
     scale_factor: float = 1.0
-    max_letter_height_px: float = 0.0   # altura máx detectada de los paths (bbox h)
-    artboard_w_cm: float = 0.0          # >0 si es SVG de Illustrator (viewBox en pt)
+    max_pieza_height_px: float = 0.0    # altura máx detectada entre las piezas
+    artboard_w_cm: float = 0.0          # >0 si la unidad real del SVG se puede mapear a cm
+    # — alias retro-compatible para callers viejos —
+    @property
+    def max_letter_height_px(self) -> float:
+        return self.max_pieza_height_px
 
 
 @dataclass
@@ -92,6 +97,10 @@ class QuoteResult:
     desglose: list[dict] = field(default_factory=list)
     desglose_letras: list[dict] = field(default_factory=list)
     altura_letra_cm: float = 0.0
+    # Rango recomendado de profundidad de cercha según altura (catálogo Signalux)
+    cercha_min_cm: float = 0.0
+    cercha_max_cm: float = 0.0
+    categoria_letra: str = ""           # "Letra pequeña", "Letra mediana", etc.
     precio_venta_costo: float = 0.0     # precio mínimo por costo+margen (referencia)
     tipo_multiplicador: str = ""
     multiplicador_valor: float = 1.0
@@ -134,86 +143,406 @@ def _path_area_shoelace(path, samples: int = 500) -> float:
         return 0.0
 
 
-def _parse_viewbox(svg_root) -> tuple[float, float, str]:
-    """Extrae dimensiones del SVG. Devuelve (ancho_px, alto_px, unidad)."""
+# ─── HELPERS: UNIDADES, CSS, TRANSFORMS, PRIMITIVAS ──────────────────────────
+
+# Factores de conversión a centímetros para unidades SVG comunes.
+_UNIT_TO_CM = {
+    "mm": 0.1,
+    "cm": 1.0,
+    "in": 2.54,
+    "pt": 2.54 / 72.0,
+    "pc": 2.54 * 12 / 72.0,
+    "px": 0.0,   # px no es físico; 0 = unidad no determinable
+}
+
+# Tag de namespace SVG → tag corto (sin namespace).
+def _ns(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+
+def _parse_length(val: str) -> tuple[float, str]:
+    """'200mm' → (200.0, 'mm'). '1024' → (1024.0, '')."""
+    if not val:
+        return 0.0, ""
+    val = val.strip()
+    m = re.match(r"^([\-+]?\d*\.?\d+)\s*([a-zA-Z%]*)$", val)
+    if not m:
+        return 0.0, ""
+    try:
+        return float(m.group(1)), m.group(2).lower()
+    except ValueError:
+        return 0.0, ""
+
+
+def _parse_viewbox(svg_root) -> tuple[float, float, str, float]:
+    """Devuelve (vb_w, vb_h, unidad, factor_to_cm).
+
+    factor_to_cm = cuántos cm reales vale 1 unidad del viewBox.
+    Si es 0.0, la unidad es px sin información física → indeterminable.
+    Casos manejados:
+      - Illustrator (style="enable-background:..."): viewBox en pt
+      - <svg width="200mm" height="...">: width define el ancho real físico
+      - <svg width="2cm">: idem
+      - Sin unidad explícita y sin marca Illustrator: px (factor=0)
+    """
     vb = svg_root.get("viewBox", "")
     width_attr  = svg_root.get("width", "")
     height_attr = svg_root.get("height", "")
+    style       = svg_root.get("style", "") or ""
 
-    # Detectar unidad
-    unit = "px"
-    for u in ("mm", "cm", "in", "pt"):
-        if u in width_attr:
-            unit = u
-            break
-
-    def to_px(val: str) -> float:
-        val = val.strip()
-        conv = {"mm": 3.7795, "cm": 37.795, "in": 96.0, "pt": 1.3333, "px": 1.0}
-        for u, f in conv.items():
-            if val.endswith(u):
-                return float(val.replace(u, "")) * f
-        try:
-            return float(val)
-        except ValueError:
-            return 0.0
-
+    # Parse viewBox primero
+    vb_w = vb_h = 0.0
     if vb:
         parts = vb.replace(",", " ").split()
         if len(parts) == 4:
-            return float(parts[2]), float(parts[3]), unit
+            try:
+                vb_w = float(parts[2])
+                vb_h = float(parts[3])
+            except ValueError:
+                pass
 
-    w = to_px(width_attr)
-    h = to_px(height_attr)
-    return w or 500.0, h or 500.0, unit
+    unit = "px"
+    factor_to_cm = 0.0
+
+    # Caso A: Illustrator (viewBox interpretado como pt)
+    if "enable-background" in style:
+        unit = "pt"
+        factor_to_cm = _UNIT_TO_CM["pt"]
+    else:
+        # Caso B: width con unidad física → derivar el factor
+        w_val, w_unit = _parse_length(width_attr)
+        if w_val > 0 and w_unit in _UNIT_TO_CM and w_unit != "px":
+            unit = w_unit
+            w_cm = w_val * _UNIT_TO_CM[w_unit]
+            if vb_w > 0:
+                factor_to_cm = w_cm / vb_w
+            else:
+                factor_to_cm = _UNIT_TO_CM[w_unit]
+                vb_w = w_val
+
+    # Fallback: si no hay viewBox, usar width/height
+    if vb_w <= 0:
+        w_val, _ = _parse_length(width_attr)
+        h_val, _ = _parse_length(height_attr)
+        vb_w = w_val or 500.0
+        vb_h = h_val or 500.0
+
+    if vb_h <= 0:
+        h_val, _ = _parse_length(height_attr)
+        vb_h = h_val or vb_w
+
+    return vb_w, vb_h, unit, factor_to_cm
+
+
+def _parse_style_classes(svg_text: str) -> dict:
+    """Lee bloques <style>...</style> y extrae .clase{fill:color}.
+
+    Devuelve {clase: fill_color} para que los paths con class='clase' puedan
+    resolver su fill efectivo. Maneja múltiples reglas y selectores agrupados.
+    """
+    mapping: dict[str, str] = {}
+    for sty in re.findall(r"<style[^>]*>(.*?)</style>", svg_text, flags=re.DOTALL | re.IGNORECASE):
+        for selector, body in re.findall(r"([^{]+)\{([^}]*)\}", sty):
+            fill_m = re.search(r"\bfill\s*:\s*([^;]+)", body, flags=re.IGNORECASE)
+            if not fill_m:
+                continue
+            fill_val = fill_m.group(1).strip()
+            for sel in selector.split(","):
+                sel = sel.strip()
+                # solo selectores de clase simples (.clase)
+                cls_m = re.match(r"\.([\w-]+)\s*$", sel)
+                if cls_m:
+                    mapping[cls_m.group(1)] = fill_val
+    return mapping
+
+
+_IDENTITY_MATRIX = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
+
+def _matmul(m1: tuple, m2: tuple) -> tuple:
+    """Composición de transforms affine 2D. m_result(p) = m1(m2(p))."""
+    a1, b1, c1, d1, e1, f1 = m1
+    a2, b2, c2, d2, e2, f2 = m2
+    return (
+        a1 * a2 + c1 * b2,
+        b1 * a2 + d1 * b2,
+        a1 * c2 + c1 * d2,
+        b1 * c2 + d1 * d2,
+        a1 * e2 + c1 * f2 + e1,
+        b1 * e2 + d1 * f2 + f1,
+    )
+
+
+def _parse_transform(t_str: str) -> tuple:
+    """Convierte un atributo transform='translate(x,y) scale(s) ...' en matriz affine.
+
+    Maneja translate, scale, rotate, matrix, skewX, skewY. Operaciones
+    desconocidas se ignoran (loguean warning). Devuelve la identidad si t_str
+    es vacío o no parseable.
+    """
+    if not t_str:
+        return _IDENTITY_MATRIX
+    result = _IDENTITY_MATRIX
+    for op, args_str in re.findall(r"([a-zA-Z]+)\s*\(\s*([^)]*)\)", t_str):
+        try:
+            args = [float(x) for x in re.split(r"[\s,]+", args_str.strip()) if x]
+        except ValueError:
+            continue
+        op_lower = op.lower()
+        if op_lower == "translate":
+            tx = args[0] if args else 0
+            ty = args[1] if len(args) > 1 else 0
+            m = (1, 0, 0, 1, tx, ty)
+        elif op_lower == "scale":
+            sx = args[0] if args else 1
+            sy = args[1] if len(args) > 1 else sx
+            m = (sx, 0, 0, sy, 0, 0)
+        elif op_lower == "matrix":
+            if len(args) != 6:
+                continue
+            m = tuple(args)
+        elif op_lower == "rotate":
+            if not args:
+                continue
+            theta = math.radians(args[0])
+            cs, sn = math.cos(theta), math.sin(theta)
+            if len(args) >= 3:
+                cx, cy = args[1], args[2]
+                m = _matmul(
+                    _matmul((1, 0, 0, 1, cx, cy), (cs, sn, -sn, cs, 0, 0)),
+                    (1, 0, 0, 1, -cx, -cy),
+                )
+            else:
+                m = (cs, sn, -sn, cs, 0, 0)
+        elif op_lower == "skewx":
+            if not args:
+                continue
+            t = math.tan(math.radians(args[0]))
+            m = (1, 0, t, 1, 0, 0)
+        elif op_lower == "skewy":
+            if not args:
+                continue
+            t = math.tan(math.radians(args[0]))
+            m = (1, t, 0, 1, 0, 0)
+        else:
+            log.warning("parse_svg: transform '%s' no soportado, ignorado", op)
+            continue
+        result = _matmul(result, m)
+    return result
+
+
+# Aproximación cúbica Bezier de un círculo/elipse. Constante de Kirchhoff.
+_KAPPA = 0.5522847498307933
+
+
+def _primitive_to_path_d(elem) -> tuple[str, bool]:
+    """Convierte una primitiva SVG a (d_string, es_cerrado).
+
+    Devuelve ('', False) si no se reconoce el tipo o le faltan atributos.
+    """
+    tag = _ns(elem.tag)
+    g = elem.get
+
+    def _num(k, default=0.0):
+        v, _ = _parse_length(g(k, "") or str(default))
+        return v
+
+    if tag == "path":
+        d = g("d", "") or ""
+        return d.strip(), d.strip().upper().rstrip().endswith("Z")
+    if tag == "rect":
+        x, y = _num("x"), _num("y")
+        w, h = _num("width"), _num("height")
+        if w <= 0 or h <= 0:
+            return "", False
+        return f"M{x},{y} L{x + w},{y} L{x + w},{y + h} L{x},{y + h} Z", True
+    if tag == "circle":
+        cx, cy = _num("cx"), _num("cy")
+        r = _num("r")
+        if r <= 0:
+            return "", False
+        k = _KAPPA * r
+        d = (
+            f"M{cx - r},{cy} "
+            f"C{cx - r},{cy - k} {cx - k},{cy - r} {cx},{cy - r} "
+            f"C{cx + k},{cy - r} {cx + r},{cy - k} {cx + r},{cy} "
+            f"C{cx + r},{cy + k} {cx + k},{cy + r} {cx},{cy + r} "
+            f"C{cx - k},{cy + r} {cx - r},{cy + k} {cx - r},{cy} Z"
+        )
+        return d, True
+    if tag == "ellipse":
+        cx, cy = _num("cx"), _num("cy")
+        rx, ry = _num("rx"), _num("ry")
+        if rx <= 0 or ry <= 0:
+            return "", False
+        kx, ky = _KAPPA * rx, _KAPPA * ry
+        d = (
+            f"M{cx - rx},{cy} "
+            f"C{cx - rx},{cy - ky} {cx - kx},{cy - ry} {cx},{cy - ry} "
+            f"C{cx + kx},{cy - ry} {cx + rx},{cy - ky} {cx + rx},{cy} "
+            f"C{cx + rx},{cy + ky} {cx + kx},{cy + ry} {cx},{cy + ry} "
+            f"C{cx - kx},{cy + ry} {cx - rx},{cy + ky} {cx - rx},{cy} Z"
+        )
+        return d, True
+    if tag in ("polygon", "polyline"):
+        pts_str = g("points", "") or ""
+        nums = [float(t) for t in re.split(r"[\s,]+", pts_str.strip()) if t]
+        if len(nums) < 4 or len(nums) % 2 != 0:
+            return "", False
+        pairs = [(nums[i], nums[i + 1]) for i in range(0, len(nums), 2)]
+        head = f"M{pairs[0][0]},{pairs[0][1]} "
+        body = " ".join(f"L{x},{y}" for x, y in pairs[1:])
+        closed = tag == "polygon"
+        return head + body + (" Z" if closed else ""), closed
+    if tag == "line":
+        x1, y1 = _num("x1"), _num("y1")
+        x2, y2 = _num("x2"), _num("y2")
+        return f"M{x1},{y1} L{x2},{y2}", False
+    return "", False
+
+
+def _bbox_perim_area(path_obj, matrix: tuple, is_closed: bool, samples: int = 240):
+    """Calcula bbox, perímetro y área de un path aplicando matrix.
+
+    Si matrix es identidad, usa los métodos rápidos de svgpathtools. Si no,
+    muestrea el path y transforma puntos para obtener métricas correctas.
+    """
+    a, b, c, d, e, f = matrix
+    is_identity = matrix == _IDENTITY_MATRIX
+
+    if is_identity:
+        try:
+            xmin, xmax, ymin, ymax = path_obj.bbox()
+            bbox = {"x": xmin, "y": ymin, "w": xmax - xmin, "h": ymax - ymin}
+        except Exception:
+            bbox = {"x": 0.0, "y": 0.0, "w": 0.0, "h": 0.0}
+        try:
+            perimeter = path_obj.length(error=1e-4)
+        except Exception:
+            perimeter = 0.0
+        if is_closed:
+            try:
+                pts = [path_obj.point(t / samples) for t in range(samples)]
+                xs = [p.real for p in pts]
+                ys = [p.imag for p in pts]
+                n = len(xs)
+                area = abs(sum(xs[i] * ys[(i + 1) % n] - xs[(i + 1) % n] * ys[i]
+                               for i in range(n))) / 2.0
+            except Exception:
+                area = 0.0
+        else:
+            area = 0.0
+        return bbox, perimeter, area
+
+    # Camino con transform: muestrear y transformar puntos
+    try:
+        raw_pts = [path_obj.point(t / samples) for t in range(samples + 1)]
+    except Exception:
+        return {"x": 0.0, "y": 0.0, "w": 0.0, "h": 0.0}, 0.0, 0.0
+    txs = [a * p.real + c * p.imag + e for p in raw_pts]
+    tys = [b * p.real + d * p.imag + f for p in raw_pts]
+    xmin, xmax = min(txs), max(txs)
+    ymin, ymax = min(tys), max(tys)
+    bbox = {"x": xmin, "y": ymin, "w": xmax - xmin, "h": ymax - ymin}
+    perimeter = sum(
+        math.hypot(txs[i + 1] - txs[i], tys[i + 1] - tys[i])
+        for i in range(len(txs) - 1)
+    )
+    if is_closed:
+        n = len(txs) - 1   # último punto = primero
+        area = abs(sum(txs[i] * tys[(i + 1) % n] - txs[(i + 1) % n] * tys[i]
+                       for i in range(n))) / 2.0
+    else:
+        area = 0.0
+    return bbox, perimeter, area
+
+
+# ─── PARSEO DE SVG ───────────────────────────────────────────────────────────
+
+_SVG_PRIMITIVES = ("path", "rect", "circle", "ellipse", "polygon", "polyline", "line")
+
+
+def _collect_primitives(elem, class_to_fill: dict, parent_matrix: tuple,
+                        parent_class: str = "", out: list | None = None) -> list:
+    """Recorre el XML acumulando transforms heredados. Devuelve lista de dicts
+    con {elem, matrix, fill_resuelto}."""
+    if out is None:
+        out = []
+    # Acumular transform de este elemento
+    own_t = _parse_transform(elem.get("transform", ""))
+    matrix = _matmul(parent_matrix, own_t)
+    tag = _ns(elem.tag)
+
+    # Resolver fill
+    own_class = elem.get("class", "") or parent_class
+    own_fill  = elem.get("fill", "")
+    if not own_fill:
+        # buscar fill en style="fill:..."
+        style = elem.get("style", "") or ""
+        m = re.search(r"\bfill\s*:\s*([^;]+)", style)
+        if m:
+            own_fill = m.group(1).strip()
+    if not own_fill and own_class:
+        # resolver vía CSS class (puede ser una de varias)
+        for cls in own_class.split():
+            if cls in class_to_fill:
+                own_fill = class_to_fill[cls]
+                break
+
+    if tag in _SVG_PRIMITIVES:
+        out.append({"elem": elem, "matrix": matrix, "fill": own_fill, "tag": tag})
+
+    # Recursar en hijos
+    for ch in elem:
+        if _ns(ch.tag) in ("defs", "style", "title", "desc", "metadata"):
+            continue
+        _collect_primitives(ch, class_to_fill, matrix, own_class, out)
+    return out
 
 
 def parse_svg(svg_bytes: bytes) -> SVGData:
-    """Parsea un SVG y devuelve paths con perímetro y área en píxeles."""
+    """Parsea un SVG arbitrario y devuelve piezas con geometría real.
+
+    El universo del programa es objetos vectoriales 2D, no solo letras. Esta
+    función trata por igual primitivas (<rect>, <circle>, <ellipse>,
+    <polygon>, <polyline>, <line>) y <path>. Aplica transforms heredados de
+    <g> y resuelve fills declarados por CSS class en <style>.
+    """
     svg_text = svg_bytes.decode("utf-8", errors="replace")
 
-    # Parse con svgpathtools para obtener paths
+    # 1. Parse XML
     try:
-        paths_raw, attrs, svg_attrs = svg2paths2(io.StringIO(svg_text))
-    except Exception:
-        log.warning("svg2paths2 falló — el SVG no se pudo parsear; devolviendo lista vacía", exc_info=True)
-        paths_raw, attrs = [], []
-        svg_attrs = {}
+        root = ET.fromstring(svg_text)
+    except ET.ParseError:
+        log.warning("parse_svg: XML inválido", exc_info=True)
+        return SVGData(paths=[], viewbox_w=500.0, viewbox_h=500.0, svg_unit="px")
 
-    # Parse XML para viewBox
-    ns = {"svg": "http://www.w3.org/2000/svg"}
-    root = ET.fromstring(svg_text)
-    vb_w, vb_h, unit = _parse_viewbox(root)
+    # 2. viewBox + unidad real
+    vb_w, vb_h, unit, factor_to_cm = _parse_viewbox(root)
 
-    path_infos = []
-    for i, (path, attr) in enumerate(zip(paths_raw, attrs)):
-        if not path:
+    # 3. Resolver fills declarados en <style>
+    class_to_fill = _parse_style_classes(svg_text)
+
+    # 4. Recorrer el árbol recogiendo primitivas con su transform acumulado
+    primitivas = _collect_primitives(root, class_to_fill, _IDENTITY_MATRIX)
+
+    # 5. Por cada primitiva: construir d, parsear, aplicar transform, medir
+    path_infos: list[PathInfo] = []
+    for i, info in enumerate(primitivas):
+        d, is_closed = _primitive_to_path_d(info["elem"])
+        if not d:
             continue
         try:
-            perimeter = path.length(error=1e-4)
+            path_obj = parse_path(d)
         except Exception:
-            perimeter = 0.0
+            log.warning("parse_svg: no se pudo parsear d='%s...'", d[:40], exc_info=True)
+            continue
+        if not path_obj:
+            continue
 
-        # Determinar si es cerrado (path con Z o figura convertida como rect)
-        d = attr.get("d", "")
-        if d.strip().upper().endswith("Z"):
-            is_closed = True
-        else:
-            try:
-                is_closed = abs(path[-1].end - path[0].start) < 1e-3
-            except Exception:
-                is_closed = False
+        bbox, perimeter, area = _bbox_perim_area(path_obj, info["matrix"], is_closed)
 
-        area = _path_area_shoelace(path) if is_closed else 0.0
-
-        # Bounding box
-        try:
-            xmin, xmax, ymin, ymax = path.bbox()
-            bbox = {"x": xmin, "y": ymin, "w": xmax - xmin, "h": ymax - ymin}
-        except Exception:
-            bbox = {"x": 0, "y": 0, "w": 0, "h": 0}
-
-        orig_id = attr.get("id", f"path_{i}")
+        orig_id = info["elem"].get("id", f"path_{i}")
         path_infos.append(PathInfo(
             id=orig_id,
             perimeter_px=perimeter,
@@ -223,28 +552,22 @@ def parse_svg(svg_bytes: bytes) -> SVGData:
             svg_id=orig_id,
         ))
 
-    # Ordenar por posición horizontal (izquierda → derecha) y renombrar
+    # 6. Ordenar por X y renombrar a "Pieza N" — el universo son piezas, no letras
     path_infos.sort(key=lambda p: p.bbox["x"])
     for i, p in enumerate(path_infos):
-        p.id = f"Letra {i + 1}"
+        p.id = f"Pieza {i + 1}"
 
     max_h_px = max((p.bbox["h"] for p in path_infos), default=0.0)
 
-    # Detectar SVG de Illustrator: viewBox en puntos tipográficos (pt)
-    # Marker: style="enable-background:..." en el elemento <svg>
-    artboard_w_cm = 0.0
-    svg_style = root.get("style", "")
-    if "enable-background" in svg_style:
-        PT_TO_CM = 2.54 / 72.0   # 1 pt = 0.035278 cm
-        artboard_w_cm = vb_w * PT_TO_CM
-        unit = "pt"
+    # 7. Calcular ancho real del artboard en cm (si la unidad lo permite)
+    artboard_w_cm = vb_w * factor_to_cm if factor_to_cm > 0 else 0.0
 
     return SVGData(
         paths=path_infos,
         viewbox_w=vb_w,
         viewbox_h=vb_h,
         svg_unit=unit,
-        max_letter_height_px=max_h_px,
+        max_pieza_height_px=max_h_px,
         artboard_w_cm=artboard_w_cm,
     )
 
@@ -309,6 +632,7 @@ def cotizar_letras(
     tipo_multiplicador: str = "acrilico_con_luz_std",
     ajuste_pct: float = 0.0,
     vinil_cercha_id: str = "",
+    led_id: str = "auto",
 ) -> QuoteResult:
 
     # Si el usuario conoce la altura, escalar desde ella (ignora márgenes del artboard).
@@ -335,9 +659,10 @@ def cotizar_letras(
     )
     perimetro_total   = sum(p.perimeter_cm for p in letras)
 
-    # Cercha
+    # Cercha — rango oficial Signalux según altura
+    rango_cercha = cercha_rango_cm(altura_letra_cm)
     if cercha_cm <= 0:
-        cercha_cm = cercha_recomendada_cm(altura_letra_cm)
+        cercha_cm = rango_cercha["recomendado"]
 
     area_cercha_total = perimetro_total * cercha_cm
 
@@ -380,7 +705,11 @@ def cotizar_letras(
     # ── LEDS Y FUENTE ─────────────────────────────────────────────────────────
     if config["leds"]:
         modulos = math.ceil(perimetro_total / espaciado_led_cm)
-        led     = led_recomendado(cercha_cm, uso)
+        led     = None
+        if led_id and led_id != "auto":
+            led = next((l for l in LEDS_CANAL if l.get("id") == led_id), None)
+        if led is None:
+            led = led_recomendado(cercha_cm, uso)
         watts   = modulos * led["watts_modulo"]
         fuente  = fuente_optima(watts, uso)
         c_led   = modulos * led["precio_modulo"]
@@ -508,6 +837,9 @@ def cotizar_letras(
         tipo="letras_3d",
         paths_count=len(letras),
         altura_letra_cm=round(altura_letra_cm, 1),
+        cercha_min_cm=rango_cercha["min"],
+        cercha_max_cm=rango_cercha["max"],
+        categoria_letra=rango_cercha["categoria"],
         area_cara_cm2=area_cara_total,
         perimetro_total_cm=perimetro_total,
         cercha_altura_cm=cercha_cm,

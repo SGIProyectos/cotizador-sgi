@@ -37,16 +37,19 @@ class TestParseSVG:
         assert p.area_px == pytest.approx(10000, abs=200)
         assert p.perimeter_px == pytest.approx(400, abs=2)
 
-    def test_three_letters_sorted_left_to_right(self, three_letters_svg):
+    def test_three_pieces_sorted_left_to_right(self, three_letters_svg):
         data = parse_svg(three_letters_svg)
         assert len(data.paths) == 3
         xs = [p.bbox["x"] for p in data.paths]
         assert xs == sorted(xs)
-        assert all(p.id.startswith("Letra ") for p in data.paths)
+        # El universo del programa son piezas, no letras
+        assert all(p.id.startswith("Pieza ") for p in data.paths)
 
-    def test_max_letter_height_detected(self, three_letters_svg):
+    def test_max_pieza_height_detected(self, three_letters_svg):
         data = parse_svg(three_letters_svg)
-        assert data.max_letter_height_px == pytest.approx(100, abs=1)
+        assert data.max_pieza_height_px == pytest.approx(100, abs=1)
+        # alias retro-compatible sigue funcionando
+        assert data.max_letter_height_px == data.max_pieza_height_px
 
     def test_empty_svg_does_not_crash(self):
         empty = b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>'
@@ -59,22 +62,130 @@ class TestParseViewbox:
     def test_uses_viewbox_when_present(self):
         import xml.etree.ElementTree as ET
         root = ET.fromstring('<svg viewBox="0 0 100 50" width="200" height="100"/>')
-        w, h, unit = _parse_viewbox(root)
+        w, h, unit, factor = _parse_viewbox(root)
         assert w == 100.0
         assert h == 50.0
 
     def test_detects_mm_unit(self):
         import xml.etree.ElementTree as ET
         root = ET.fromstring('<svg width="100mm" height="50mm"/>')
-        _, _, unit = _parse_viewbox(root)
+        _, _, unit, factor = _parse_viewbox(root)
         assert unit == "mm"
+        # 100mm = 10cm; sin viewBox el factor a cm es mm→cm = 0.1
+        assert factor == pytest.approx(0.1, abs=1e-6)
 
     def test_fallback_when_missing(self):
         import xml.etree.ElementTree as ET
         root = ET.fromstring('<svg/>')
-        w, h, _ = _parse_viewbox(root)
+        w, h, _, _ = _parse_viewbox(root)
         assert w == 500.0
         assert h == 500.0
+
+    def test_illustrator_detected_via_enable_background(self):
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(
+            '<svg viewBox="0 0 1224 792" style="enable-background:new 0 0 1224 792;"/>'
+        )
+        w, h, unit, factor = _parse_viewbox(root)
+        assert w == 1224.0
+        assert unit == "pt"
+        # 1 pt = 2.54/72 cm
+        assert factor == pytest.approx(2.54 / 72, abs=1e-6)
+
+    def test_width_mm_with_viewbox_derives_factor(self):
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring('<svg viewBox="0 0 1000 500" width="200mm" height="100mm"/>')
+        w, h, unit, factor = _parse_viewbox(root)
+        assert w == 1000.0
+        assert unit == "mm"
+        # 200mm = 20cm; 1000 unidades viewBox = 20cm → factor = 0.02 cm/unidad
+        assert factor == pytest.approx(0.02, abs=1e-6)
+
+
+class TestSVGPrimitives:
+    """El universo del programa son primitivas SVG arbitrarias, no solo <path>."""
+
+    def test_rect_primitive_detected(self):
+        svg = (b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" '
+               b'viewBox="0 0 200 200">'
+               b'<rect x="50" y="50" width="100" height="80"/></svg>')
+        data = parse_svg(svg)
+        assert len(data.paths) == 1
+        p = data.paths[0]
+        assert p.is_closed
+        assert p.bbox["w"] == pytest.approx(100, abs=0.1)
+        assert p.bbox["h"] == pytest.approx(80, abs=0.1)
+        assert p.area_px == pytest.approx(8000, abs=10)
+
+    def test_circle_primitive_detected(self):
+        svg = (b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" '
+               b'viewBox="0 0 200 200">'
+               b'<circle cx="100" cy="100" r="40"/></svg>')
+        data = parse_svg(svg)
+        assert len(data.paths) == 1
+        p = data.paths[0]
+        # bbox de un círculo de r=40 es 80×80
+        assert p.bbox["w"] == pytest.approx(80, abs=0.5)
+        assert p.bbox["h"] == pytest.approx(80, abs=0.5)
+        # área ≈ π·r² ≈ 5027 (las Beziers aproximan bien)
+        assert p.area_px == pytest.approx(5027, abs=50)
+
+    def test_polygon_primitive_detected(self):
+        svg = (b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" '
+               b'viewBox="0 0 200 200">'
+               b'<polygon points="10,10 50,10 50,50 10,50"/></svg>')
+        data = parse_svg(svg)
+        assert len(data.paths) == 1
+        p = data.paths[0]
+        assert p.is_closed
+        assert p.bbox["w"] == pytest.approx(40, abs=0.5)
+        assert p.bbox["h"] == pytest.approx(40, abs=0.5)
+
+
+class TestCSSClassResolution:
+    """Los SVG de Illustrator declaran fills vía <style>.clase{fill:color}."""
+
+    def test_fill_resolved_via_css_class(self):
+        svg = (b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" '
+               b'viewBox="0 0 200 200">'
+               b'<style>.bg{fill:#FFFFFF;} .fg{fill:#000;}</style>'
+               b'<rect class="bg" x="0" y="0" width="200" height="200"/>'
+               b'<rect class="fg" x="50" y="50" width="100" height="100"/></svg>')
+        data = parse_svg(svg)
+        # Ambos rects deben detectarse, la resolución de fill es para
+        # consumidores posteriores (filtros de fondo, etc.)
+        assert len(data.paths) == 2
+
+
+class TestTransforms:
+    """Transforms heredados de <g> deben aplicarse al bbox y al perímetro."""
+
+    def test_translate_on_group_shifts_bbox(self):
+        svg = (b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" '
+               b'viewBox="0 0 400 400">'
+               b'<g transform="translate(100,50)">'
+               b'<rect x="0" y="0" width="50" height="50"/>'
+               b'</g></svg>')
+        data = parse_svg(svg)
+        assert len(data.paths) == 1
+        p = data.paths[0]
+        # El rect original está en (0,0,50,50) pero el grupo lo traslada a (100,50)
+        assert p.bbox["x"] == pytest.approx(100, abs=0.5)
+        assert p.bbox["y"] == pytest.approx(50, abs=0.5)
+        assert p.bbox["w"] == pytest.approx(50, abs=0.5)
+        assert p.bbox["h"] == pytest.approx(50, abs=0.5)
+
+    def test_scale_on_group_resizes_bbox(self):
+        svg = (b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" '
+               b'viewBox="0 0 400 400">'
+               b'<g transform="scale(2)">'
+               b'<rect x="0" y="0" width="50" height="50"/>'
+               b'</g></svg>')
+        data = parse_svg(svg)
+        p = data.paths[0]
+        # scale(2) duplica el tamaño
+        assert p.bbox["w"] == pytest.approx(100, abs=1)
+        assert p.bbox["h"] == pytest.approx(100, abs=1)
 
 
 class TestApplyScale:
