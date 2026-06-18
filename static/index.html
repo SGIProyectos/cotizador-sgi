@@ -658,7 +658,7 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
     <div class="panel panel-card">
       <h3>Diseño y presentación</h3>
       <label>Ancho detectado del diseño (cm)</label>
-      <input type="number" id="ancho-real" placeholder="ej. 60" min="1" step="1">
+      <input type="number" id="ancho-real" placeholder="ej. 60" min="1" step="0.001">
       <label>Uso</label>
       <select id="uso" onchange="populateLedsCaja()">
         <option value="exterior">Exterior</option>
@@ -694,7 +694,7 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
       <div class="info-tag" id="construccion-desc-tag" style="margin-bottom:8px">Cara acrílico · cercha aluminio · fondo PVC · LEDs adelante</div>
       <div class="info-tag" id="distanciadores-note" style="display:none;background:rgba(232,124,42,0.2);margin-bottom:4px">⚠ Requiere distanciadores de montaje</div>
       <label>Altura de la letra (cm)</label>
-      <input type="number" id="altura-letra" value="15" min="1" step="1">
+      <input type="number" id="altura-letra" placeholder="auto" min="0.001" step="0.001">
       <div class="info-tag" id="cercha-auto-tag" style="line-height:1.5">Cercha automática: 5 cm</div>
       <div id="cercha-signalux-aviso" style="font-size:11px;color:#e87c2a;background:rgba(232,124,42,0.10);border-left:3px solid #e87c2a;padding:6px 10px;margin-top:4px;line-height:1.5;border-radius:3px">
         SIGNALUX recomienda una cercha de <b>2 a 6 cm</b> para letras pequeñas.
@@ -1618,11 +1618,16 @@ async function uploadSVG(file) {
     // Limpiar campos del diseño anterior
     document.getElementById("pared-ancho").value = "";
     document.getElementById("pared-alto").value  = "";
+    // FASE B: el archivo declara su unidad real → respetarla. Sobreescribir
+    // cualquier valor previo del input (autofill del navegador, restauración
+    // de quote anterior, etc.) con el ancho real del archivo.
     if (svgArtboardWCm > 0) {
-      document.getElementById("ancho-real").value = svgArtboardWCm.toFixed(1);
-      showToast(`Illustrator detectado — artboard ${svgArtboardWCm.toFixed(1)} cm`, "ok");
+      document.getElementById("ancho-real").value = svgArtboardWCm.toFixed(3);
+      document.getElementById("altura-letra").value = "";   // forzar recálculo
+      showToast(`Unidad real detectada — artboard ${svgArtboardWCm.toFixed(3)} cm`, "ok");
     } else {
       document.getElementById("ancho-real").value = "";
+      document.getElementById("altura-letra").value = "";   // limpia el "15" residual
     }
 
     // Mostrar SVG (con contexto de pared si ya hay dims, o preview normal)
@@ -1666,19 +1671,34 @@ function renderWallPreview() {
     return;
   }
 
-  const disenoAlto = svgViewboxW > 0 ? disenoAncho * (svgViewboxH / svgViewboxW) : disenoAncho;
-  const cabeAncho  = disenoAncho <= paredAncho;
-  const cabeAlto   = disenoAlto  <= paredAlto;
+  // FIX patrón 3: lo que la pared necesita acomodar es el bbox conjunto de
+  // las piezas, no el artboard del Illustrator. Para casselsvg (artboard
+  // 43.18×27.94, placa real 38×15.6) sin este fix el preview reportaría
+  // un alto inflado por el aire del artboard.
+  const sf = disenoAncho / svgViewboxW;
+  let bboxAncho = disenoAncho;
+  let disenoAlto = svgViewboxH * sf;
+  if (svgPathsRaw.length > 0) {
+    const minX = Math.min(...svgPathsRaw.map(p => p.bbox.x));
+    const maxX = Math.max(...svgPathsRaw.map(p => p.bbox.x + p.bbox.w));
+    const minY = Math.min(...svgPathsRaw.map(p => p.bbox.y));
+    const maxY = Math.max(...svgPathsRaw.map(p => p.bbox.y + p.bbox.h));
+    bboxAncho  = (maxX - minX) * sf;
+    disenoAlto = (maxY - minY) * sf;
+  }
+
+  const cabeAncho  = bboxAncho <= paredAncho;
+  const cabeAlto   = disenoAlto <= paredAlto;
   const cabe       = cabeAncho && cabeAlto;
-  const pctW       = Math.min(100, (disenoAncho / paredAncho) * 100);
+  const pctW       = Math.min(100, (bboxAncho / paredAncho) * 100);
 
   const borderColor = cabe ? "#4caf50" : "#ef5350";
   const fitBg       = cabe ? "rgba(46,125,50,.9)" : "rgba(198,40,40,.9)";
   let fitMsg;
   if (cabe) {
-    fitMsg = `✓ Cabe — sobran ${(paredAncho-disenoAncho).toFixed(0)} × ${(paredAlto-disenoAlto).toFixed(0)} cm`;
+    fitMsg = `✓ Cabe — sobran ${(paredAncho-bboxAncho).toFixed(0)} × ${(paredAlto-disenoAlto).toFixed(0)} cm`;
   } else {
-    const excW = !cabeAncho ? ` +${(disenoAncho-paredAncho).toFixed(0)} cm ancho` : "";
+    const excW = !cabeAncho ? ` +${(bboxAncho-paredAncho).toFixed(0)} cm ancho` : "";
     const excH = !cabeAlto  ? ` +${(disenoAlto -paredAlto ).toFixed(0)} cm alto`  : "";
     fitMsg = `⚠ No cabe —${excW}${excH}`;
   }
@@ -1699,7 +1719,7 @@ function renderWallPreview() {
                       white-space:nowrap;background:rgba(0,0,0,.6);color:#fff;
                       border-radius:4px;padding:2px 7px;font-size:9.5px;
                       font-family:monospace;pointer-events:none">
-            ${disenoAncho.toFixed(0)} × ${disenoAlto.toFixed(0)} cm
+            ${bboxAncho.toFixed(1)} × ${disenoAlto.toFixed(1)} cm
           </div>
           <div style="border:2px solid ${borderColor};border-radius:2px;
                       box-shadow:0 2px 12px rgba(0,0,0,.3);overflow:hidden">
@@ -2153,6 +2173,16 @@ function colorizePaths(svgEl, paths) {
 
   const domPaths = [...svgEl.querySelectorAll("path, polyline, polygon, ellipse, circle, rect")];
 
+  // FIX color/medida mismatch: los SVG de Illustrator no traen `id` en los
+  // elementos. parse_svg les asigna svg_id="path_N" en orden DOM (recorrido
+  // depth-first del XML). Inyectamos esos mismos ids al DOM aquí para que
+  // el matching por id siempre acierte; sin esto, paths queda ordenado por
+  // X (Pieza 1, 2…) pero domPaths queda en orden DOM y el fallback
+  // domPaths[i] empareja mal cuando los dos órdenes no coinciden.
+  domPaths.forEach((el, idx) => {
+    if (!el.id) el.id = `path_${idx}`;
+  });
+
   // Reset all shapes to neutral
   domPaths.forEach(el => {
     el.style.fill        = "none";
@@ -2163,7 +2193,7 @@ function colorizePaths(svgEl, paths) {
 
   if (!paths.length) return;
 
-  // Build id→element map; determine if we can use id-based matching
+  // Build id→element map (todos los elementos tienen id tras la inyección de arriba)
   const byId = {};
   domPaths.forEach(el => { if (el.id) byId[el.id] = el; });
   const idHits = paths.filter(p => byId[p.svg_id]).length;
@@ -2431,12 +2461,12 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
 
   const cards = paths.map((p, idx) => {
     const c         = pathColors[idx];
-    const perim_cm  = hasCm ? (p.perimeter_px * scaleFactor).toFixed(1) : "—";
-    const area_cm2  = hasCm ? (p.area_px * scaleFactor * scaleFactor).toFixed(1) : "—";
-    const ancho_cm  = hasCm ? ((p.bbox?.w || 0) * scaleFactor).toFixed(1) : "—";
-    const alto_cm   = hasCm ? ((p.bbox?.h || 0) * scaleFactor).toFixed(1) : "—";
-    const tira_neta = hasCercha ? (p.perimeter_px * scaleFactor).toFixed(1) : "—";
-    const tira_mas  = hasCercha ? (p.perimeter_px * scaleFactor * 1.10).toFixed(1) : "—";
+    const perim_cm  = hasCm ? (p.perimeter_px * scaleFactor).toFixed(3) : "—";
+    const area_cm2  = hasCm ? (p.area_px * scaleFactor * scaleFactor).toFixed(3) : "—";
+    const ancho_cm  = hasCm ? ((p.bbox?.w || 0) * scaleFactor).toFixed(3) : "—";
+    const alto_cm   = hasCm ? ((p.bbox?.h || 0) * scaleFactor).toFixed(3) : "—";
+    const tira_neta = hasCercha ? (p.perimeter_px * scaleFactor).toFixed(3) : "—";
+    const tira_mas  = hasCercha ? (p.perimeter_px * scaleFactor * 1.10).toFixed(3) : "—";
 
     return `<div class="path-card" style="border:2px solid ${c};background:${c}22">
       <div class="name" style="color:${c};display:flex;align-items:center;gap:6px">
@@ -3589,6 +3619,11 @@ function getScaleFactor() {
     return alturaInput / svgMaxHeightPx;
   if (anchoReal > 0 && svgViewboxW > 0)
     return anchoReal / svgViewboxW;
+  // Fallback: si el archivo declara su unidad real (Illustrator pt, mm, cm),
+  // respétala. Garantiza que las medidas siempre se muestren correctamente
+  // aunque los inputs estén vacíos.
+  if (svgArtboardWCm > 0 && svgViewboxW > 0)
+    return svgArtboardWCm / svgViewboxW;
   return 0;
 }
 
@@ -3600,7 +3635,7 @@ function actualizarAsesor(autoFillAltura = false) {
   if (autoFillAltura && svgMaxHeightPx > 0 && svgViewboxW > 0 && anchoReal > 0) {
     const sfAncho         = anchoReal / svgViewboxW;
     const alturaEstimada  = svgMaxHeightPx * sfAncho;
-    document.getElementById("altura-letra").value = alturaEstimada.toFixed(1);
+    document.getElementById("altura-letra").value = alturaEstimada.toFixed(3);
   }
 
   // ── 2. Calcular escala definitiva (usa altura si está definida) ───────────
@@ -3824,21 +3859,28 @@ async function openCfgModal() {
   let hintMsg = "";
 
   if (svgPathsRaw.length > 0 && anchoReal > 0 && svgViewboxW > 0) {
-    // Bounding box ajustado de TODOS los paths juntos
+    // FIX: el campo cfg-altura se aplica al sidebar "altura-letra", que el
+    // sistema usa como la altura de la PIEZA más alta (sf = altura / max_h_px).
+    // Si pusiéramos aquí el alto total del conjunto, sf saldría mal escalado
+    // 1.6×. Para piezas heterogéneas (anuncio = placa + letras + decoración)
+    // mostramos en el hint las dimensiones del conjunto Y la pieza más alta
+    // por separado.
     const minY         = Math.min(...svgPathsRaw.map(p => p.bbox.y));
     const maxY         = Math.max(...svgPathsRaw.map(p => p.bbox.y + p.bbox.h));
     const minX         = Math.min(...svgPathsRaw.map(p => p.bbox.x));
     const maxX         = Math.max(...svgPathsRaw.map(p => p.bbox.x + p.bbox.w));
     const totalAltoPx  = maxY - minY;
     const totalAnchoPx = maxX - minX;
+    const maxPiezaH    = Math.max(...svgPathsRaw.map(p => p.bbox.h));
 
     const sf = anchoReal / svgViewboxW;
-    alturaDetectada = parseFloat((totalAltoPx * sf).toFixed(1));
-    const anchoDiseno = parseFloat((totalAnchoPx * sf).toFixed(1));
+    alturaDetectada   = parseFloat((maxPiezaH * sf).toFixed(3));
+    const anchoDiseno = parseFloat((totalAnchoPx * sf).toFixed(3));
+    const altoDiseno  = parseFloat((totalAltoPx * sf).toFixed(3));
 
-    hintMsg = `<span style="color:#1f9d57">✓ Detectado del SVG:</span> el diseño completo mide
-      <strong>${anchoDiseno} × ${alturaDetectada} cm</strong>
-      (ancho × alto total, todos los elementos).`;
+    hintMsg = `<span style="color:#1f9d57">✓ Detectado del SVG:</span>
+      pieza más alta = <strong>${alturaDetectada} cm</strong>.
+      Diseño completo: ${anchoDiseno} × ${altoDiseno} cm.`;
   } else if (anchoReal === 0) {
     hintMsg = `<span style="color:#e87c2a">↑ Ingresa primero el ancho del diseño</span> para calcular la altura automáticamente.`;
   }
