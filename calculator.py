@@ -992,15 +992,29 @@ def cotizar_planas(
 
 # ─── COTIZACIÓN CAJA DE LUZ ──────────────────────────────────────────────────
 
-def _find_caja_outline(paths: list):
-    """
-    Identifica el contorno rectangular de la caja: el path con mayor bbox-área
-    cuyo perímetro ≈ 2*(w+h) (ratio ≤ 2.5).
-    Devuelve None si ningún path pasa el criterio rectangular — el caller
-    debe usar artboard/viewbox como fallback.
+def _find_caja_outline(paths: list, ratio_max: float = 4.5,
+                       contain_pct: float = 0.70):
+    """Identifica el contorno exterior del anuncio (placa, marco, caja).
+
+    Dos heurísticas combinadas, lo que pase primero:
+
+    1. Path con `perimetro / 2*(w+h) <= ratio_max` (forma cuasi-rectangular,
+       incluyendo bordes redondeados). El umbral por defecto es 4.5, lo que
+       cubre placas con esquinas redondeadas estándar tipo casselsvg. El
+       umbral viejo de 2.5 rechazaba esas placas.
+
+    2. Si no hay match por (1), buscar el path cuyo bbox CONTIENE los bboxes
+       de >= contain_pct de los demás paths. Eso identifica un contorno
+       exterior aunque su forma sea irregular (logo orgánico que envuelve
+       texto, p.ej.).
+
+    Devuelve None si ningún criterio aplica; el caller usa bbox conjunto
+    como fallback.
     """
     if not paths:
         return None
+
+    # Heurística 1: forma cuasi-rectangular, mayor bbox-área
     best, best_bbox_area = None, 0.0
     for candidate in paths:
         cw = candidate.bbox["w"]
@@ -1008,12 +1022,34 @@ def _find_caja_outline(paths: list):
         exp_perim = 2 * (cw + ch)
         if exp_perim <= 0:
             continue
-        if candidate.perimeter_px / exp_perim <= 2.5:
+        if candidate.perimeter_px / exp_perim <= ratio_max:
             bbox_area = cw * ch
             if bbox_area > best_bbox_area:
                 best_bbox_area = bbox_area
                 best = candidate
-    return best  # None cuando no hay path rectangular
+    if best is not None:
+        return best
+
+    # Heurística 2: contiene a la mayoría de los otros paths
+    def _contains(outer, inner, eps: float = 0.5) -> bool:
+        return (inner.bbox["x"] >= outer.bbox["x"] - eps
+                and inner.bbox["y"] >= outer.bbox["y"] - eps
+                and inner.bbox["x"] + inner.bbox["w"]
+                    <= outer.bbox["x"] + outer.bbox["w"] + eps
+                and inner.bbox["y"] + inner.bbox["h"]
+                    <= outer.bbox["y"] + outer.bbox["h"] + eps)
+
+    n_others = len(paths) - 1
+    if n_others <= 0:
+        return None
+    for candidate in sorted(paths,
+                            key=lambda p: p.bbox["w"] * p.bbox["h"],
+                            reverse=True):
+        contained = sum(1 for other in paths
+                        if other is not candidate and _contains(candidate, other))
+        if contained / n_others >= contain_pct:
+            return candidate
+    return None
 
 
 def _group_design_paths_by_row(paths: list) -> list:
@@ -1051,25 +1087,34 @@ def cotizar_caja(
     svg_data = apply_scale(svg_data, real_width_cm)
     sf = svg_data.scale_factor
 
-    caja_w_cm = real_width_cm
-
-    # Determinar altura de la cara y paths del diseño
+    # Determinar dimensiones de la cara y paths del diseño.
+    # FIX Fase C: caja_w_cm/caja_h_cm son las medidas REALES de la placa
+    # exterior detectada, no del artboard completo. Para SVGs con aire
+    # alrededor (Illustrator carta horizontal de 43×27 cm con placa de
+    # 38×16 cm, p.ej.), antes la caja se "inflaba" al artboard.
     if svg_data.paths:
         caja_path = _find_caja_outline(svg_data.paths)
         if caja_path is not None:
-            # Hay contorno rectangular → usarlo para la relación de aspecto
-            _bw = caja_path.bbox["w"] or 1
-            caja_h_cm     = round(real_width_cm * (caja_path.bbox["h"] / _bw), 2)
+            caja_w_cm     = round(caja_path.bbox["w"] * sf, 2)
+            caja_h_cm     = round(caja_path.bbox["h"] * sf, 2)
             design_paths_all = [p for p in svg_data.paths if p is not caja_path]
             clamp_x, clamp_y = caja_path.bbox["x"], caja_path.bbox["y"]
             clamp_w, clamp_h = caja_path.bbox["w"], caja_path.bbox["h"]
         else:
-            # Sin contorno rectangular → usar artboard/viewbox (Illustrator: viewBox en pt)
-            caja_h_cm     = round(svg_data.viewbox_h * sf, 2)
+            # Sin contorno detectado → bbox conjunto como caja (no viewBox).
+            min_x = min(p.bbox["x"] for p in svg_data.paths)
+            min_y = min(p.bbox["y"] for p in svg_data.paths)
+            max_x = max(p.bbox["x"] + p.bbox["w"] for p in svg_data.paths)
+            max_y = max(p.bbox["y"] + p.bbox["h"] for p in svg_data.paths)
+            bbox_w = max_x - min_x
+            bbox_h = max_y - min_y
+            caja_w_cm     = round(bbox_w * sf, 2)
+            caja_h_cm     = round(bbox_h * sf, 2)
             design_paths_all = list(svg_data.paths)
-            clamp_x, clamp_y = 0.0, 0.0
-            clamp_w, clamp_h = svg_data.viewbox_w, svg_data.viewbox_h
+            clamp_x, clamp_y = min_x, min_y
+            clamp_w, clamp_h = bbox_w, bbox_h
     else:
+        caja_w_cm        = real_width_cm
         caja_h_cm        = round(svg_data.viewbox_h * sf, 2)
         design_paths_all = []
         clamp_x, clamp_y = 0.0, 0.0

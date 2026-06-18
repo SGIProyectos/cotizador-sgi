@@ -2320,22 +2320,46 @@ function _groupPathsByRow(paths) {
   return rows;
 }
 
-// Identifica el contorno de la caja: el path con mayor área de bbox que sea
-// aproximadamente rectangular (perímetro ≈ 2*(w+h), ratio ≤ 2.5).
-// Devuelve null si ningún path pasa el criterio — el caller usa artboard/viewbox.
-function _findCajaOutline(paths) {
+// Identifica el contorno exterior del anuncio. Igual semántica que
+// _find_caja_outline en calculator.py:
+//   1. Forma cuasi-rectangular: ratio perim/2*(w+h) <= 4.5 (cubre placas
+//      con esquinas redondeadas; el umbral viejo 2.5 las rechazaba).
+//   2. Si no hay match, path cuyo bbox contiene >=70% de los demás.
+// Devuelve null si nada aplica → el caller usa bbox conjunto como fallback.
+function _findCajaOutline(paths, ratioMax = 4.5, containPct = 0.70) {
   if (paths.length <= 1) return paths[0] || null;
+
+  // Heurística 1
   let best = null, bestBboxArea = 0;
   for (const c of paths) {
     const cw = c.bbox?.w ?? 0, ch = c.bbox?.h ?? 0;
     if (cw <= 0 || ch <= 0) continue;
     const expPerim = 2 * (cw + ch);
-    if (expPerim > 0 && (c.perimeter_px || 0) / expPerim <= 2.5) {
+    if (expPerim > 0 && (c.perimeter_px || 0) / expPerim <= ratioMax) {
       const bboxArea = cw * ch;
       if (bboxArea > bestBboxArea) { bestBboxArea = bboxArea; best = c; }
     }
   }
-  return best;  // null si ningún path es rectangular → usar artboard/viewbox
+  if (best) return best;
+
+  // Heurística 2: contiene a la mayoría de los demás
+  const contains = (outer, inner, eps = 0.5) => {
+    const ox = outer.bbox.x, oy = outer.bbox.y, ow = outer.bbox.w, oh = outer.bbox.h;
+    const ix = inner.bbox.x, iy = inner.bbox.y, iw = inner.bbox.w, ih = inner.bbox.h;
+    return ix >= ox - eps && iy >= oy - eps
+      && ix + iw <= ox + ow + eps && iy + ih <= oy + oh + eps;
+  };
+  const nOthers = paths.length - 1;
+  const sorted = [...paths].sort((a, b) =>
+    (b.bbox.w * b.bbox.h) - (a.bbox.w * a.bbox.h));
+  for (const candidate of sorted) {
+    let count = 0;
+    for (const other of paths) {
+      if (other !== candidate && contains(candidate, other)) count++;
+    }
+    if (count / nOthers >= containPct) return candidate;
+  }
+  return null;
 }
 
 function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
@@ -5058,7 +5082,8 @@ function _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm) {
         const dx = pts[nj].x-pts[j].x, dy = pts[nj].y-pts[j].y;
         perim += Math.sqrt(dx*dx+dy*dy);
       }
-      if (perim/(2*(bw+bh)) <= 2.5) {
+      if (perim/(2*(bw+bh)) <= 4.5) {
+        // 4.5 (no 2.5) cubre placas con esquinas redondeadas
         const ba = bw*bh;
         if (ba > bestArea) { bestArea = ba; outlineIdx = i; }
       }
