@@ -2260,6 +2260,24 @@ function _addPieceBadges(svgEl, paths, colorByIndex, viewboxW) {
   // Limpiar capa previa de badges si existe
   svgEl.querySelectorAll("g.pieza-labels").forEach(g => g.remove());
   if (!paths.length) return;
+
+  // TODOS los badges del mismo tamaño = el que dictaría la pieza más pequeña.
+  // Evita que piezas grandes generen números enormes que tapen el diseño.
+  let minPieceDim = Infinity;
+  paths.forEach(p => {
+    if (!p.is_closed) return;
+    const m = Math.min(p.bbox?.w || 0, p.bbox?.h || 0);
+    if (m > 0 && m < minPieceDim) minPieceDim = m;
+  });
+  if (!isFinite(minPieceDim) || minPieceDim <= 0) minPieceDim = viewboxW * 0.05;
+  // Piso del 0.8% del viewBox para que badges queden legibles en piezas
+  // diminutas; tope del 2.5% para que no quede gigante en SVGs con piezas
+  // grandes y poca dispersión.
+  const fontSize = Math.min(
+    viewboxW * 0.025,
+    Math.max(viewboxW * 0.008, minPieceDim * 0.25)
+  );
+
   const layer = document.createElementNS(SVG_NS, "g");
   layer.classList.add("pieza-labels");
   let num = 0;
@@ -2269,9 +2287,6 @@ function _addPieceBadges(svgEl, paths, colorByIndex, viewboxW) {
     const color = colorByIndex(idx) || "#888";
     const cx = (p.bbox?.x || 0) + (p.bbox?.w || 0) / 2;
     const cy = (p.bbox?.y || 0) + (p.bbox?.h || 0) / 2;
-    const minDim = Math.min(p.bbox?.w || 0, p.bbox?.h || 0);
-    // Tamaño: 25% del lado menor, con piso del 1.4% del viewBox para que sea legible
-    const fontSize = Math.max(viewboxW * 0.014, minDim * 0.25);
     const numStr = String(num);
     const padX   = fontSize * 0.55;
     const padY   = fontSize * 0.15;
