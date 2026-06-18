@@ -299,6 +299,19 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
 .badge.closed { background: #e3f3ea; color: #1f7a45; }
 .badge.open   { background: #fdeede; color: #b5611a; }
 
+/* Interactividad pieza ↔ card: hover y click en la card resaltan la pieza en el SVG, y al revés */
+.path-card[data-svg-id]            { cursor: pointer; transition: transform .12s, box-shadow .12s, opacity .12s; }
+.path-card.piece-highlighted       { transform: translateY(-2px); }
+.path-card.piece-dimmed            { opacity: .45; }
+.path-card.piece-pinned::after     { content: "📌"; position: absolute; top: 4px; right: 6px; font-size: 11px; }
+.path-card                         { position: relative; }
+/* Elementos SVG con interactividad — usamos !important porque colorizePaths setea estilos inline */
+svg [data-piece-interactive]       { cursor: pointer; transition: opacity .12s, stroke-width .12s; }
+svg .piece-highlighted             { stroke-width: 3 !important; filter: drop-shadow(0 0 6px var(--hl-color, currentColor)); }
+svg .piece-dimmed                  { opacity: .18 !important; }
+svg g.pieza-labels > .badge-dimmed { opacity: .25 !important; }
+svg g.pieza-labels                 { pointer-events: none; }
+
 /* stat cards */
 .result-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 20px; }
 @media (max-width: 900px) { .result-grid { grid-template-columns: 1fr 1fr; } }
@@ -2166,6 +2179,161 @@ function usarSvgTrazado() {
   openCfgModal();
 }
 
+// ─── INTERACTIVIDAD pieza ↔ card (hover/click) + badges numerados ──────────
+// Cuando hay muchas piezas con colores parecidos, identificar visualmente
+// cuál card corresponde a cuál figura es difícil. Esta capa permite:
+//   1. Pasar el mouse por una card → la figura se resalta en el SVG.
+//   2. Pasar el mouse por una figura → la card se resalta y hace scroll.
+//   3. Click → fija el resaltado (toggle); click de nuevo o en otra → cambia.
+// Más un badge numerado discreto en el centro de cada pieza como respaldo
+// visual permanente.
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+let _pinnedPieceId = null;        // svg_id de la pieza con highlight fijado
+const _pieceMeta   = new Map();   // svg_id → { color, el, num }
+
+function _highlightPiece(svgId, opts = {}) {
+  const meta = _pieceMeta.get(svgId);
+  if (!meta) return;
+  const { color, el } = meta;
+  const svgEl = el.closest("svg");
+  if (!svgEl) return;
+  // Limpiar primero por si había highlight previo
+  _resetHighlightStyles();
+  // Dim al resto
+  svgEl.querySelectorAll("path, rect, circle, ellipse, polygon, polyline").forEach(e => {
+    if (e === el) return;
+    if (e.dataset.badgeFor === svgId) return;   // badge propio se mantiene visible
+    e.classList.add("piece-dimmed");
+  });
+  svgEl.querySelectorAll("g.pieza-labels > *").forEach(e => {
+    if (e.dataset.badgeFor !== svgId) e.classList.add("badge-dimmed");
+  });
+  // Highlight target
+  el.style.setProperty("--hl-color", color);
+  el.classList.add("piece-highlighted");
+  // Highlight card y opcionalmente scroll
+  const card = document.querySelector(`.path-card[data-svg-id="${CSS.escape(svgId)}"]`);
+  if (card) {
+    document.querySelectorAll(".path-card[data-svg-id]").forEach(c => {
+      if (c !== card) c.classList.add("piece-dimmed");
+    });
+    card.classList.add("piece-highlighted");
+    card.style.setProperty("box-shadow", `0 0 0 3px ${color}, 0 6px 18px rgba(0,0,0,.18)`);
+    if (opts.scroll) card.scrollIntoView({ block: "nearest", behavior: "smooth", inline: "nearest" });
+  }
+}
+
+function _resetHighlightStyles() {
+  document.querySelectorAll(".piece-highlighted, .piece-dimmed, .badge-dimmed").forEach(e => {
+    e.classList.remove("piece-highlighted", "piece-dimmed", "badge-dimmed");
+    e.style.removeProperty("box-shadow");
+  });
+}
+
+function _clearHighlight() {
+  if (_pinnedPieceId) {
+    // Mantener el pin, sólo restaurar lo que estaba pinned
+    _highlightPiece(_pinnedPieceId);
+    return;
+  }
+  _resetHighlightStyles();
+}
+
+function _togglePiecePin(svgId) {
+  if (_pinnedPieceId === svgId) {
+    _pinnedPieceId = null;
+    document.querySelectorAll(".path-card.piece-pinned").forEach(c => c.classList.remove("piece-pinned"));
+    _resetHighlightStyles();
+  } else {
+    _pinnedPieceId = svgId;
+    document.querySelectorAll(".path-card.piece-pinned").forEach(c => c.classList.remove("piece-pinned"));
+    const card = document.querySelector(`.path-card[data-svg-id="${CSS.escape(svgId)}"]`);
+    if (card) card.classList.add("piece-pinned");
+    _highlightPiece(svgId, { scroll: true });
+  }
+}
+
+// Inyecta un badge numerado (pill con color de la pieza + número en blanco)
+// en el centro del bbox de cada pieza cerrada.
+function _addPieceBadges(svgEl, paths, colorByIndex, viewboxW) {
+  // Limpiar capa previa de badges si existe
+  svgEl.querySelectorAll("g.pieza-labels").forEach(g => g.remove());
+  if (!paths.length) return;
+  const layer = document.createElementNS(SVG_NS, "g");
+  layer.classList.add("pieza-labels");
+  let num = 0;
+  paths.forEach((p, idx) => {
+    if (!p.is_closed) return;
+    num++;
+    const color = colorByIndex(idx) || "#888";
+    const cx = (p.bbox?.x || 0) + (p.bbox?.w || 0) / 2;
+    const cy = (p.bbox?.y || 0) + (p.bbox?.h || 0) / 2;
+    const minDim = Math.min(p.bbox?.w || 0, p.bbox?.h || 0);
+    // Tamaño: 25% del lado menor, con piso del 1.4% del viewBox para que sea legible
+    const fontSize = Math.max(viewboxW * 0.014, minDim * 0.25);
+    const numStr = String(num);
+    const padX   = fontSize * 0.55;
+    const padY   = fontSize * 0.15;
+    const w      = fontSize * 0.62 * numStr.length + padX * 2;
+    const h      = fontSize + padY * 2;
+
+    const rect = document.createElementNS(SVG_NS, "rect");
+    rect.setAttribute("x", cx - w / 2);
+    rect.setAttribute("y", cy - h / 2);
+    rect.setAttribute("width", w);
+    rect.setAttribute("height", h);
+    rect.setAttribute("rx", h / 2);
+    rect.setAttribute("ry", h / 2);
+    rect.setAttribute("fill", color);
+    rect.setAttribute("stroke", "white");
+    rect.setAttribute("stroke-width", fontSize * 0.09);
+    rect.setAttribute("opacity", "0.92");
+    rect.dataset.badgeFor = p.svg_id;
+    layer.appendChild(rect);
+
+    const text = document.createElementNS(SVG_NS, "text");
+    text.setAttribute("x", cx);
+    text.setAttribute("y", cy);
+    text.setAttribute("font-size", fontSize);
+    text.setAttribute("font-weight", "700");
+    text.setAttribute("font-family", "system-ui, sans-serif");
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("dominant-baseline", "central");
+    text.setAttribute("fill", "white");
+    text.dataset.badgeFor = p.svg_id;
+    text.textContent = numStr;
+    layer.appendChild(text);
+  });
+  svgEl.appendChild(layer);
+}
+
+// Engancha handlers de mouse a los elementos de la geometría del SVG.
+function _attachPieceHandlers(svgEl, paths, colorByIndex) {
+  _pieceMeta.clear();
+  paths.forEach((p, idx) => {
+    const el = svgEl.querySelector(`#${CSS.escape(p.svg_id)}`);
+    if (!el) return;
+    const color = colorByIndex(idx) || "#888";
+    _pieceMeta.set(p.svg_id, { color, el, num: idx + 1 });
+    el.dataset.pieceInteractive = "1";
+    el.onmouseenter = () => { if (!_pinnedPieceId) _highlightPiece(p.svg_id, { scroll: true }); };
+    el.onmouseleave = () => _clearHighlight();
+    el.onclick      = (ev) => { ev.stopPropagation(); _togglePiecePin(p.svg_id); };
+  });
+  // Click fuera de cualquier pieza → desactiva pin
+  if (!svgEl.dataset.outsideClickWired) {
+    svgEl.addEventListener("click", () => {
+      if (_pinnedPieceId) {
+        _pinnedPieceId = null;
+        document.querySelectorAll(".path-card.piece-pinned").forEach(c => c.classList.remove("piece-pinned"));
+        _resetHighlightStyles();
+      }
+    });
+    svgEl.dataset.outsideClickWired = "1";
+  }
+}
+
 // Colorear paths según tipo de producto y rol de cada path
 function colorizePaths(svgEl, paths) {
   if (!svgEl) return;
@@ -2237,6 +2405,17 @@ function colorizePaths(svgEl, paths) {
       { color:"#e74c3c", fill:"none", dash:true,         label:"⚠ Trazo abierto (no se cortará)" },
     ]);
 
+    // Badges numerados + interactividad (caja): el contorno usa gris, el diseño azul
+    const colorForCajaIdx = (idx) => {
+      const p = paths[idx];
+      if (!p) return null;
+      if (p === cajaPath || p?.svg_id === cajaId) return "#888";
+      if (p.is_closed && p.area_px > 0) return "#3498db";
+      return null;
+    };
+    _addPieceBadges(svgEl, paths, colorForCajaIdx, svgViewboxW || 1000);
+    _attachPieceHandlers(svgEl, paths, colorForCajaIdx);
+
   } else {
     // Letras 3D / planas: paleta naranja-cálida (cara material) por letra
     // para distinguirlas individualmente sin perder el "naranja = cara" del spec
@@ -2258,6 +2437,18 @@ function colorizePaths(svgEl, paths) {
         el.style.strokeDasharray = "3 3";
       }
     });
+
+    // Badges numerados + interactividad (letras / planas): color por pieza cerrada
+    const colorByIdxLetras = (() => {
+      let cIdx = 0;
+      const map = paths.map(p => {
+        if (p.is_closed) { const c = PATH_PALETTE[cIdx % PATH_PALETTE.length]; cIdx++; return c; }
+        return null;
+      });
+      return (i) => map[i];
+    })();
+    _addPieceBadges(svgEl, paths, colorByIdxLetras, svgViewboxW || 1000);
+    _attachPieceHandlers(svgEl, paths, colorByIdxLetras);
 
     const closedCount = paths.filter(p => p.is_closed).length;
     const openCount   = paths.length - closedCount;
@@ -2492,9 +2683,13 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
     const tira_neta = hasCercha ? (p.perimeter_px * scaleFactor).toFixed(3) : "—";
     const tira_mas  = hasCercha ? (p.perimeter_px * scaleFactor * 1.10).toFixed(3) : "—";
 
-    return `<div class="path-card" style="border:2px solid ${c};background:${c}22">
+    return `<div class="path-card" data-svg-id="${p.svg_id || ''}"
+      onmouseenter="if(!_pinnedPieceId&&this.dataset.svgId)_highlightPiece(this.dataset.svgId)"
+      onmouseleave="_clearHighlight()"
+      onclick="if(this.dataset.svgId)_togglePiecePin(this.dataset.svgId)"
+      style="border:2px solid ${c};background:${c}22">
       <div class="name" style="color:${c};display:flex;align-items:center;gap:6px">
-        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};flex-shrink:0"></span>
+        <span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:${c};color:#fff;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${idx+1}</span>
         ${p.id}
       </div>
       <div style="margin-bottom:5px">
