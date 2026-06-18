@@ -2472,7 +2472,7 @@ function colorizePaths(svgEl, paths) {
       legendItems.push({
         color: PATH_PALETTE[0],
         fill:  PATH_PALETTE[0] + "33",
-        label: `${closedCount} letras detectadas (1 color por letra)`,
+        label: `${closedCount} pieza${closedCount === 1 ? '' : 's'} detectada${closedCount === 1 ? '' : 's'} (1 color por pieza)`,
       });
     }
     if (openCount > 0) {

@@ -177,7 +177,7 @@ def generar_pdf(result, meta: dict) -> bytes:
     elements.append(Paragraph("Medidas del diseño", st["h2"]))
     med = [
         ["Elementos detectados", str(result.paths_count)],
-        ["Altura de letra",      f"{result.altura_letra_cm:.1f} cm"],
+        ["Altura máx pieza",     f"{result.altura_letra_cm:.1f} cm"],
         ["Área total caras",     f"{result.area_cara_cm2:.1f} cm²  ({result.area_cara_cm2/10000:.4f} m²)"],
         ["Perímetro total",      f"{result.perimetro_total_cm:.1f} cm  ({result.perimetro_total_cm/100:.2f} m)"],
         ["Profundidad cercha",   f"{result.cercha_altura_cm:.1f} cm"],
@@ -332,7 +332,7 @@ def generar_pdf_ot(result, meta: dict) -> bytes:
     desc_rows = [
         ["Producto",            tipo_label],
         ["Piezas a fabricar",   f"{n_letras}"],
-        ["Altura de letra",     f"{result.altura_letra_cm:.1f} cm"],
+        ["Altura máx pieza",    f"{result.altura_letra_cm:.1f} cm"],
         ["Área total caras",    f"{result.area_cara_cm2:.1f} cm²"],
         ["Material cara",       result.material_cara.get("nombre", "—")],
         ["Iluminación",         result.led.get("nombre", "Sin iluminación")],
@@ -558,7 +558,7 @@ def generar_pdf_entrega(result, meta: dict) -> bytes:
     elements.append(Paragraph("Descripción del Trabajo Entregado", st["h2"]))
     desc_rows = [
         ["Producto",         tipo_label],
-        ["Altura de letra",  f"{result.altura_letra_cm:.1f} cm"],
+        ["Altura máx pieza", f"{result.altura_letra_cm:.1f} cm"],
         ["Material cara",    result.material_cara.get("nombre", "—")],
         ["Material cercha",  result.material_cercha.get("nombre", "—")],
         ["Iluminación",      result.led.get("nombre", "Sin iluminación")],

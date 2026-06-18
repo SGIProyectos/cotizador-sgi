@@ -65,7 +65,7 @@ def generar_xlsx(result: QuoteResult, meta: dict) -> bytes:
     ws.cell(row=base_row, column=1, value="MEDIDAS").font = Font(bold=True, color="1F3A5F")
     medidas = [
         ("Paths detectados",     result.paths_count),
-        ("Altura de letra (cm)", round(result.altura_letra_cm, 1)),
+        ("Altura máx pieza (cm)", round(result.altura_letra_cm, 1)),
         ("Área cara (cm²)",      round(result.area_cara_cm2, 2)),
         ("Perímetro total (cm)", round(result.perimetro_total_cm, 2)),
         ("Cercha altura (cm)",   round(result.cercha_altura_cm, 1)),
@@ -100,13 +100,14 @@ def generar_xlsx(result: QuoteResult, meta: dict) -> bytes:
 
     _autosize(ws, 2)
 
-    # ─── Hoja 2: Letras (desglose por pieza) ─────────────────────────────────
+    # ─── Hoja 2: Piezas (desglose por pieza) ─────────────────────────────────
     if result.desglose_letras:
-        ws2 = wb.create_sheet("Letras")
+        ws2 = wb.create_sheet("Piezas")
         headers = ["ID", "Alto (cm)", "Ancho (cm)", "Área bbox (cm²)",
                    "Perímetro (cm)", "Cercha área (cm²)",
+                   "Material cara",
                    "Costo cara", "Costo cercha", "Costo material",
-                   "Precio letra"]
+                   "Precio pieza"]
         _header_row(ws2, 1, headers)
         for i, d in enumerate(result.desglose_letras, start=2):
             row_vals = [
@@ -116,6 +117,7 @@ def generar_xlsx(result: QuoteResult, meta: dict) -> bytes:
                 d.get("area_bbox_cm2", 0),
                 d.get("perimetro_cm", 0),
                 d.get("cercha_area_cm2", 0),
+                d.get("material_cara_nombre", ""),
                 d.get("costo_cara", 0),
                 d.get("costo_cercha", 0),
                 d.get("costo_mat", 0),
@@ -123,15 +125,15 @@ def generar_xlsx(result: QuoteResult, meta: dict) -> bytes:
             ]
             for col, v in enumerate(row_vals, start=1):
                 cell = ws2.cell(row=i, column=col, value=v)
-                if col >= 7:  # columnas de dinero
+                if col >= 8:  # columnas de dinero (corridas por la nueva columna material)
                     cell.number_format = '"$" #,##0.00'
                     cell.alignment = _RIGHT
-                elif col >= 2:
+                elif col >= 2 and col != 7:
                     cell.alignment = _RIGHT
         # Fila de totales
         last = len(result.desglose_letras) + 2
         ws2.cell(row=last, column=1, value="TOTAL").font = _TOTAL_FONT
-        for col in (7, 8, 9, 10):
+        for col in (8, 9, 10, 11):
             ws2.cell(row=last, column=col,
                      value=f"=SUM({get_column_letter(col)}2:{get_column_letter(col)}{last-1})")
             ws2.cell(row=last, column=col).number_format = '"$" #,##0.00'
