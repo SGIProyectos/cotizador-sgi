@@ -636,7 +636,7 @@ def cotizar_letras(
 ) -> QuoteResult:
 
     # Si el usuario conoce la altura, escalar desde ella (ignora márgenes del artboard).
-    # Si no, escalar desde el ancho y auto-detectar altura.
+    # Si no, escalar desde el ancho y auto-detectar altura como la pieza más alta.
     if altura_letra_cm > 0:
         svg_data = apply_scale(svg_data, real_width_cm, altura_cm=altura_letra_cm)
     else:
@@ -653,13 +653,16 @@ def cotizar_letras(
         letras = svg_data.paths  # fallback: usar todos
 
     sf = svg_data.scale_factor
-    # Cara: usamos bounding box (alto × ancho) por letra, como se corta en producción real
+    # Cara: usamos bounding box (alto × ancho) por pieza, como se corta en producción real
     area_cara_total   = sum(
         (p.bbox["h"] * sf) * (p.bbox["w"] * sf) for p in letras
     )
     perimetro_total   = sum(p.perimeter_cm for p in letras)
 
-    # Cercha — rango oficial Signalux según altura
+    # Cercha — rango oficial Signalux según la altura máxima del proyecto.
+    # La cercha sigue siendo GLOBAL (un solo perfil estructural para todas
+    # las piezas) — lo que cambia en Fase D es el material CARA, que ahora
+    # se elige por pieza individual.
     rango_cercha = cercha_rango_cm(altura_letra_cm)
     if cercha_cm <= 0:
         cercha_cm = rango_cercha["recomendado"]
@@ -668,22 +671,60 @@ def cotizar_letras(
 
     config = TIPOS_CONSTRUCCION.get(tipo_construccion, TIPOS_CONSTRUCCION["cajon_luz"])
 
-    # ── CARA ──────────────────────────────────────────────────────────────────
+    # ── CARA — material por pieza individual ─────────────────────────────────
+    # Fase D: cuando tipo_cara == "auto", cada pieza recibe el material
+    # apropiado para su PROPIA altura, no la altura máxima del proyecto.
+    # Un anuncio con placa de 38 cm + texto de 2 cm ya no se cobra todo
+    # con el material más caro: cada pieza paga su material adecuado.
+    # Si el usuario fija un material específico (no auto), se aplica a
+    # todas las piezas (comportamiento legacy).
+    cara_por_pieza: list[tuple] = []  # (mat_id, area_cm2, costo) por pieza
     if config["cara"] == "ninguna":
+        cara_por_pieza = [(None, (p.bbox["h"] * sf) * (p.bbox["w"] * sf), 0.0)
+                          for p in letras]
+    else:
+        for p in letras:
+            alto_pz  = p.bbox["h"] * sf
+            ancho_pz = p.bbox["w"] * sf
+            area_pz  = alto_pz * ancho_pz
+            if tipo_cara != "auto":
+                mat_id = tipo_cara
+            elif config["cara"] == "aluminio":
+                mat_id = material_cercha(alto_pz)
+            else:  # acrilico
+                mat_id = material_cara(alto_pz)
+            costo_pz = area_pz * precio_cm2(LAMINAS[mat_id])
+            cara_por_pieza.append((mat_id, area_pz, costo_pz))
+
+    # Agregaciones por material
+    area_por_mat: dict[str, float]  = {}
+    costo_por_mat: dict[str, float] = {}
+    for mat_id, area, costo in cara_por_pieza:
+        if mat_id is None:
+            continue
+        area_por_mat[mat_id]  = area_por_mat.get(mat_id, 0.0) + area
+        costo_por_mat[mat_id] = costo_por_mat.get(mat_id, 0.0) + costo
+
+    c_cara = round(sum(costo_por_mat.values()), 2)
+
+    # Material representativo y láminas (para QuoteResult.material_cara y .laminas_cara)
+    if not area_por_mat:
         mat_cara_id = None
-        mat_cara    = {"nombre": "Sin cara frontal", "precio": 0, "ancho_cm": 122, "alto_cm": 244}
+        mat_cara    = {"nombre": "Sin cara frontal", "precio": 0,
+                       "ancho_cm": 122, "alto_cm": 244}
         lam_cara    = 0
-        c_cara      = 0.0
-    elif config["cara"] == "aluminio":
-        mat_cara_id = material_cercha(altura_letra_cm) if tipo_cara == "auto" else tipo_cara
-        mat_cara    = LAMINAS[mat_cara_id]
-        lam_cara    = laminas_necesarias(area_cara_total, mat_cara_id)
-        c_cara      = round(area_cara_total * precio_cm2(mat_cara), 2)
-    else:  # acrilico
-        mat_cara_id = material_cara(altura_letra_cm) if tipo_cara == "auto" else tipo_cara
-        mat_cara    = LAMINAS[mat_cara_id]
-        lam_cara    = laminas_necesarias(area_cara_total, mat_cara_id)
-        c_cara      = round(area_cara_total * precio_cm2(mat_cara), 2)
+    else:
+        primary_mat_id = max(area_por_mat, key=lambda k: area_por_mat[k])
+        mat_cara_id    = primary_mat_id
+        mat_cara_base  = LAMINAS[primary_mat_id]
+        if len(area_por_mat) == 1:
+            mat_cara = mat_cara_base
+        else:
+            # Hay mezcla → nombre indica que ver desglose
+            nombres = [LAMINAS[mid]["nombre"] for mid in area_por_mat]
+            mat_cara = {**mat_cara_base,
+                        "nombre": f"Mixto ({len(area_por_mat)}): {', '.join(nombres)}"}
+        lam_cara = sum(laminas_necesarias(a, mid) for mid, a in area_por_mat.items())
 
     # ── CERCHA ────────────────────────────────────────────────────────────────
     mat_cercha_id = material_cercha(altura_letra_cm) if tipo_cercha == "auto" else tipo_cercha
@@ -766,7 +807,6 @@ def cotizar_letras(
     venta    = total / (1 - margen_ganancia)
 
     # ── DESGLOSE ──────────────────────────────────────────────────────────────
-    ppcm2_cara   = precio_cm2(mat_cara)   if mat_cara_id else 0.0
     ppcm2_cercha = precio_cm2(mat_cercha)
     ppcm2_fondo  = precio_cm2(mat_fondo)  if config["fondo_pvc"] else 0.0
 
@@ -774,8 +814,19 @@ def cotizar_letras(
         return f"{nombre} · {area:.0f} cm² × ${ppcm2:.4f}/cm² ({lam} lám.)"
 
     desglose = []
-    if config["cara"] != "ninguna":
-        desglose.append({"concepto": _fmt_mat(mat_cara["nombre"], lam_cara, ppcm2_cara, area_cara_total), "costo": c_cara})
+    if config["cara"] != "ninguna" and area_por_mat:
+        # Una línea por material distinto (Fase D: refleja material por pieza)
+        for mat_id, area in area_por_mat.items():
+            m_obj  = LAMINAS[mat_id]
+            ppcm2  = precio_cm2(m_obj)
+            costo  = costo_por_mat[mat_id]
+            lams   = laminas_necesarias(area, mat_id)
+            n_pzs  = sum(1 for mid, _, _ in cara_por_pieza if mid == mat_id)
+            sufijo = f" ({n_pzs} pieza{'s' if n_pzs != 1 else ''})" if len(area_por_mat) > 1 else ""
+            desglose.append({
+                "concepto": _fmt_mat(m_obj["nombre"], lams, ppcm2, area) + sufijo,
+                "costo": round(costo, 2),
+            })
     desglose.append({"concepto": _fmt_mat(mat_cercha["nombre"], lam_cercha, ppcm2_cercha, area_cercha_total), "costo": c_cercha})
     if config["fondo_pvc"]:
         desglose.append({"concepto": _fmt_mat(mat_fondo["nombre"], lam_fondo, ppcm2_fondo, area_cara_total), "costo": c_fondo})
@@ -797,7 +848,7 @@ def cotizar_letras(
 
     desglose_letras = []
     precio_formula_total = 0.0
-    for p in letras:
+    for i, p in enumerate(letras):
         alto_cm    = round(p.bbox["h"] * svg_data.scale_factor, 2)
         ancho_cm   = round(p.bbox["w"] * svg_data.scale_factor, 2)
         area_bbox  = round(alto_cm * ancho_cm, 2)           # alto × ancho (bounding box)
@@ -805,13 +856,17 @@ def cotizar_letras(
         tira_total = round(p.perimeter_cm * 1.10, 1)
         cercha_area_letra = round(tira_neta * cercha_cm, 2)  # perímetro × profundidad
 
-        costo_cara_letra   = round(area_bbox         * ppcm2_cara,   2) if mat_cara_id else 0.0
+        # Material y costo cara reales de esta pieza (de cara_por_pieza)
+        pieza_mat_id, _, pieza_costo_cara_raw = cara_por_pieza[i]
+        costo_cara_letra   = round(pieza_costo_cara_raw, 2)
         costo_cercha_letra = round(cercha_area_letra * ppcm2_cercha, 2)
-        costo_fondo_letra  = round(area_bbox         * ppcm2_fondo,  2)
+        costo_fondo_letra  = round(area_bbox * ppcm2_fondo, 2)
         costo_mat_letra    = round(costo_cara_letra + costo_cercha_letra + costo_fondo_letra, 2)
 
         precio_letra = round(alto_cm * precio_cm * multiplicador, 2)
         precio_formula_total += precio_letra
+
+        pieza_mat_nombre = LAMINAS[pieza_mat_id]["nombre"] if pieza_mat_id else "Sin cara"
         desglose_letras.append({
             "id":               p.id,
             "alto_cm":          alto_cm,
@@ -823,6 +878,8 @@ def cotizar_letras(
             "cercha_total_cm":  tira_total,
             "cercha_area_cm2":  cercha_area_letra,
             "cercha_altura_cm": round(cercha_cm, 1),
+            "material_cara_id":     pieza_mat_id or "",
+            "material_cara_nombre": pieza_mat_nombre,
             "costo_cara":       costo_cara_letra,
             "costo_cercha":     costo_cercha_letra,
             "costo_mat":        costo_mat_letra,

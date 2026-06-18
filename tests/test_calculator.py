@@ -377,6 +377,38 @@ class TestCotizarLetras:
         assert r.metros_silvatrim > 0
         assert r.costo_silvatrim > 0
 
+    def test_fase_d_material_por_pieza_individual(self):
+        """Fase D: en auto, cada pieza recibe material según su propia altura,
+        no la altura máxima del proyecto. Anuncio mixto = placa grande
+        (35cm) + texto chico (5cm) → DOS materiales distintos."""
+        svg = b"""<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 500">
+  <path d="M50,50 L550,50 L550,400 L50,400 Z" id="placa"/>
+  <path d="M100,420 L150,420 L150,470 L100,470 Z" id="texto1"/>
+</svg>"""
+        r = self._quote(svg, real_width_cm=60.0, altura_letra_cm=0,
+                        tipo_cara="auto")
+        # Hay 2 piezas: placa 35cm y texto 5cm
+        assert r.paths_count == 2
+        materiales_usados = {d["material_cara_id"] for d in r.desglose_letras}
+        # En anuncio heterogéneo deben aparecer al menos 2 materiales distintos
+        assert len(materiales_usados) >= 2, \
+            f"Esperaba materiales distintos por pieza; salió {materiales_usados}"
+        # La placa (más alta) debe tener material distinto al texto (más bajo)
+        placa_pieza = next(d for d in r.desglose_letras if d["alto_cm"] >= 30)
+        texto_pieza = next(d for d in r.desglose_letras if d["alto_cm"] < 10)
+        assert placa_pieza["material_cara_id"] != texto_pieza["material_cara_id"]
+        # Material agregado debe reportar "Mixto"
+        assert "Mixto" in r.material_cara["nombre"]
+
+    def test_fase_d_material_fijo_se_aplica_a_todas(self, square_svg):
+        """Cuando el usuario fija un material específico (tipo_cara != 'auto'),
+        TODAS las piezas usan ese material — comportamiento legacy."""
+        r = self._quote(square_svg, tipo_cara="acrilico_3mm")
+        materiales = {d["material_cara_id"] for d in r.desglose_letras}
+        assert materiales == {"acrilico_3mm"}
+        assert "Mixto" not in r.material_cara["nombre"]
+
     def test_invalid_construction_falls_back(self, square_svg):
         # tipo_construccion no existente → no debe crashear, usa cajon_luz default
         r = self._quote(square_svg, tipo_construccion="no_existe")
