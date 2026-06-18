@@ -660,7 +660,32 @@ async def api_ot(quote_id: str, cliente: str = "", notas: str = ""):
     if cliente: meta["cliente"] = cliente
     if notas:   meta["notas"]   = notas
 
-    pdf_bytes = generar_pdf_ot(result, meta)
+    # Recuperar SVG persistido para añadir página landscape con el diseño
+    # + badges numerados por material en la OT.
+    svg_text = ""
+    vb_w = vb_h = 0.0
+    paths_info: list = []
+    row = db.get_quote(quote_id)
+    if row:
+        svg_text = row.get("svg_text") or ""
+        if svg_text:
+            try:
+                svg_data = parse_svg(svg_text.encode("utf-8"))
+                vb_w = svg_data.viewbox_w
+                vb_h = svg_data.viewbox_h
+                paths_info = [
+                    {"svg_id": p.svg_id, "id": p.id, "bbox": p.bbox,
+                     "is_closed": p.is_closed}
+                    for p in svg_data.paths
+                ]
+            except Exception:
+                log.warning("OT %s: no se pudo parsear SVG persistido", quote_id,
+                            exc_info=True)
+                svg_text = ""
+
+    pdf_bytes = generar_pdf_ot(result, meta, svg_text=svg_text,
+                               viewbox_w=vb_w, viewbox_h=vb_h,
+                               paths_info=paths_info)
     filename  = f"OT_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
     return FileResponse(path=_write_tmp(pdf_bytes, filename), filename=filename, media_type="application/pdf")
 

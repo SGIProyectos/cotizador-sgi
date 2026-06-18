@@ -8,8 +8,14 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import (
+    BaseDocTemplate,
+    Flowable,
+    Frame,
     HRFlowable,
     KeepTogether,
+    NextPageTemplate,
+    PageBreak,
+    PageTemplate,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -297,13 +303,42 @@ def generar_pdf(result, meta: dict) -> bytes:
 
 # ─── 2. ORDEN DE TRABAJO ─────────────────────────────────────────────────────
 
-def generar_pdf_ot(result, meta: dict) -> bytes:
+def generar_pdf_ot(result, meta: dict, svg_text: str = "",
+                   viewbox_w: float = 0.0, viewbox_h: float = 0.0,
+                   paths_info: list | None = None) -> bytes:
+    """Orden de Trabajo. Si se proporciona svg_text + viewbox + paths_info,
+    se añade una página landscape con el diseño visual, badges numerados
+    sobre cada pieza coloreados por material asignado, y leyenda de
+    materiales al pie. Sin esos parámetros, queda como antes: solo portrait
+    con datos."""
+
+    from reportlab.lib.pagesizes import landscape as _ls
+    from reportlab.lib.pagesizes import letter as _letter
+
+    has_design = bool(svg_text) and bool(paths_info)
+
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=letter,
-        leftMargin=2*cm, rightMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm,
-        title="Orden de Trabajo",
-    )
+    if has_design:
+        PW_P, PH_P = _letter
+        PW_L, PH_L = _ls(_letter)
+        MAR = 2 * cm
+        doc = BaseDocTemplate(
+            buf, pagesize=_letter,
+            leftMargin=MAR, rightMargin=MAR, topMargin=MAR, bottomMargin=MAR,
+            title="Orden de Trabajo",
+        )
+        frame_p = Frame(MAR, MAR, PW_P - 2*MAR, PH_P - 2*MAR, id="port", showBoundary=0)
+        frame_l = Frame(MAR, MAR, PW_L - 2*MAR, PH_L - 2*MAR, id="land", showBoundary=0)
+        doc.addPageTemplates([
+            PageTemplate(id="P", frames=[frame_p], pagesize=_letter),
+            PageTemplate(id="L", frames=[frame_l], pagesize=_ls(_letter)),
+        ])
+    else:
+        doc = SimpleDocTemplate(
+            buf, pagesize=letter,
+            leftMargin=2*cm, rightMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm,
+            title="Orden de Trabajo",
+        )
 
     st  = _estilos()
     elements = []
@@ -486,8 +521,235 @@ def generar_pdf_ot(result, meta: dict) -> bytes:
                   st["pie"]),
     ]))
 
+    # ── Página landscape con el DISEÑO + badges por material ─────────────────
+    if has_design:
+        try:
+            elements.append(NextPageTemplate("L"))
+            elements.append(PageBreak())
+            _agregar_pagina_diseno_ot(
+                elements, st, result, meta,
+                svg_text, viewbox_w, viewbox_h, paths_info,
+                avail_w=PW_L - 2*MAR, avail_h=PH_L - 2*MAR,
+            )
+        except Exception:
+            log.warning("OT: falló renderizado de la página de diseño; OT se entrega sin diseño",
+                        exc_info=True)
+
     doc.build(elements)
     return buf.getvalue()
+
+
+# ─── PÁGINA DE DISEÑO PARA LA OT ─────────────────────────────────────────────
+
+# Paleta estable para colorear materiales en el diseño de la OT.
+_OT_MATERIAL_PALETTE = [
+    "#1565C0",  # azul fuerte
+    "#E65100",  # naranja
+    "#2E7D32",  # verde
+    "#6A1B9A",  # morado
+    "#C62828",  # rojo
+    "#00838F",  # cian
+    "#558B2F",  # verde oliva
+    "#4527A0",  # índigo
+]
+
+
+def _ot_materiales_colores(result) -> dict:
+    """Mapa estable {material_id → color hex} agrupando por material distinto."""
+    materiales: list[str] = []
+    for d in (result.desglose_letras or []):
+        mid = d.get("material_cara_id") or ""
+        if mid and mid not in materiales:
+            materiales.append(mid)
+    return {m: _OT_MATERIAL_PALETTE[i % len(_OT_MATERIAL_PALETTE)]
+            for i, m in enumerate(materiales)}
+
+
+class _OTDisenoFlowable(Flowable):
+    """Flowable que renderiza el SVG escalado + badges numerados por material."""
+
+    def __init__(self, svg_text: str, viewbox_w: float, viewbox_h: float,
+                 paths_info: list, result, mat_colors: dict,
+                 max_w: float, max_h: float) -> None:
+        Flowable.__init__(self)
+        self.svg_text     = svg_text
+        self.viewbox_w    = viewbox_w
+        self.viewbox_h    = viewbox_h
+        self.paths_info   = paths_info or []
+        self.result       = result
+        self.mat_colors   = mat_colors
+        self.max_w        = max_w
+        self.max_h        = max_h
+        self.width        = max_w
+        self.height       = max_h
+        self.hAlign       = "CENTER"
+
+    def wrap(self, availWidth, availHeight):
+        self.width  = min(self.max_w, availWidth)
+        self.height = min(self.max_h, availHeight)
+        return self.width, self.height
+
+    def draw(self) -> None:
+        c = self.canv
+        # svglib + reportlab.graphics para renderizar el SVG
+        try:
+            from reportlab.graphics import renderPDF
+            from svglib.svglib import svg2rlg
+        except ImportError:
+            c.setFillColor(colors.grey)
+            c.setFont("Helvetica", 9)
+            c.drawString(4, 4, "svglib no disponible — diseño omitido")
+            return
+        import os
+        import tempfile
+
+        try:
+            tmp = tempfile.NamedTemporaryFile(
+                delete=False, suffix=".svg", mode="w", encoding="utf-8")
+            tmp.write(self.svg_text)
+            tmp.close()
+            rlg = svg2rlg(tmp.name)
+            os.unlink(tmp.name)
+        except Exception:
+            log.warning("OT: svg2rlg falló", exc_info=True)
+            return
+        if not rlg or rlg.width <= 0 or rlg.height <= 0:
+            return
+
+        # Encajar dentro del flowable conservando proporciones (95% para margen)
+        scale = min(self.width / rlg.width, self.height / rlg.height) * 0.95
+        sw    = rlg.width  * scale
+        sh    = rlg.height * scale
+        ox    = (self.width  - sw) / 2
+        oy    = (self.height - sh) / 2
+
+        c.saveState()
+        c.translate(ox, oy)
+        c.scale(scale, scale)
+        renderPDF.draw(rlg, c, 0, 0)
+        c.restoreState()
+
+        # Mapa svg_id → desglose (material y número)
+        desglose_por_svg = {}
+        for i, d in enumerate(self.result.desglose_letras or []):
+            sid = d.get("svg_id") or d.get("id") or ""
+            desglose_por_svg[sid] = (i + 1, d)
+
+        # Calcular tamaño uniforme de badge basándose en la pieza más pequeña
+        min_dim = float("inf")
+        for p in self.paths_info:
+            if not p.get("is_closed"):
+                continue
+            bb = p.get("bbox", {})
+            md = min(bb.get("w", 0), bb.get("h", 0))
+            if md > 0 and md < min_dim:
+                min_dim = md
+        if min_dim == float("inf"):
+            min_dim = rlg.width * 0.05
+
+        # Tamaño en unidades del SVG; tras escalado queda visible en la hoja
+        font_size_svg = max(rlg.width * 0.012, min_dim * 0.22)
+        font_size_pt  = font_size_svg * scale
+        font_size_pt  = max(7.0, min(14.0, font_size_pt))   # legible siempre
+
+        # Dibujar badges (orden de aparición = orden de svg_id en paths_info)
+        c.saveState()
+        c.setFont("Helvetica-Bold", font_size_pt)
+        num = 0
+        for p in self.paths_info:
+            if not p.get("is_closed"):
+                continue
+            num += 1
+            bb     = p.get("bbox", {})
+            cx_svg = bb.get("x", 0) + bb.get("w", 0) / 2
+            cy_svg = bb.get("y", 0) + bb.get("h", 0) / 2
+            # SVG: Y crece hacia abajo. reportlab: Y crece hacia arriba.
+            # rlg.height ya es la altura del viewBox en unidades SVG.
+            x_pt = ox + cx_svg * scale
+            y_pt = oy + (rlg.height - cy_svg) * scale
+
+            # Color = material de esta pieza (o gris si no aplica)
+            mat_id = ""
+            sid    = p.get("svg_id") or p.get("id") or ""
+            if sid in desglose_por_svg:
+                _, dd = desglose_por_svg[sid]
+                mat_id = dd.get("material_cara_id") or ""
+            color_hex = self.mat_colors.get(mat_id, "#555555")
+
+            # Pill rectangular para acomodar números de 1 y 2 dígitos
+            num_str = str(num)
+            pill_w  = font_size_pt * 0.55 * len(num_str) + font_size_pt * 0.9
+            pill_h  = font_size_pt * 1.6
+            c.setFillColor(colors.HexColor(color_hex))
+            c.setStrokeColor(colors.white)
+            c.setLineWidth(0.8)
+            c.roundRect(x_pt - pill_w / 2, y_pt - pill_h / 2,
+                         pill_w, pill_h, pill_h / 2, fill=1, stroke=1)
+            c.setFillColor(colors.white)
+            c.drawCentredString(x_pt, y_pt - font_size_pt * 0.35, num_str)
+        c.restoreState()
+
+
+def _agregar_pagina_diseno_ot(elements: list, st: dict, result, meta: dict,
+                              svg_text: str, viewbox_w: float, viewbox_h: float,
+                              paths_info: list, avail_w: float, avail_h: float) -> None:
+    """Construye los flowables de la página landscape con el diseño + leyenda."""
+    folio   = meta.get("folio", "---")
+    cliente = meta.get("cliente") or "—"
+    n_piezas = result.paths_count or len(result.desglose_letras or [])
+
+    S_TIT = ParagraphStyle("sgi_ot_dis_t", fontSize=14, textColor=AZUL_DARK,
+                            fontName="Helvetica-Bold", alignment=TA_CENTER, leading=18)
+    S_SUB = ParagraphStyle("sgi_ot_dis_s", fontSize=9.5, textColor=colors.black,
+                            alignment=TA_CENTER, leading=12)
+    elements.append(Paragraph("DISEÑO A FABRICAR", S_TIT))
+    sub = f"OT-{folio}  ·  Cliente: {cliente}  ·  {n_piezas} pieza(s)"
+    elements.append(Paragraph(sub, S_SUB))
+    elements.append(Spacer(1, 0.3*cm))
+
+    # Construir leyenda de materiales primero (para reservar su altura)
+    mat_colors = _ot_materiales_colores(result)
+    leyenda_items = []
+    if mat_colors:
+        # Conteo de piezas por material
+        cuenta_por_mat: dict[str, int] = {}
+        for d in result.desglose_letras or []:
+            mid = d.get("material_cara_id") or ""
+            if mid:
+                cuenta_por_mat[mid] = cuenta_por_mat.get(mid, 0) + 1
+        for mid, color_hex in mat_colors.items():
+            nombre = next(
+                (d.get("material_cara_nombre", mid)
+                 for d in result.desglose_letras or []
+                 if d.get("material_cara_id") == mid),
+                mid,
+            )
+            n = cuenta_por_mat.get(mid, 0)
+            leyenda_items.append((color_hex, nombre, n))
+
+    leyenda_h = 0.7 * cm if leyenda_items else 0.0
+    diseno_h  = avail_h - 1.8 * cm - leyenda_h   # restar título + leyenda
+
+    # Flowable del diseño
+    elements.append(
+        _OTDisenoFlowable(svg_text, viewbox_w, viewbox_h, paths_info,
+                          result, mat_colors,
+                          max_w=avail_w, max_h=max(4*cm, diseno_h))
+    )
+
+    # Leyenda al pie
+    if leyenda_items:
+        elements.append(Spacer(1, 0.3*cm))
+        S_LEY = ParagraphStyle("sgi_ot_ley", fontSize=8.5, textColor=colors.black,
+                                leading=12)
+        parts = []
+        for color_hex, nombre, n in leyenda_items:
+            sufijo = f"({n} pieza{'s' if n != 1 else ''})" if n else ""
+            parts.append(
+                f'<font color="{color_hex}">■</font> '
+                f'<b>{nombre}</b> {sufijo}'
+            )
+        elements.append(Paragraph("&nbsp;&nbsp;&nbsp;".join(parts), S_LEY))
 
 
 def _control_produccion_tbl():
