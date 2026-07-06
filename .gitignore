@@ -57,6 +57,12 @@ continua.png
 # Carpeta de trabajos del usuario
 TRABAJOS/
 
+# SVGs y PDFs de prueba del propietario
+EJEMPLOS/
+
+# Estado local de Claude Code
+.claude/
+
 # Debug / runtime
 server_err.log
 tmp_check.py

@@ -35,7 +35,7 @@ python -m pytest tests/test_calculator.py::test_<name> -v
 pip-compile requirements.txt -o requirements.lock
 ```
 
-Lint config: `pyproject.toml` (ruff, line-length 100, py310 target, rule sets E/W/F/I/B/UP/SIM). Tests live in `tests/` (pytest, 64 tests as of last count). CI: `.github/workflows/test.yml` runs ruff + pytest with coverage gate of 70% on push/PR to `main`.
+Lint config: `pyproject.toml` (ruff, line-length 100, py310 target, rule sets E/W/F/I/B/UP/SIM). Tests live in `tests/` (pytest, 82 tests as of last count). CI: `.github/workflows/test.yml` runs ruff + pytest with coverage gate of 70% on push/PR to `main`.
 
 ## Deployment
 
@@ -45,9 +45,9 @@ Deployed to Render.com via `render.yaml` (Python 3.11, `uvicorn main:app --host 
 
 ### Request flow
 
-1. **Upload SVG** → `POST /api/parse-svg` → `calculator.parse_svg()` extracts paths with perimeter, area, and bounding box in SVG pixels → stored in `_svg_store[session_id]` (in-memory; SVG is small and re-uploadable so RAM-only is fine)
+1. **Upload SVG** → `POST /api/parse-svg` → `calculator.parse_svg()` extracts *pieces* (any closed shape: `<path>`, `<rect>`, `<circle>`, `<ellipse>`, `<polygon>`, `<polyline>`, `<line>`) with perimeter, area, and bounding box in SVG pixels → stored in `_svg_store[session_id]` (in-memory; SVG is small and re-uploadable so RAM-only is fine). The raw SVG text is also persisted to the `quotes.svg_text` column at quote time so planos can be regenerated after re-open.
 2. **Quote** → `POST /api/cotizar/letras|caja|planas` → calls `cotizar_letras()` / `cotizar_caja()` / `cotizar_planas()`, which scale px→cm, select materials from catalog, compute costs → result written to SQLite via `db.save_quote()` and cached in `_quote_store[quote_id]`; metadata (cliente, notas, folio) cached at `_quote_store[quote_id + "_meta"]`
-3. **PDF / Excel** → `GET /api/pdf/{quote_id}?cliente=X&notas=Y` (cotización), `/api/ot/{quote_id}` (orden de trabajo), `/api/entrega/{quote_id}` (acta de entrega + garantía), `/api/excel/{quote_id}` (XLSX export) — all written to `tmp/` directory
+3. **PDF / Excel** → `GET /api/pdf/{quote_id}?cliente=X&notas=Y` (cotización), `/api/ot/{quote_id}` (orden de trabajo), `/api/entrega/{quote_id}` (acta de entrega + garantía), `/api/plano/{quote_id}` (plano de medidas para cliente), `/api/plano-taller/{quote_id}` (plano con materiales para taller), `/api/excel/{quote_id}` (XLSX export) — all written to `tmp/` directory. The plano endpoints use `_cargar_svg_para_plano()` to recover the persisted SVG.
 4. **History** → `GET /api/quotes` (list with filters), `GET /api/quotes/{id}/open` (re-open: rebuilds session + QuoteResult from DB), `DELETE /api/quotes/{id}`
 5. **Clients** → `GET /api/clients?q=` (search), `POST /api/clients` (upsert), `DELETE /api/clients/{id}`
 6. **Catalog** → `GET /api/catalog` returns current in-memory catalog; `POST /api/catalog` calls `catalog_apply()` + `catalog_save()` to persist to `catalog.json`
@@ -60,13 +60,14 @@ Deployed to Render.com via `render.yaml` (Python 3.11, `uvicorn main:app --host 
 | `main.py` | FastAPI app, route handlers, in-memory caches (`_svg_store`, `_quote_store`), persistence helpers |
 | `calculator.py` | SVG parsing, quoting logic for all three product types, `QuoteResult` dataclass |
 | `db.py` | SQLite persistence: `init_db()`, `save_quote()`, `list_quotes()`, `get_quote()`, `next_folio()` (SGI-YYYY-NNNN), client CRUD |
-| `catalog_data.py` | All pricing data (LAMINAS, LEDS_CANAL, LEDS_CAJA, FUENTES, PEGAMENTOS, PRECIOS_BASE, TIPOS_CONSTRUCCION, GRUAS), auto-selection functions, catalog persistence |
-| `pdf_gen.py` | ReportLab PDF generation for all three document types; purely presentational |
+| `catalog_data.py` | All pricing data (LAMINAS, LEDS_CANAL, LEDS_CAJA, FUENTES, PEGAMENTOS, CABLES, SILVATRIM, PRECIOS_BASE, TIPOS_CONSTRUCCION, GRUAS), auto-selection functions, catalog persistence |
+| `pdf_gen.py` | ReportLab PDF generation for the three business documents; purely presentational |
+| `plano_gen.py` | Plano de medidas PDFs: `generar_plano_cliente()` (drawing + numbered badges + dimension table) and `generar_plano_taller()` (adds per-piece material column + technical notes). Drawing is scaled by the joint bbox of kept pieces, not the viewBox |
 | `excel_gen.py` | openpyxl XLSX export of a `QuoteResult` (Resumen + Letras + Desglose sheets) |
 | `vectorizer.py` | Raster→SVG pipeline: OpenCV flood-fill background removal + vtracer Bézier tracing. Only `vectorize()` is real; do NOT add LLM-based variants (see §7). |
 | `static/index.html` | Single-file SPA (vanilla JS + inline CSS); no build step |
 | `catalog.json` | Runtime price overrides; loaded at startup by `catalog_load()`, updated via `POST /api/catalog` |
-| `cotizador.db` | SQLite database file (quotes, folio_seq, clients tables); auto-created by `db.init_db()` on startup |
+| `cotizador.db` | SQLite database file (quotes, folio_seq, clients tables); auto-created by `db.init_db()` on startup. `init_db()` also runs a defensive migration adding `quotes.svg_text` if missing |
 
 ### Material cost methodology (critical)
 
@@ -79,9 +80,14 @@ def precio_cm2(mat: dict) -> float:
     area = mat.get("ancho_cm", 122) * mat.get("alto_cm", 244)
     return mat.get("precio", 0) / area if area > 0 else 0.0
 
-# Face material: bounding box area per letter (h × w of cut rectangle)
-area_cara_total = sum((p.bbox["h"] * sf) * (p.bbox["w"] * sf) for p in letras)
-c_cara = area_cara_total * precio_cm2(mat_cara)
+# Face material is ADAPTIVE PER PIECE: with tipo_cara == "auto", each piece gets
+# the material appropriate for its OWN height (material_cara()/material_cercha()
+# per piece), so a 38 cm plate + 2 cm text no longer all pays the expensive
+# material. A specific tipo_cara applies to all pieces (legacy behavior).
+# `cara_por_pieza` holds (mat_id, area_cm2, costo) per piece; totals are the sum.
+c_cara = sum(costo for _, _, costo in cara_por_pieza)
+# Per-piece bbox area (h × w of cut rectangle):
+area_pz = (p.bbox["h"] * sf) * (p.bbox["w"] * sf)
 
 # Cercha: perimeter × depth
 area_cercha_total = perimeter_total * cercha_cm
@@ -89,6 +95,10 @@ c_cercha = area_cercha_total * precio_cm2(mat_cercha)
 ```
 
 `laminas_necesarias()` is still computed for display (how many sheets needed) but cost is NOT `laminas × precio`.
+
+### LEDs (channel letters)
+
+LED modules are distributed over the face AREA (illumination from inside the channel), not along the perimeter. Coverage per module ≈ `cercha_cm × espaciado_led_cm × 2`; each piece gets `max(3, ceil(area_pieza / cobertura_modulo))` modules (minimum 3 for uniformity on small letters). `led_id` param: `"auto"` uses `led_recomendado(cercha_cm, uso)`, or a specific LEDS_CANAL id overrides. Note: the per-piece display breakdown in `desglose_letras` estimates modules as `ceil(perim / espaciado)` — the global count (area-based) is authoritative for cost.
 
 ### Fuente (power supply) cost
 
@@ -103,9 +113,11 @@ c_fuente = round(fuente["precio"] * fraccion_fuente, 2)
 Proportional to linear meters of perimeter:
 ```python
 metros_peg = perimetro_total / 100 * max(1, juntas)   # juntas = seams (cara + fondo)
-envases = max(0.15, metros_peg / pegamento["metros_por_envase"])
+envases = max(0.05, metros_peg / pegamento["metros_por_envase"])   # floor 5% (was 15% — inflated small quotes)
 c_peg = envases * pegamento["precio_aprox"]
 ```
+
+Pegamento yields were recalibrated with field data: Soudaflex 11 m/envase, Silicón 11 m, Cloruro 60 m.
 
 ### Pricing formula (COTIZANDO sheet)
 
@@ -131,13 +143,13 @@ When `tipo_construccion` changes in the UI, `onTipoConstruccionChange()` must sy
 
 `DISTANCIADORES` cost is added only when `config["distanciadores"]` is True (i.e., `retro_halo`): `n_letras × DISTANCIADORES["precio"]`.
 
-**Silvatrim** is added to every channel letter quote: `silvatrim_recomendado(cercha_cm)` auto-selects the profile; cost = `(perimeter_total / 100) m × sv["precio_ml"]`. The `desglose_letras[*]["cercha_total_cm"]` = perimeter × 1.10 (10% waste for cuts/bends).
+**Silvatrim** is now optional, controlled by `silvatrim_id` in `LetrasRequest`: `""` = none, `"auto"` (default) = `silvatrim_recomendado(cercha_cm)` auto-selects the profile, or a specific SILVATRIM id overrides. Cost = `(perimeter_total / 100) m × sv["precio_ml"]`. The `desglose_letras[*]["cercha_total_cm"]` = perimeter × 1.10 (10% waste for cuts/bends). PDFs only show the Silvatrim row when `metros_silvatrim > 0`.
 
 ### Light box (`cotizar_caja`) specifics
 
 **Pricing formula**: Unlike channel letters, `cotizar_caja` does NOT use the height×price×multiplier formula. `precio_venta_sugerido = total / (1 - margen_ganancia)` directly. `precio_sin_ajuste`, `ajuste_pct`, and `desglose_letras` are empty/zero in caja results.
 
-**Caja outline detection** — `_find_caja_outline()` identifies the box outline as the path that looks rectangular: `perimeter / (2*(w+h)) ≤ 2.5` (i.e. not a complex shape), picking the one with the largest bounding-box area among candidates. Returns `None` if no path passes the ratio check; caller then uses artboard/viewbox dimensions as the caja bounds. This is critical because interior design elements can have larger fill area than the outline, which would break the old "largest area = caja" assumption.
+**Caja outline detection** — `_find_caja_outline()` identifies the box outline as the path that looks rectangular: `perimeter / (2*(w+h)) ≤ 4.5` (threshold raised from 2.5 to accept rounded-corner plates), picking the one with the largest bounding-box area among candidates. Returns `None` if no path passes the ratio check; caller then uses artboard/viewbox dimensions as the caja bounds. This is critical because interior design elements can have larger fill area than the outline, which would break the old "largest area = caja" assumption.
 
 **Caja dimensions**: `caja_w_cm = real_width_cm` is always the authoritative width. `caja_h_cm` is derived proportionally from the caja outline path's bbox aspect ratio (`real_width_cm × bbox_h / bbox_w`). When no outline is detected, `viewbox_h × scale_factor` is used.
 
@@ -156,13 +168,22 @@ When `tipo_construccion` changes in the UI, `onTipoConstruccionChange()` must sy
 | `backlite` | `filas = ceil(profundidad_cm / 18)` — one row of strips per 18 cm depth |
 | `edgelite` | `tiras = ceil(perimetro / led["largo_cm"])` — bars along perimeter |
 | `perimetral` | `tiras = ceil(perimetro / led["espaciado_cm"])` — modules every N cm |
+| `modulo_panel` | grid 20×20 cm over face area (25 mod/m²) — default for medium/large boxes with ultra-white interior |
 
-`LEDS_CAJA` is split into `"interior"` and `"exterior"` keys. `recomendar_led_caja()` auto-selects based on dimensions, double-face, uso, and profundidad.
+`LEDS_CAJA` is split into `"interior"` and `"exterior"` keys. `recomendar_led_caja()` auto-selects with preference order `modulo_panel > edgelite > perimetral > backlite`.
+
+**Cables**: `CABLES` in `catalog_data.py` (LED Radox cal 22, POT cal 18, priced $/m) are costed into `cotizar_caja`.
+
+**Maquila costs**: `CajaRequest` accepts `corte_laser`, `corte_cnc`, `corte_plotter`, `flete_maquila` — outsourced cutting/freight amounts passed into `cotizar_caja` and added to cost.
+
+**MO in cajas**: labor is injected inside `cotizar_caja` (enters cost, margin applies once). `_apply_instalacion()` deliberately skips setting `result.mo_total` when `tipo == "caja_luz"` to avoid double-charging in the PDF.
+
+**PRECIOS_CAJA_M2** entries are material cost only (no markup): lona 250, vinil_corte 100, acrilico 380, acrilico_2vistas 760 $/m².
 
 ### Installation and labor (`_InstMixin`)
 
 All three request models (`LetrasRequest`, `CajaRequest`, `PlanasRequest`) inherit `_InstMixin`, which adds:
-- `mo_horas` / `mo_tarifa` → `result.mo_total = mo_horas × mo_tarifa`
+- `mo_horas` / `mo_tarifa` → `result.mo_total = mo_horas × mo_tarifa` (skipped for `caja_luz` — see caja section)
 - `inst_activa` — if True, populates installation fields
 - `inst_lugar`, `inst_viaticos`, `inst_grua_id`, `inst_dias_grua`, `inst_extras`
 
@@ -176,10 +197,12 @@ All three request models (`LetrasRequest`, `CajaRequest`, `PlanasRequest`) inher
 - Column widths must be `PW * fraction` (actual points), never percentage strings like `"15%"`
 - All `ParagraphStyle` objects are module-level constants with unique `sgi_*` prefixed names to prevent duplicate registration errors
 
-Three generators:
+Generators in `pdf_gen.py`:
 - `generar_pdf(result, meta)` — customer quote (Cotización)
-- `generar_pdf_ot(result, meta)` — internal work order (Orden de Trabajo, single-page portrait)
+- `generar_pdf_ot(result, meta)` — internal work order (Orden de Trabajo): portrait page with a technical warnings box (`_avisos_tecnicos_ot()` — fabrication rules in orange border) + a **landscape page** rendering the SVG design with numbered badges color-coded per material (when the persisted SVG is available)
 - `generar_pdf_entrega(result, meta)` — delivery receipt + warranty (Acta de Entrega)
+
+Plano generators live in `plano_gen.py` (`generar_plano_cliente` / `generar_plano_taller`): page 1 is the drawing with numbered badges (no per-piece dimension lines when >15 pieces — they become unreadable), page 2 is a tabular per-piece listing (# · type · dimensions · perimeter [· material]). Circle-shaped pieces (square bbox + perimeter ≈ π·d) display as "Ø D". Badge colors follow the same material palette as the OT (`_OT_MATERIAL_PALETTE`).
 
 ### QuoteResult fields (key additions)
 
@@ -189,7 +212,9 @@ Beyond basic cost fields, `QuoteResult` includes:
 - `precio_venta_costo` (cost floor = total / (1 - margin)), `precio_venta_sugerido` (formula-based)
 - `mo_total` (labor), `inst_activa`, `inst_lugar`, `inst_viaticos`, `inst_grua`, `inst_costo_grua`, `inst_extras`, `inst_total`
 - `precio_final = precio_venta_sugerido + inst_total`
-- `desglose_letras` — per-letter breakdown with `alto_cm`, `ancho_cm`, `area_bbox_cm2`, `cercha_area_cm2`, `costo_cara`, `costo_cercha`, `costo_mat`, `precio_letra`
+- `desglose_letras` — per-piece breakdown: dimensions (`alto_cm`, `ancho_cm`, `area_bbox_cm2`, `perimetro_cm`, `cercha_area_cm2`), `svg_id` (stable key linking UI cards / planos to SVG elements), `material_cara_id`/`material_cara_nombre` (per-piece adaptive material), the piece "recipe" (`lleva_cercha`, `lleva_luz`, `lleva_fondo`, `lleva_distanciadores`, `n_modulos_led`, `watts`), per-component costs (`costo_cara`, `costo_cercha`, `costo_fondo`, `costo_leds`, `costo_fuente`, `costo_pegamento`, `costo_distanciadores`, `costo_extras`), `costo_mat` (cara+cercha+fondo, legacy), `costo_total` (real total per piece), `precio_letra`, `margen_real_pct`
+- `desglose_costos_componentes` — global real cost totals by component (cara, cercha, fondo, leds, fuente, pegamento, distanciadores, …)
+- `warnings` — list of inconsistency alerts (e.g. LEDs configured but 0 modules, unusual multiplier for flat letters)
 - `silvatrim`, `metros_silvatrim`, `costo_silvatrim` — Silvatrim profile selection and cost (channel letters only)
 - `vinil_cercha`, `metros_vinil_cercha`, `costo_vinil_cercha` — optional vinyl wrap on cercha (set by `vinil_cercha_id` in `LetrasRequest`)
 
@@ -200,31 +225,31 @@ Beyond basic cost fields, `QuoteResult` includes:
 - PEGAMENTOS keys are tuples `(cercha_tipo, cara_tipo)`; serialized to JSON as `"aluminio|acrilico"`
 - `NEON_FLEX` is defined in `catalog_data.py` (neon flex strips with prices and colors) but is **not yet used in any quoting logic** — it exists for future expansion
 
-### SVG scale detection priority
+### SVG parsing and scale detection
 
-1. `altura_letra_cm > 0` → scale from tallest letter's bounding box height
-2. Illustrator SVG (has `enable-background` in style) → scale from artboard width in pt
+`parse_svg()` treats the SVG as a **universe of pieces**, not just letters: `<path>`, `<rect>`, `<circle>`, `<ellipse>`, `<polygon>`, `<polyline>`, `<line>` all become `PathInfo` entries. Each `PathInfo` carries `svg_id` (original `id` attribute — the stable key used by UI cards and planos). `SVGData` carries `svg_unit` (detected from width/height attributes: px/mm/cm/in/pt) and `artboard_w_cm` (> 0 when the SVG declares a physical unit that maps to cm). UI labels use the generic term "pieza" instead of "letra".
+
+Scale priority (`apply_scale()`):
+1. `altura_letra_cm > 0` → scale from tallest piece's bounding box height (user knows the real measurement)
+2. `artboard_w_cm > 0` (Illustrator / physical-unit SVG) → `(real_width_cm / artboard_w_cm) × PT_TO_CM`
 3. Fallback → `real_width_cm / viewbox_w`
 
 ---
 
-## Roadmap — pending features (as of 2026-06-01)
+## Roadmap — pending features (as of 2026-07-06)
 
 These are agreed improvements not yet implemented, ordered by priority.
 
-Already shipped: SQLite persistence, quote history/list, re-open quote, client catalog, sequential folio `SGI-YYYY-NNNN`, **Excel export** (`/api/excel/{quote_id}`), **automated catalog + DB backups** (startup + every 24h + on every `POST /api/catalog`, retention 30 days), SQLite indexes on `quotes(fecha, cliente, folio, tipo)` and `clients(nombre)`.
-
-### Important — daily operations
-1. **SVG preview in UI** — display the uploaded SVG with paths color-coded (face = orange, vinyl = blue, caja outline = gray) so the user can verify detection before quoting.
+Already shipped: SQLite persistence, quote history/list, re-open quote, client catalog, sequential folio `SGI-YYYY-NNNN`, **Excel export** (`/api/excel/{quote_id}`), **automated catalog + DB backups** (startup + every 24h + on every `POST /api/catalog`, retention 30 days), SQLite indexes on `quotes(fecha, cliente, folio, tipo)` and `clients(nombre)`, **SVG preview in UI** (interactive: piece ↔ card highlighting, numbered badges), **planos de medidas** (`/api/plano`, `/api/plano-taller`), SVG persistence in DB (`quotes.svg_text`).
 
 ### Useful — productivity
-2. **Multi-SVG per quote** — support quoting multiple signs in one project (different SVGs, each with its own dimensions).
-3. **Company info in PDFs** — address, phone, RFC, logo image embedded in all PDF types. Currently PDFs have no company branding.
+1. **Multi-SVG per quote** — support quoting multiple signs in one project (different SVGs, each with its own dimensions).
+2. **Company info in PDFs** — address, phone, RFC, logo image embedded in all PDF types. Currently PDFs have no company branding.
 
 ### Lower priority
-4. Authentication (multi-user over network).
-5. Email quote to client directly from the app.
-6. Integration API for ERP/invoicing systems.
+3. Authentication (multi-user over network).
+4. Email quote to client directly from the app.
+5. Integration API for ERP/invoicing systems.
 
 ---
 
@@ -436,9 +461,11 @@ Análisis honesto del estado actual. Marcado por criticidad.
 
 ---
 
-## 8. Estado actual del repositorio (snapshot al 2026-06-16)
+## 8. Estado actual del repositorio (snapshot al 2026-07-06)
 
 Fase 1 de endurecimiento cerrada (commits `18155a3`, `7fd86c2`, `d9bf8a5`, `603f068`, `ed59cad`, `da8776e`, `e4cc9a1`, `e4e1d76`). Lo que sigue documentado como pendiente arriba ya **NO** está pendiente: Dockerfile, `requirements.lock`, CI, ruff, mypy, índices SQLite, backup automático, thread-safety, logging exhaustivo, Excel export, vectorización Claude removida — todo committed.
+
+**Trabajo de junio-julio 2026** (fases A-G de mejoras al motor de cotización, ver secciones de arquitectura arriba): refactor de `parse_svg` a "universo de piezas" con detección de unidad real del SVG, material de cara adaptativo por pieza individual, LEDs por área de cobertura (mín. 3/pieza), silvatrim opcional, pegamento recalibrado con datos de campo, detección de placas redondeadas en cajas, costos de maquila y cables en cajas, LED `modulo_panel`, planos de medidas cliente/taller (`plano_gen.py`), OT con página landscape del diseño + badges por material, SVG persistido en DB, desglose de costos por componente y por pieza con margen real, `warnings` de inconsistencias. 82 tests.
 
 **Archivos siempre untracked (locales, NO commitear):**
 - `cotizador.db`, `server.log`, `server_err.log`, `tmp_check.py`
