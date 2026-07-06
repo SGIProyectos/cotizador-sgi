@@ -303,6 +303,46 @@ def generar_pdf(result, meta: dict) -> bytes:
 
 # ─── 2. ORDEN DE TRABAJO ─────────────────────────────────────────────────────
 
+def _avisos_tecnicos_ot():
+    """Bloque compacto de reglas críticas de fabricación al inicio de la OT.
+    Letra pequeña, fondo claro con borde naranja. El operario lo lee antes
+    de empezar a fabricar."""
+    S_TITLE = ParagraphStyle(
+        "sgi_avt_t", fontSize=8, textColor=NARANJA,
+        fontName="Helvetica-Bold", leading=10,
+    )
+    S_RULE = ParagraphStyle(
+        "sgi_avt_r", fontSize=7.2, textColor=colors.HexColor("#3a3a3a"),
+        leading=9.6,
+    )
+    reglas = [
+        "<b>Limpiar</b> superficies con cepillo de alambre + alcohol antes de pegar.",
+        "<b>Aluminio-aluminio</b> (cercha/tapa): Soudaflex 40FC (poliuretano).",
+        "<b>Aluminio-acrílico</b> (cercha-cara): silicón arquitectónico transparente. <b>NUNCA</b> cloruro de metileno.",
+        "<b>Acrílico-acrílico</b>: cloruro de metileno con jeringa. Ventilación + guantes obligatorios.",
+        "<b>Cianoacrilato</b>: SOLO para fijación puntual. Sellado final siempre con poliuretano.",
+        "<b>Sellado 100%</b> del perímetro interno con poliuretano — evita filtraciones y nidos de insectos.",
+        "<b>Fuente de poder al 90%</b> de carga máxima. Nunca al 100%.",
+        "<b>Exterior</b>: componentes IP65 mínimo.",
+        "<b>Curado</b>: 24 h funcional · 7 días resistencia máxima. No instalar antes de 24 h.",
+        "<b>Película protectora</b> de aluminio/acrílico: retirar hasta justo antes del montaje.",
+    ]
+    titulo = Paragraph("⚠ AVISOS TÉCNICOS — leer antes de fabricar", S_TITLE)
+    cuerpo = Paragraph("<br/>".join(f"• {r}" for r in reglas), S_RULE)
+    tbl = Table([[titulo], [cuerpo]], colWidths=[PW])
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0, 0), (-1, -1), colors.HexColor("#fff7ed")),
+        ("BOX",           (0, 0), (-1, -1), 0.8, NARANJA),
+        ("LINEBELOW",     (0, 0), (0, 0),   0.4, NARANJA),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 9),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 9),
+        ("TOPPADDING",    (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+    ]))
+    return tbl
+
+
 def generar_pdf_ot(result, meta: dict, svg_text: str = "",
                    viewbox_w: float = 0.0, viewbox_h: float = 0.0,
                    paths_info: list | None = None) -> bytes:
@@ -352,6 +392,10 @@ def generar_pdf_ot(result, meta: dict, svg_text: str = "",
 
     # Encabezado
     elements.append(_header(empresa, "ORDEN DE TRABAJO", st))
+    elements.append(Spacer(1, 0.25*cm))
+
+    # Avisos técnicos (reglas críticas de fabricación)
+    elements.append(_avisos_tecnicos_ot())
     elements.append(Spacer(1, 0.3*cm))
 
     elements.append(_info_grid([
@@ -452,8 +496,9 @@ def generar_pdf_ot(result, meta: dict, svg_text: str = "",
             ["Perímetro total (neto)",     f"{result.perimetro_total_cm:.1f} cm  ·  {result.perimetro_total_cm/100:.2f} m"],
             ["Cercha con merma (+10%)",    f"{result.perimetro_total_cm*1.10:.1f} cm  ·  {result.perimetro_total_cm*1.10/100:.2f} m"],
             ["Área total cercha",          f"{result.cercha_area_cm2:.0f} cm²"],
-            ["Silvatrim (acabado borde)",  f"{sv_nombre}  ·  {sv_metros:.2f} m"],
         ]
+        if sv_metros > 0 and sv_nombre != "—":
+            cercha_rows.append(["Silvatrim (acabado borde)",  f"{sv_nombre}  ·  {sv_metros:.2f} m"])
         elements.append(_tabla_kv(cercha_rows))
         elements.append(Spacer(1, 0.3*cm))
 

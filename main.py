@@ -28,6 +28,7 @@ from catalog_data import (
 )
 from excel_gen import generar_xlsx
 from pdf_gen import generar_pdf, generar_pdf_entrega, generar_pdf_ot
+from plano_gen import generar_plano_cliente, generar_plano_taller
 
 BASE = Path(__file__).parent
 STATIC = BASE / "static"
@@ -321,6 +322,7 @@ class LetrasRequest(_InstMixin):
     tipo_multiplicador: str = "acrilico_con_luz_std"
     ajuste_pct: float = 0.0
     vinil_cercha_id: str = ""
+    silvatrim_id: str = "auto"
     led_id: str = "auto"
     cliente: str = ""
     notas: str = ""
@@ -335,6 +337,11 @@ class CajaRequest(_InstMixin):
     uso: str = "exterior"
     vistas: int = 1
     margen_ganancia: float = 0.35
+    # Maquila y flete (montos manuales por cotización, suelen variar por proveedor)
+    corte_laser: float = 0.0
+    corte_cnc: float = 0.0
+    corte_plotter: float = 0.0
+    flete_maquila: float = 0.0
     cliente: str = ""
     notas: str = ""
 
@@ -352,7 +359,11 @@ class PlanasRequest(_InstMixin):
 # ─── INSTALACIÓN / MANO DE OBRA ──────────────────────────────────────────────
 
 def _apply_instalacion(result: QuoteResult, req: _InstMixin) -> QuoteResult:
-    result.mo_total = round(req.mo_horas * req.mo_tarifa, 2)
+    # Para caja_luz la MO se inyecta dentro de cotizar_caja (entra al costo y
+    # el margen se aplica). NO la duplicamos como línea separada — eso causaría
+    # doble cobro en el PDF.
+    if result.tipo != "caja_luz":
+        result.mo_total = round(req.mo_horas * req.mo_tarifa, 2)
     if req.inst_activa:
         grua = next((g for g in GRUAS if g["id"] == req.inst_grua_id), {"precio_dia": 0})
         costo_grua = round(grua["precio_dia"] * req.inst_dias_grua, 2)
@@ -451,6 +462,7 @@ async def api_cotizar_letras(req: LetrasRequest):
             tipo_multiplicador=req.tipo_multiplicador,
             ajuste_pct=req.ajuste_pct,
             vinil_cercha_id=req.vinil_cercha_id,
+            silvatrim_id=req.silvatrim_id,
             led_id=req.led_id,
         )
     except Exception as e:
@@ -497,6 +509,12 @@ async def api_cotizar_caja(req: CajaRequest):
             uso=req.uso,
             vistas=req.vistas,
             margen_ganancia=req.margen_ganancia,
+            corte_laser=req.corte_laser,
+            corte_cnc=req.corte_cnc,
+            corte_plotter=req.corte_plotter,
+            flete_maquila=req.flete_maquila,
+            mo_horas=req.mo_horas,
+            mo_tarifa=req.mo_tarifa,
         )
     except Exception as e:
         raise HTTPException(500, f"Error en cálculo: {e}")
@@ -703,6 +721,106 @@ async def api_entrega(quote_id: str, cliente: str = "", notas: str = ""):
     return FileResponse(path=_write_tmp(pdf_bytes, filename), filename=filename, media_type="application/pdf")
 
 
+# ─── PLANO TÉCNICO DE MEDIDAS ────────────────────────────────────────────────
+
+def _cargar_svg_para_plano(quote_id: str, result) -> tuple[str, list, float, float, float, float]:
+    """Recupera SVG persistido de db.get_quote y deriva las medidas en cm
+    necesarias para plano_gen. Devuelve:
+      (svg_text, paths_info, viewbox_w, viewbox_h, bbox_w_cm, bbox_h_cm)
+    bbox_*_cm = ancho/alto del bbox conjunto de las piezas cerradas en cm,
+    derivado del scale_factor implícito en result.altura_letra_cm. Devuelve
+    valores vacíos / 0 si no hay SVG o el parseo falla.
+    """
+    row = db.get_quote(quote_id) or {}
+    svg_text = row.get("svg_text") or ""
+    if not svg_text:
+        return "", [], 0.0, 0.0, 0.0, 0.0
+    try:
+        svg_data = parse_svg(svg_text.encode("utf-8"))
+    except Exception:
+        log.warning("plano %s: parse_svg falló", quote_id, exc_info=True)
+        return "", [], 0.0, 0.0, 0.0, 0.0
+
+    paths_info = [
+        {"svg_id": p.svg_id, "id": p.id, "bbox": p.bbox, "is_closed": p.is_closed}
+        for p in svg_data.paths
+    ]
+    cerrados = [p for p in svg_data.paths if p.is_closed]
+    if not cerrados:
+        return svg_text, paths_info, svg_data.viewbox_w, svg_data.viewbox_h, 0.0, 0.0
+
+    # scale_factor (cm por unidad SVG) = altura_letra_cm / max_h_px
+    altura_cm  = getattr(result, "altura_letra_cm", 0.0) or 0.0
+    max_h_px   = max(p.bbox["h"] for p in cerrados)
+    cm_per_unit = (altura_cm / max_h_px) if (max_h_px > 0 and altura_cm > 0) else 0.0
+
+    if cm_per_unit > 0:
+        xs0 = [p.bbox["x"] for p in cerrados]
+        ys0 = [p.bbox["y"] for p in cerrados]
+        xs1 = [p.bbox["x"] + p.bbox["w"] for p in cerrados]
+        ys1 = [p.bbox["y"] + p.bbox["h"] for p in cerrados]
+        bbox_w_cm = (max(xs1) - min(xs0)) * cm_per_unit
+        bbox_h_cm = (max(ys1) - min(ys0)) * cm_per_unit
+    else:
+        bbox_w_cm = bbox_h_cm = 0.0
+
+    return (svg_text, paths_info, svg_data.viewbox_w, svg_data.viewbox_h,
+            bbox_w_cm, bbox_h_cm)
+
+
+@app.get("/api/plano/{quote_id}")
+async def api_plano(quote_id: str, cliente: str = "", notas: str = ""):
+    """Plano de medidas para el CLIENTE: dibujo + cotas globales y por pieza."""
+    result = _ensure_quote_in_memory(quote_id)
+    meta   = _get_meta(quote_id)
+    if not result:
+        raise HTTPException(404, "Cotización no encontrada")
+    if cliente: meta["cliente"] = cliente
+    if notas:   meta["notas"]   = notas
+
+    svg_text, paths_info, vb_w, vb_h, bbox_w_cm, bbox_h_cm = \
+        _cargar_svg_para_plano(quote_id, result)
+    if not svg_text:
+        raise HTTPException(404, "Esta cotización no tiene SVG persistido para generar el plano")
+
+    pdf_bytes = generar_plano_cliente(
+        meta=meta, svg_text=svg_text, paths_info=paths_info,
+        viewbox_w=vb_w, viewbox_h=vb_h,
+        real_width_cm=bbox_w_cm, altura_cm=bbox_h_cm,
+        result=result,
+    )
+    filename = f"Plano_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
+    return FileResponse(path=_write_tmp(pdf_bytes, filename),
+                        filename=filename, media_type="application/pdf")
+
+
+@app.get("/api/plano-taller/{quote_id}")
+async def api_plano_taller(quote_id: str, cliente: str = "", notas: str = ""):
+    """Plano de fabricación para el TALLER: dibujo + cotas + tabla técnica
+    con material por pieza (Fase D) + sección de notas al pie."""
+    result = _ensure_quote_in_memory(quote_id)
+    meta   = _get_meta(quote_id)
+    if not result:
+        raise HTTPException(404, "Cotización no encontrada")
+    if cliente: meta["cliente"] = cliente
+    if notas:   meta["notas"]   = notas
+
+    svg_text, paths_info, vb_w, vb_h, bbox_w_cm, bbox_h_cm = \
+        _cargar_svg_para_plano(quote_id, result)
+    if not svg_text:
+        raise HTTPException(404, "Esta cotización no tiene SVG persistido para generar el plano")
+
+    pdf_bytes = generar_plano_taller(
+        meta=meta, svg_text=svg_text, paths_info=paths_info,
+        viewbox_w=vb_w, viewbox_h=vb_h,
+        real_width_cm=bbox_w_cm, altura_cm=bbox_h_cm,
+        result=result, notas=(notas or meta.get("notas", "")),
+    )
+    filename = f"PlanoTaller_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
+    return FileResponse(path=_write_tmp(pdf_bytes, filename),
+                        filename=filename, media_type="application/pdf")
+
+
 @app.get("/api/pdf/{quote_id}")
 async def api_pdf(quote_id: str, cliente: str = "", notas: str = ""):
     result = _ensure_quote_in_memory(quote_id)
@@ -849,6 +967,8 @@ def _result_to_dict(r: QuoteResult, qid: str) -> dict:
             for d in r.desglose if d["costo"] > 0
         ],
         "desglose_letras": r.desglose_letras,
+        "desglose_costos_componentes": r.desglose_costos_componentes,
+        "warnings": r.warnings,
         "pdf_url": f"/api/pdf/{qid}",
     }
 

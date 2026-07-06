@@ -103,6 +103,44 @@ def test_excel_export_quote_inexistente(client):
     assert r.status_code == 404
 
 
+# ─── PLANO TÉCNICO DE MEDIDAS ───────────────────────────────────────────────
+
+def test_plano_cliente(client, square_svg):
+    sid = _new_session(client, square_svg)
+    qid = client.post("/api/cotizar/letras", json={
+        "session_id": sid,
+        "real_width_cm": 200.0,
+        "altura_letra_cm": 50.0,
+    }).json()["quote_id"]
+    r = client.get(f"/api/plano/{qid}")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert r.content[:5] == b"%PDF-"
+    assert len(r.content) > 1024
+    assert "Plano_" in r.headers.get("content-disposition", "")
+
+
+def test_plano_taller(client, square_svg):
+    sid = _new_session(client, square_svg)
+    qid = client.post("/api/cotizar/letras", json={
+        "session_id": sid,
+        "real_width_cm": 200.0,
+        "altura_letra_cm": 50.0,
+    }).json()["quote_id"]
+    r = client.get(f"/api/plano-taller/{qid}", params={"notas": "Test workshop"})
+    assert r.status_code == 200
+    assert r.content[:5] == b"%PDF-"
+    assert len(r.content) > 1024
+    assert "PlanoTaller_" in r.headers.get("content-disposition", "")
+
+
+def test_plano_quote_inexistente(client):
+    r = client.get("/api/plano/no-existe")
+    assert r.status_code == 404
+    r = client.get("/api/plano-taller/no-existe")
+    assert r.status_code == 404
+
+
 def test_cotizar_caja_flujo(client, caja_svg):
     sid = _new_session(client, caja_svg)
     r = client.post("/api/cotizar/caja", json={

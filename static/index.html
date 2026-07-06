@@ -45,8 +45,6 @@ body { font-family: var(--sans); background: var(--gris); color: var(--texto); f
   background: rgba(0,0,0,.14); position: sticky; top: 0; z-index: 5;
 }
 .sidebar-header h1 { font-size: 15px; font-weight: 700; letter-spacing: .01em; line-height: 1.2; }
-.sidebar-header p  { font-family: var(--mono); font-size: 10.5px; color: var(--naranja);
-                     margin-top: 5px; letter-spacing: .05em; text-transform: uppercase; opacity: .92; }
 
 .panel { padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,.07); }
 .panel h3 { font-size: 10.5px; text-transform: uppercase; letter-spacing: .11em;
@@ -54,21 +52,21 @@ body { font-family: var(--sans); background: var(--gris); color: var(--texto); f
             display: flex; align-items: center; gap: 8px; }
 .panel h3::before { content: ""; width: 3px; height: 11px; background: var(--naranja); border-radius: 2px; }
 
-/* Panel tarjeta destacada */
-.panel-card {
-  background: rgba(30,70,120,.35);
-  border: 1px solid rgba(100,160,240,.18);
-  border-bottom: 1px solid rgba(100,160,240,.18);
-  border-radius: 10px;
-  margin: 12px 14px;
-  padding: 14px 16px;
+/* Subtle text-link button (e.g. "convertir desde imagen", "opciones avanzadas") */
+.btn-link {
+  background: none; border: none; color: #6b7d9c; font-size: 11px; cursor: pointer;
+  padding: 0; text-align: left; letter-spacing: .01em; transition: color .15s;
+  display: inline-flex; align-items: center; gap: 4px;
 }
-.panel-card h3 {
-  color: #b8d0f0;
-  font-size: 10px;
-  letter-spacing: .13em;
+.btn-link:hover { color: #aebcd4; }
+
+/* Compact pill button (e.g. Historial, ⚙ Clientes) */
+.btn-pill {
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18);
+  color: #aebcd4; border-radius: 6px; padding: 5px 9px; font-size: 12px;
+  cursor: pointer; white-space: nowrap; transition: background .15s, color .15s;
 }
-.panel-card h3::before { background: #5b9bd5; }
+.btn-pill:hover { background: rgba(255,255,255,.16); color: #eef3fb; }
 
 label { font-size: 11px; color: #aebcd4; display: block; margin-bottom: 5px; margin-top: 11px; font-weight: 500; }
 label:first-of-type { margin-top: 0; }
@@ -81,20 +79,57 @@ select {
 input[type=number] { -moz-appearance: textfield; }
 input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
-.sidebar input, .sidebar select, .sidebar textarea {
+.sidebar input, .sidebar select, .sidebar textarea,
+.inspector input, .inspector select, .inspector textarea {
   width: 100%; height: 36px; padding: 0 11px;
   background-color: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14);
   border-radius: 5px; color: #eef3fb; font-size: 13px; font-family: var(--mono); transition: .14s;
 }
-.sidebar textarea { height: auto; padding: 8px 11px; font-family: var(--sans); }
-.sidebar input::placeholder { color: #6b7d9c; }
-.sidebar input:focus, .sidebar select:focus, .sidebar textarea:focus {
+.sidebar textarea, .inspector textarea { height: auto; padding: 8px 11px; font-family: var(--sans); }
+.sidebar input::placeholder, .inspector input::placeholder { color: #6b7d9c; }
+.sidebar input:focus, .sidebar select:focus, .sidebar textarea:focus,
+.inspector input:focus, .inspector select:focus, .inspector textarea:focus {
   outline: none; border-color: var(--naranja); box-shadow: 0 0 0 3px rgba(232,124,42,.16); background-color: rgba(0,0,0,.18);
 }
-.sidebar select {
+.sidebar select, .inspector select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23aebcd4' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
-.sidebar select option { background: #1a2b4a; color: #eef3fb; }
+.sidebar select option, .inspector select option { background: #1a2b4a; color: #eef3fb; }
+
+/* ── INSPECTOR (panel derecho) ── */
+.inspector {
+  width: 320px; min-width: 320px;
+  background: linear-gradient(180deg,#15243f,#1a2b4a);
+  color: #eef3fb;
+  display: flex; flex-direction: column; overflow-y: auto;
+  border-left: 1px solid rgba(255,255,255,.06);
+  scrollbar-width: thin; scrollbar-color: #2a3f63 transparent;
+  transition: width .25s ease, min-width .25s ease, border .25s ease;
+}
+.inspector::-webkit-scrollbar { width: 9px; }
+.inspector::-webkit-scrollbar-thumb { background: #2a3f63; border-radius: 9px; border: 2px solid #1a2b4a; }
+.inspector.collapsed { width: 0; min-width: 0; overflow: hidden; border-left: 0; }
+.inspector-header {
+  padding: 18px 20px 15px; border-bottom: 1px solid rgba(255,255,255,.08);
+  background: rgba(0,0,0,.14); position: sticky; top: 0; z-index: 5;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.inspector-header h2 {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .12em;
+  color: #9fb0cb; font-weight: 600; margin: 0;
+}
+.inspector-toggle-floating {
+  position: fixed; right: 14px; top: 96px; z-index: 100;
+  height: 32px; padding: 0 12px; border-radius: 16px;
+  background: rgba(20,35,60,.94); border: 1px solid rgba(255,255,255,.22);
+  color: #aebcd4; cursor: pointer; font-size: 12px; font-weight: 600;
+  letter-spacing: .03em;
+  display: none; align-items: center; gap: 6px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.45);
+  transition: background .15s, color .15s, transform .15s;
+}
+.inspector-toggle-floating:hover { background: rgba(40,60,95,.98); color: #fff; transform: translateY(-1px); }
+.inspector.collapsed + .inspector-toggle-floating { display: flex; }
 
 /* tipo selector */
 .tipo-btns { display: flex; gap: 7px; }
@@ -596,17 +631,9 @@ svg g.pieza-labels                 { pointer-events: none; }
   <!-- ══════════════════ SIDEBAR ══════════════════ -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
-          <h1>⬡ SGI Cotizador</h1>
-          <p>Letras 3D · Cajas de Luz · Anuncios</p>
-        </div>
-        <button onclick="abrirHistorial()" title="Historial de cotizaciones"
-          style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);
-                 color:#aebcd4;border-radius:6px;padding:5px 9px;font-size:12px;
-                 cursor:pointer;white-space:nowrap;margin-top:2px;transition:.15s"
-          onmouseover="this.style.background='rgba(255,255,255,.16)'"
-          onmouseout="this.style.background='rgba(255,255,255,.08)'">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h1>⬡ SGI Cotizador</h1>
+        <button class="btn-pill" onclick="abrirHistorial()" title="Historial de cotizaciones">
           📋 Historial
         </button>
       </div>
@@ -635,11 +662,7 @@ svg g.pieza-labels                 { pointer-events: none; }
       </div>
       <input type="file" id="svg-input" accept=".svg" style="display:none" onchange="handleFile(event)">
 
-      <button onclick="toggleImgZone()" id="btn-img-toggle"
-        style="background:none;border:none;color:#6b7d9c;font-size:11px;cursor:pointer;
-               margin-top:8px;padding:0;text-align:left;letter-spacing:.01em;transition:.15s"
-        onmouseover="this.style.color='#aebcd4'"
-        onmouseout="this.style.color='#6b7d9c'">
+      <button class="btn-link" onclick="toggleImgZone()" id="btn-img-toggle" style="margin-top:8px">
         ↳ convertir desde imagen JPG / PNG
       </button>
 
@@ -667,46 +690,44 @@ svg g.pieza-labels                 { pointer-events: none; }
       <div id="asesor-content"></div>
     </div>
 
-    <!-- Datos del diseño y presentación -->
-    <div class="panel panel-card">
-      <h3>Diseño y presentación</h3>
-      <label>Ancho detectado del diseño (cm)</label>
+    <!-- Datos básicos (lo único editable directo en el sidebar) -->
+    <div class="panel">
+      <h3>Datos básicos</h3>
+      <label>Ancho del diseño (cm)</label>
       <input type="number" id="ancho-real" placeholder="ej. 60" min="1" step="0.001">
       <label>Uso</label>
       <select id="uso" onchange="populateLedsCaja()">
         <option value="exterior">Exterior</option>
         <option value="interior">Interior</option>
       </select>
-      <div style="height:1px;background:rgba(100,160,240,.15);margin:13px 0 10px"></div>
-      <label style="margin-top:0;color:#7a9fc0;font-size:10px;letter-spacing:.07em;text-transform:uppercase">
-        Espacio en pared
-        <span style="text-transform:none;letter-spacing:0;opacity:.6;font-weight:400"> — opcional, activa preview</span>
-      </label>
-      <div style="display:flex;gap:8px;margin-top:6px">
-        <div style="flex:1">
-          <label>Ancho (cm)</label>
-          <input type="number" id="pared-ancho" placeholder="ej. 300" min="1" step="1" oninput="renderWallPreview()">
-        </div>
-        <div style="flex:1">
-          <label>Alto (cm)</label>
-          <input type="number" id="pared-alto" placeholder="ej. 120" min="1" step="1" oninput="renderWallPreview()">
-        </div>
-      </div>
+      <button class="btn-link" onclick="openCfgModal()" style="margin-top:12px" title="Reabrir configurador">
+        ⚙ ajustes avanzados del anuncio
+      </button>
     </div>
+
+    <!-- ══════════════════════════════════════════════════════════
+         BÓVEDA: inputs preservados para JS (wizard los puebla).
+         Anteriormente eran 5 paneles visibles; ahora viven aquí
+         para que la lógica siga funcionando sin saturar el UI.
+         Espacio en pared, params letras/caja/planas, costos+MO.
+         ══════════════════════════════════════════════════════════ -->
+    <div class="sidebar-vault" style="display:none" aria-hidden="true">
+      <input type="number" id="pared-ancho" oninput="renderWallPreview()">
+      <input type="number" id="pared-alto" oninput="renderWallPreview()">
 
     <!-- Parámetros LETRAS -->
     <div class="panel field-group visible" id="params-letras">
       <h3>Parámetros — Letras 3D</h3>
       <label>Tipo de construcción</label>
       <select id="tipo-construccion" onchange="onTipoConstruccionChange()">
-        <option value="cajon_luz">🔡 Cajón con luz</option>
-        <option value="retro_halo">✨ Retroiluminada / Halo</option>
-        <option value="sin_luz">⬛ Sin luz (cajón)</option>
-        <option value="abierta_luz">💡 Abierta con luz</option>
+        <option value="cajon_luz">Cajón con luz</option>
+        <option value="retro_halo">Retroiluminada / Halo</option>
+        <option value="sin_luz">Sin luz (cajón)</option>
+        <option value="abierta_luz">Abierta con luz</option>
       </select>
       <div class="info-tag" id="construccion-desc-tag" style="margin-bottom:8px">Cara acrílico · cercha aluminio · fondo PVC · LEDs adelante</div>
       <div class="info-tag" id="distanciadores-note" style="display:none;background:rgba(232,124,42,0.2);margin-bottom:4px">⚠ Requiere distanciadores de montaje</div>
-      <label>Altura de la letra (cm)</label>
+      <label>Altura (cm)</label>
       <input type="number" id="altura-letra" placeholder="auto" min="0.001" step="0.001">
       <div class="info-tag" id="cercha-auto-tag" style="line-height:1.5">Cercha automática: 5 cm</div>
       <div id="cercha-signalux-aviso" style="font-size:11px;color:#e87c2a;background:rgba(232,124,42,0.10);border-left:3px solid #e87c2a;padding:6px 10px;margin-top:4px;line-height:1.5;border-radius:3px">
@@ -714,12 +735,7 @@ svg g.pieza-labels                 { pointer-events: none; }
       </div>
 
       <!-- Avanzado colapsable -->
-      <button onclick="toggleAvanzadoLetras()" id="btn-avanzado-letras"
-        style="background:none;border:none;color:#6b7d9c;font-size:11px;cursor:pointer;
-               margin-top:10px;padding:0;text-align:left;letter-spacing:.01em;transition:.15s;
-               display:flex;align-items:center;gap:4px"
-        onmouseover="this.style.color='#aebcd4'"
-        onmouseout="this.style.color='#6b7d9c'">
+      <button class="btn-link" onclick="toggleAvanzadoLetras()" id="btn-avanzado-letras" style="margin-top:10px">
         <span id="avanzado-letras-arrow" style="font-size:9px">▶</span> opciones avanzadas
       </button>
       <div id="avanzado-letras-wrap" style="display:none;margin-top:8px">
@@ -728,7 +744,7 @@ svg g.pieza-labels                 { pointer-events: none; }
         <div id="cercha-rango-hint" style="font-size:11px;color:#8fa3c4;margin-top:-6px;margin-bottom:8px;line-height:1.4">
           📐 Ingresa altura de letra para ver el rango recomendado
         </div>
-        <label>Material de la cara</label>
+        <label>Material cara</label>
         <select id="mat-cara">
           <option value="auto">Automático según altura</option>
           <optgroup label="Acrílico">
@@ -750,7 +766,7 @@ svg g.pieza-labels                 { pointer-events: none; }
             <option value="aluminio_cal18">Aluminio Calibre 18</option>
           </optgroup>
         </select>
-        <label>Material de la cercha</label>
+        <label>Material cercha</label>
         <select id="mat-cercha">
           <option value="auto">Automático según altura</option>
           <option value="aluminio_cal22">Aluminio Calibre 22</option>
@@ -759,12 +775,17 @@ svg g.pieza-labels                 { pointer-events: none; }
           <option value="alucobon_3mm">Alucobon / Dibond 3mm</option>
         </select>
         <div id="led-fields-group">
-          <label>Espaciado entre módulos LED (cm)</label>
+          <label>Espaciado LED (cm)</label>
           <input type="number" id="espaciado-led" value="6" min="3" max="15" step="1">
         </div>
         <!-- Vinil cercha: oculto, se llena desde el modal de configuración -->
         <select id="vinil-cercha-id" style="display:none">
           <option value="">Sin vinil en cercha</option>
+        </select>
+        <!-- Silvatrim: oculto, se llena desde el modal de configuración -->
+        <select id="silvatrim-id" style="display:none">
+          <option value="auto">Automático (según cercha)</option>
+          <option value="">Sin Silvatrim</option>
         </select>
         <!-- LED forzado: oculto, se llena desde el modal de configuración -->
         <input type="hidden" id="led-letras-id" value="">
@@ -776,7 +797,7 @@ svg g.pieza-labels                 { pointer-events: none; }
       <h3>Parámetros — Caja de Luz</h3>
       <label>Profundidad del cajón (cm)</label>
       <input type="number" id="profundidad" value="15" min="5" step="1" oninput="sugerirLedCaja()">
-      <label>Material de la cara</label>
+      <label>Material cara</label>
       <select id="base-cara-caja" onchange="onBaseCaraCajaChange(this.value)">
         <option value="lona">Lona</option>
         <option value="acrilico">Acrílico</option>
@@ -791,11 +812,39 @@ svg g.pieza-labels                 { pointer-events: none; }
         <option value="1">1 vista</option>
         <option value="2">2 vistas</option>
       </select>
-      <label>Tipo de LED</label>
+      <label>LED</label>
       <select id="led-caja" onchange="sugerirLedCaja()">
         <option value="auto">Auto (recomendado)</option>
       </select>
       <div id="led-caja-hint" style="font-size:11px;color:var(--azul);margin-top:-6px;margin-bottom:4px;min-height:16px"></div>
+
+      <!-- Maquila y flete (manual por cotización) -->
+      <details style="margin-top:10px;border-top:1px dashed rgba(255,255,255,.25);padding-top:10px">
+        <summary style="cursor:pointer;font-size:12.5px;color:rgba(255,255,255,.85);font-weight:600">
+          🔧 Maquila y flete <span style="font-weight:400;opacity:.6">(opcional, manual)</span>
+        </summary>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+          <div>
+            <label style="font-size:10.5px">Corte láser ($)</label>
+            <input type="number" id="caja-corte-laser" value="0" min="0" step="50">
+          </div>
+          <div>
+            <label style="font-size:10.5px">Corte CNC ($)</label>
+            <input type="number" id="caja-corte-cnc" value="0" min="0" step="50">
+          </div>
+          <div>
+            <label style="font-size:10.5px">Corte plotter ($)</label>
+            <input type="number" id="caja-corte-plotter" value="0" min="0" step="20">
+          </div>
+          <div>
+            <label style="font-size:10.5px">Flete maquila ($)</label>
+            <input type="number" id="caja-flete" value="0" min="0" step="50">
+          </div>
+        </div>
+        <div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:4px;line-height:1.3">
+          Se suman al costo y el margen se aplica encima. Si están en 0, no aparecen en el PDF.
+        </div>
+      </details>
     </div>
 
     <!-- Parámetros PLANAS -->
@@ -832,79 +881,14 @@ svg g.pieza-labels                 { pointer-events: none; }
       </select>
     </div>
 
-    <!-- Costos y ganancia -->
-    <div class="panel">
-      <h3>Costos y ganancia</h3>
-
-      <!-- Precio fórmula — solo letras 3D y planas (no caja) -->
-      <div id="ajuste-section" style="display:none">
-        <label>Multiplicador de precio</label>
-        <select id="tipo-multiplicador">
-          <option value="aluminio_sin_luz">Aluminio sin luz  ×2.0</option>
-          <option value="aluminio_con_luz">Aluminio con luz  ×2.5</option>
-          <option value="aluminio_acrilico_con_luz">Aluminio + acrílico con luz  ×3.5</option>
-          <option value="acrilico_con_luz_std">Acrílico con luz estándar  ×4.5</option>
-          <option value="acrilico_con_luz_premium">Acrílico con luz premium  ×5.5</option>
-        </select>
-        <label>Ajuste de precio % <span style="font-size:10px;opacity:.55">(+ sube, − baja)</span></label>
-        <input type="number" id="ajuste-pct" value="0" min="-50" max="200" step="1">
-        <div id="formula-preview" class="info-tag" style="display:none;background:#e8f5e9;color:#1b5e20;font-weight:700;font-size:13px;margin-top:4px"></div>
-        <div style="height:1px;background:rgba(255,255,255,.08);margin:13px 0 11px"></div>
-      </div>
-
-      <label>% Ganancia sobre costo</label>
-      <input type="number" id="margen" value="35" min="0" max="80" step="5">
-      <div style="font-size:9.5px;color:#6b7d9c;margin-top:4px;line-height:1.4">
-        precio mínimo = costo ÷ (1 − ganancia)
-      </div>
-
-      <div style="height:1px;background:rgba(255,255,255,.08);margin:13px 0 11px"></div>
-
-      <div style="display:flex;gap:8px">
-        <div style="flex:1">
-          <label>Horas MO</label>
-          <input type="number" id="mo-horas" value="0" min="0" step="0.5" oninput="calcMO()">
-        </div>
-        <div style="flex:1">
-          <label>$/hora</label>
-          <input type="number" id="mo-tarifa" value="150" min="0" step="10" oninput="calcMO()">
-        </div>
-      </div>
-      <div class="info-tag" id="mo-tag" style="margin-top:6px">Total MO: $0</div>
-
-      <div style="height:1px;background:rgba(255,255,255,.1);margin:13px 0 11px"></div>
-
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <span style="font-size:12px;opacity:.85">¿Incluye instalación?</span>
-        <div style="position:relative;width:44px;height:24px;cursor:pointer" onclick="toggleInst()">
-          <div id="inst-bg" style="position:absolute;inset:0;background:rgba(255,255,255,.2);border-radius:24px;transition:.3s"></div>
-          <div id="inst-dot" style="position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;left:3px;top:3px;transition:.3s"></div>
-          <input type="checkbox" id="inst-activa" style="display:none">
-        </div>
-      </div>
-      <div id="inst-fields" style="display:none">
-        <label>Lugar de instalación</label>
-        <input type="text" id="inst-lugar" placeholder="Ciudad / dirección">
-        <label>Viáticos ($)</label>
-        <input type="number" id="inst-viaticos" value="0" min="0" step="50" oninput="calcInst()">
-        <label>Equipo de acceso</label>
-        <select id="inst-grua" onchange="calcInst()">
-          <option value="ninguna">Sin equipo / acceso propio</option>
-        </select>
-        <label>Días de equipo</label>
-        <input type="number" id="inst-dias" value="1" min="1" step="1" oninput="calcInst()">
-        <label>Otros extras ($)</label>
-        <input type="number" id="inst-extras" value="0" min="0" step="50" oninput="calcInst()">
-        <div class="info-tag" id="inst-tag" style="margin-top:6px;background:rgba(232,124,42,.15)">Total instalación: $0</div>
-      </div>
-    </div>
+    </div><!-- /sidebar-vault -->
+    <!-- NOTA: el panel "Costos y ganancia" se reubicó al inspector derecho (#inspector). -->
 
     <!-- Cliente -->
     <div class="panel">
       <h3>Cliente <span style="font-weight:400;font-size:10px;color:#9fb0cb">(opcional)</span>
-        <button onclick="abrirClientes()" title="Administrar clientes"
-          style="float:right;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);
-                 color:#aebcd4;border-radius:5px;padding:2px 7px;font-size:11px;cursor:pointer">
+        <button class="btn-pill" onclick="abrirClientes()" title="Administrar clientes"
+          style="float:right;padding:2px 7px;font-size:11px">
           ⚙ Clientes
         </button>
       </h3>
@@ -1100,6 +1084,97 @@ svg g.pieza-labels                 { pointer-events: none; }
       </div>
     </div>
   </main>
+
+  <!-- ══════════════════ INSPECTOR (panel derecho) ══════════════════ -->
+  <aside class="inspector" id="inspector">
+    <div class="inspector-header">
+      <h2>Ajustes de precio</h2>
+      <button class="btn-pill" onclick="toggleInspector()" title="Colapsar panel"
+              style="padding:2px 9px;font-size:13px;line-height:1">✕</button>
+    </div>
+
+    <!-- Precio de venta (fórmula + margen) -->
+    <div class="panel">
+      <h3>Precio de venta</h3>
+      <div id="ajuste-section" style="display:none">
+        <label>Multiplicador</label>
+        <select id="tipo-multiplicador">
+          <option value="aluminio_sin_luz">Aluminio sin luz  ×2.5</option>
+          <option value="aluminio_con_luz">Aluminio con luz  ×3.0</option>
+          <option value="aluminio_acrilico_con_luz">Aluminio + acrílico con luz  ×4.0</option>
+          <option value="acrilico_con_luz_std">Acrílico con luz estándar  ×5.0</option>
+          <option value="acrilico_con_luz_premium">Acrílico con luz premium  ×5.5</option>
+        </select>
+        <label>Ajuste % <span style="font-size:10px;opacity:.55">(+ sube, − baja)</span></label>
+        <input type="number" id="ajuste-pct" value="0" min="-50" max="200" step="1">
+        <div id="formula-preview" class="info-tag" style="display:none;background:#e8f5e9;color:#1b5e20;font-weight:700;font-size:13px;margin-top:4px"></div>
+      </div>
+
+      <label>% Ganancia <span style="font-size:10px;opacity:.55">(elige o escribe)</span></label>
+      <input type="number" id="margen" value="50" min="0" max="80" step="5" list="margen-presets">
+      <datalist id="margen-presets">
+        <option value="30">Mínimo — solo cubre costos</option>
+        <option value="35">Bajo</option>
+        <option value="40">Punto de equilibrio sano</option>
+        <option value="45">Estándar</option>
+        <option value="50">Recomendado SGI</option>
+        <option value="55">Premium</option>
+        <option value="60">Premium alto</option>
+      </datalist>
+      <div style="font-size:9.5px;color:#6b7d9c;margin-top:4px;line-height:1.4">
+        precio venta = costo ÷ (1 − ganancia)
+      </div>
+    </div>
+
+    <!-- Mano de obra -->
+    <div class="panel">
+      <h3>Mano de obra</h3>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1">
+          <label>Horas</label>
+          <input type="number" id="mo-horas" value="0" min="0" step="0.5" oninput="calcMO()">
+        </div>
+        <div style="flex:1">
+          <label>$/hora</label>
+          <input type="number" id="mo-tarifa" value="150" min="0" step="10" oninput="calcMO()">
+        </div>
+      </div>
+      <div class="info-tag" id="mo-tag" style="margin-top:6px">Total MO: $0</div>
+    </div>
+
+    <!-- Instalación -->
+    <div class="panel">
+      <h3 style="display:flex;align-items:center;gap:8px">
+        <span style="flex:1">Instalación</span>
+        <div style="position:relative;width:36px;height:20px;cursor:pointer" onclick="toggleInst()">
+          <div id="inst-bg" style="position:absolute;inset:0;background:rgba(255,255,255,.2);border-radius:24px;transition:.3s"></div>
+          <div id="inst-dot" style="position:absolute;width:14px;height:14px;background:#fff;border-radius:50%;left:3px;top:3px;transition:.3s"></div>
+          <input type="checkbox" id="inst-activa" style="display:none">
+        </div>
+      </h3>
+      <div id="inst-fields" style="display:none">
+        <label>Lugar</label>
+        <input type="text" id="inst-lugar" placeholder="Ciudad / dirección">
+        <label>Viáticos ($)</label>
+        <input type="number" id="inst-viaticos" value="0" min="0" step="50" oninput="calcInst()">
+        <label>Equipo</label>
+        <select id="inst-grua" onchange="calcInst()">
+          <option value="ninguna">Sin equipo / acceso propio</option>
+        </select>
+        <label>Días</label>
+        <input type="number" id="inst-dias" value="1" min="1" step="1" oninput="calcInst()">
+        <label>Extras ($)</label>
+        <input type="number" id="inst-extras" value="0" min="0" step="50" oninput="calcInst()">
+        <div class="info-tag" id="inst-tag" style="margin-top:6px;background:rgba(232,124,42,.15)">Total instalación: $0</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Botón flotante para reabrir el inspector cuando está colapsado -->
+  <button class="inspector-toggle-floating" id="inspector-toggle-floating"
+          onclick="toggleInspector()" title="Mostrar ajustes de precio">
+    ⚙ <span>Precio</span>
+  </button>
 </div>
 
 <!-- ══════════════════ MODAL EDICIÓN ══════════════════ -->
@@ -1197,6 +1272,29 @@ svg g.pieza-labels                 { pointer-events: none; }
                 <option value="">Selecciona tipo de vinil…</option>
               </select>
               <div id="cfg-vinil-cercha-info" style="font-size:11px;color:#6b7d9c;margin-top:6px;min-height:16px"></div>
+            </div>
+          </div>
+
+          <!-- Silvatrim opcional -->
+          <div style="padding:12px;background:#f8fafc;border-radius:10px;border:1px solid #e1e8f0">
+            <div style="font-size:12px;font-weight:600;color:#4a5568;margin-bottom:8px">¿Aplicar Silvatrim en la cercha?</div>
+            <div class="cfg-cards" id="cfg-silvatrim-cards">
+              <div class="cfg-card active" data-val="si" onclick="selectCfgCard(this,'cfg-silvatrim-cards');onCfgSilvatrimChange()">
+                <div class="cfg-card-icon">🔲</div>
+                <div class="cfg-card-name">Con Silvatrim</div>
+                <div class="cfg-card-desc">Moldura de acabado en el canto de la cercha</div>
+              </div>
+              <div class="cfg-card" data-val="no" onclick="selectCfgCard(this,'cfg-silvatrim-cards');onCfgSilvatrimChange()">
+                <div class="cfg-card-icon">—</div>
+                <div class="cfg-card-name">Sin Silvatrim</div>
+                <div class="cfg-card-desc">Cercha sin moldura perimetral</div>
+              </div>
+            </div>
+            <div id="cfg-silvatrim-opts" style="margin-top:10px">
+              <select id="cfg-silvatrim-sel" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid #c8d4e8;font-size:13px" onchange="onCfgSilvatrimSelChange()">
+                <option value="auto">Automático (recomendado por cercha)</option>
+              </select>
+              <div id="cfg-silvatrim-info" style="font-size:11px;color:#6b7d9c;margin-top:6px;min-height:16px"></div>
             </div>
           </div>
 
@@ -1432,6 +1530,25 @@ const TIPOS_CONSTRUCCION_JS = {
 };
 
 // ─── TIPO DE ANUNCIO ─────────────────────────────────────────────────────────
+function toggleInspector(forceState) {
+  const insp = document.getElementById("inspector");
+  if (!insp) return;
+  const collapsed = forceState === undefined
+    ? !insp.classList.contains("collapsed")
+    : !!forceState;
+  insp.classList.toggle("collapsed", collapsed);
+  try { localStorage.setItem("sgi_inspector_collapsed", collapsed ? "1" : "0"); } catch {}
+}
+
+// Restaurar estado del inspector al cargar
+(function restoreInspectorState() {
+  try {
+    if (localStorage.getItem("sgi_inspector_collapsed") === "1") {
+      document.addEventListener("DOMContentLoaded", () => toggleInspector(true));
+    }
+  } catch {}
+})();
+
 function setTipo(tipo, btn) {
   tipoActual = tipo;
   document.querySelectorAll(".tipo-btn").forEach(b => b.classList.remove("active"));
@@ -1553,6 +1670,67 @@ function onCfgVinilCerchaSelChange() {
   if (!v) { info.textContent = ""; return; }
   const colores = (v.colores || []).join(", ");
   info.textContent = `${v.acabado} · rollo ${v.ancho_rollo_m * 100} cm ancho${colores ? " — " + colores : ""}`;
+}
+
+// ─── SELECTOR DE SILVATRIM ───────────────────────────────────────────────────
+function populateSilvatrim() {
+  const items = catalog?.silvatrim || [];
+
+  // Select oculto del sidebar (fuente de verdad para el payload)
+  const hidSel = document.getElementById("silvatrim-id");
+  if (hidSel) {
+    // Cuidado: "" (sin silvatrim) es válido — no usar || que lo trataría como falsy.
+    const prev = hidSel.value;
+    hidSel.innerHTML = '<option value="auto">Automático (según cercha)</option>'
+                     + '<option value="">Sin Silvatrim</option>';
+    items.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.id; opt.textContent = s.nombre;
+      hidSel.appendChild(opt);
+    });
+    if ([...hidSel.options].some(o => o.value === prev)) hidSel.value = prev;
+  }
+
+  // Select del modal
+  const cfgSel = document.getElementById("cfg-silvatrim-sel");
+  if (cfgSel) {
+    const prev = cfgSel.value || "auto";
+    cfgSel.innerHTML = '<option value="auto">Automático (recomendado por cercha)</option>';
+    items.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = `${s.nombre} · $${s.precio_ml}/ml`;
+      cfgSel.appendChild(opt);
+    });
+    if ([...cfgSel.options].some(o => o.value === prev)) cfgSel.value = prev;
+    onCfgSilvatrimSelChange();
+  }
+}
+
+function onCfgSilvatrimChange() {
+  const val  = _cfgCardVal("cfg-silvatrim-cards");
+  const opts = document.getElementById("cfg-silvatrim-opts");
+  if (opts) opts.style.display = val === "si" ? "" : "none";
+  if (val === "si") {
+    populateSilvatrim();
+  } else {
+    const cfgSel = document.getElementById("cfg-silvatrim-sel");
+    if (cfgSel) { cfgSel.value = "auto"; onCfgSilvatrimSelChange(); }
+  }
+}
+
+function onCfgSilvatrimSelChange() {
+  const cfgSel = document.getElementById("cfg-silvatrim-sel");
+  const info   = document.getElementById("cfg-silvatrim-info");
+  if (!cfgSel || !info) return;
+  if (cfgSel.value === "auto") {
+    info.textContent = "Se elige el ancho según la profundidad de cercha (≤5cm → 3/4\", 5–12cm → 1\", >12cm → 2\").";
+    return;
+  }
+  const s = (catalog?.silvatrim || []).find(x => x.id === cfgSel.value);
+  if (!s) { info.textContent = ""; return; }
+  const colores = (s.colores || []).join(", ");
+  info.textContent = `${s.ancho_pulg}" (${s.ancho_mm}mm) · rollo ${s.metros_rollo}m${colores ? " — " + colores : ""}`;
 }
 
 function sugerirLedCaja() {
@@ -2743,7 +2921,7 @@ async function calcular() {
   try {
     const anchoReal  = parseFloat(document.getElementById("ancho-real").value)  || 60;
     const uso        = document.getElementById("uso").value;
-    const margen     = parseFloat(document.getElementById("margen").value) / 100 || 0.35;
+    const margen     = parseFloat(document.getElementById("margen").value) / 100 || 0.50;
     const cliente    = document.getElementById("cliente-input")?.value?.trim() || "";
 
     let url, body;
@@ -2764,6 +2942,10 @@ async function calcular() {
         tipo_multiplicador: document.getElementById("tipo-multiplicador").value,
         ajuste_pct:         parseFloat(document.getElementById("ajuste-pct").value) || 0,
         vinil_cercha_id:    document.getElementById("vinil-cercha-id").value,
+        silvatrim_id:       (() => {
+                              const el = document.getElementById("silvatrim-id");
+                              return el ? el.value : "auto";   // "" es válido (sin silvatrim)
+                            })(),
         led_id:             document.getElementById("led-letras-id")?.value || "auto",
         cliente,
         ..._instBody(),
@@ -2791,6 +2973,10 @@ async function calcular() {
         uso,
         vistas:         parseInt(document.getElementById("vistas").value) || 1,
         margen_ganancia: margen,
+        corte_laser:    parseFloat(document.getElementById("caja-corte-laser")?.value)   || 0,
+        corte_cnc:      parseFloat(document.getElementById("caja-corte-cnc")?.value)     || 0,
+        corte_plotter:  parseFloat(document.getElementById("caja-corte-plotter")?.value) || 0,
+        flete_maquila:  parseFloat(document.getElementById("caja-flete")?.value)         || 0,
         cliente,
         ..._instBody(),
       };
@@ -2844,16 +3030,32 @@ function renderResult(d) {
   };
 
   const precioFinal = costos.precio_final || costos.precio_venta_sugerido;
-  const costoTotal  = costos.total + (costos.mo_total || 0);
-  const pct = (precioFinal > 0 && costos.precio_venta_costo > 0)
-    ? (((precioFinal - costoTotal) / precioFinal) * 100).toFixed(1)
-    : null;
 
   let tipoLabel = 'Caja de Luz';
   if (esLetras) tipoLabel = 'Letras 3D';
   if (esPlanas) tipoLabel = 'Letras Planas';
 
+  // Fase H: warnings banner (inconsistencias detectadas por el calculator)
+  const warningsHtml = (d.warnings || []).length ? `
+    <div style="background:#fff3e0;border:1px solid #ffb74d;border-radius:8px;padding:10px 12px;margin-bottom:14px;display:flex;flex-direction:column;gap:6px">
+      ${(d.warnings || []).map(w => `
+        <div style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#7c4a00">
+          <span style="font-size:14px;line-height:1">⚠️</span>
+          <span style="flex:1">${w}</span>
+        </div>
+      `).join("")}
+    </div>` : "";
+
+  // Datos para las zonas hero y comparativa
+  const costoMatTotal   = d.desglose_costos_componentes?.total_material || costos.subtotal || 0;
+  const costoConstruccion = costoMatTotal + costos.iva + (costos.mo_total || 0) + (d.instalacion?.activa ? d.instalacion.total : 0);
+  const margenPct       = precioFinal > 0 ? ((precioFinal - costoConstruccion) / precioFinal * 100) : 0;
+  const margenColor     = margenPct >= 50 ? '#2e7d32' : margenPct >= 25 ? '#f57c00' : '#c62828';
+  const margenIcon      = margenPct >= 50 ? '✓' : margenPct >= 25 ? '⚠' : '✗';
+  const margenLabel     = margenPct >= 50 ? 'Saludable' : margenPct >= 25 ? 'Justo' : 'Bajo';
+
   document.getElementById("result-content").innerHTML = `
+    ${warningsHtml}
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
       <div>
         <h2 style="color:var(--azul);font-size:17px">Cotización — ${tipoLabel}</h2>
@@ -2874,6 +3076,14 @@ function renderResult(d) {
             onclick="return actualizarDocUrl('entrega','${d.quote_id}')"
             style="background:#2e7d32"
             title="Acta de entrega y garantía (al terminar el trabajo)">✅ Acta de Entrega</a>
+          <a class="btn-pdf" id="btn-pln-link" href="/api/plano/${d.quote_id}" target="_blank"
+            onclick="return actualizarDocUrl('plano','${d.quote_id}')"
+            style="background:#6a4c93"
+            title="Plano de medidas para el cliente">📐 Plano</a>
+          <a class="btn-pdf" id="btn-plt-link" href="/api/plano-taller/${d.quote_id}" target="_blank"
+            onclick="return actualizarDocUrl('plano-taller','${d.quote_id}')"
+            style="background:#4527a0"
+            title="Plano de fabricación con material por pieza + notas">🛠️ Plano Taller</a>
           <a class="btn-pdf" id="btn-xls-link" href="/api/excel/${d.quote_id}"
             onclick="return actualizarDocUrl('excel','${d.quote_id}')"
             style="background:#107c41"
@@ -2884,24 +3094,197 @@ function renderResult(d) {
       </div>
     </div>
 
+    <!-- ─── ZONA 1: 3 HEROES (precio cliente / costo construcción / margen) ─── -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px">
+      <div style="background:linear-gradient(135deg,#fff4e6 0%,#ffe0b2 100%);border:2px solid #ff9800;border-radius:10px;padding:16px;text-align:center">
+        <div style="font-size:11px;color:#7c4a00;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">💰 Precio al cliente</div>
+        <div style="font-size:28px;font-weight:800;color:#e65100;margin-top:4px;line-height:1.1">
+          $${precioFinal.toLocaleString('es-MX',{minimumFractionDigits:2})}
+        </div>
+        <div style="font-size:11px;color:#7c4a00;margin-top:4px">
+          ${costos.mo_total>0?'+ MO ':''}${d.instalacion?.activa?'+ instalación':''}${!costos.mo_total && !d.instalacion?.activa?'fabricación':''}
+        </div>
+      </div>
+      <div style="background:linear-gradient(135deg,#e8eaf6 0%,#c5cae9 100%);border:2px solid #3f51b5;border-radius:10px;padding:16px;text-align:center">
+        <div style="font-size:11px;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">🔨 Costo construcción</div>
+        <div style="font-size:28px;font-weight:800;color:#1a237e;margin-top:4px;line-height:1.1">
+          $${costoConstruccion.toLocaleString('es-MX',{minimumFractionDigits:2})}
+        </div>
+        <div style="font-size:11px;color:#1a237e;margin-top:4px">
+          materiales + IVA${costos.mo_total>0?' + MO':''}${d.instalacion?.activa?' + inst.':''}
+        </div>
+      </div>
+      <div style="background:linear-gradient(135deg,${margenPct>=50?'#e8f5e9':margenPct>=25?'#fff8e1':'#ffebee'} 0%,${margenPct>=50?'#c8e6c9':margenPct>=25?'#ffe0b2':'#ffcdd2'} 100%);border:2px solid ${margenColor};border-radius:10px;padding:16px;text-align:center">
+        <div style="font-size:11px;color:${margenColor};text-transform:uppercase;letter-spacing:0.5px;font-weight:600">📈 Margen bruto</div>
+        <div style="font-size:28px;font-weight:800;color:${margenColor};margin-top:4px;line-height:1.1">
+          ${margenPct.toFixed(1)}%
+        </div>
+        <div style="font-size:11px;color:${margenColor};margin-top:4px">
+          ${margenIcon} ${margenLabel} · $${(precioFinal - costoConstruccion).toLocaleString('es-MX',{minimumFractionDigits:0})} utilidad
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── ZONA 2: COMPARATIVA (cómo cobras vs en qué se va) ─── -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px">
+      <!-- COLUMNA IZQUIERDA: cómo se cobra (fórmula) -->
+      <div style="background:#fffbf5;border:1px solid #ffd29a;border-radius:10px;padding:14px">
+        <h3 style="margin:0 0 10px;color:#e65100;font-size:13px;display:flex;align-items:center;gap:6px">
+          🧾 ¿Cómo se cobra?
+          <span style="font-weight:400;color:#999;font-size:11px;margin-left:auto">precio según fórmula</span>
+        </h3>
+        ${(esLetras || esPlanas) ? `
+          <div style="font-size:12px;color:#555;margin-bottom:10px;font-family:'Courier New',monospace;background:#fff;padding:8px;border-radius:4px;border:1px solid #f0e0c0">
+            <div style="color:#888;font-size:10px;text-transform:uppercase">Fórmula:</div>
+            <div style="font-weight:700;color:#333">
+              altura × $${(catalog?.precios_base?.precio_cm || 10)}/cm × ×${costos.multiplicador_valor}
+            </div>
+          </div>
+          <div style="font-size:11px;color:#666;margin-bottom:6px">
+            <strong style="color:#e65100">Multiplicador:</strong>
+            ${MULT_LABELS[costos.tipo_multiplicador] || costos.tipo_multiplicador}
+          </div>
+          <div style="font-size:11px;color:#666;margin-bottom:10px">
+            <strong style="color:#e65100">Por pieza típica:</strong>
+            ${m.altura_letra_cm} × $${(catalog?.precios_base?.precio_cm || 10)} × ${costos.multiplicador_valor}
+            = <strong>$${(m.altura_letra_cm * (catalog?.precios_base?.precio_cm || 10) * costos.multiplicador_valor).toLocaleString('es-MX',{minimumFractionDigits:2})}</strong>
+          </div>
+        ` : `
+          <div style="font-size:12px;color:#555;margin-bottom:10px;font-family:'Courier New',monospace;background:#fff;padding:8px;border-radius:4px;border:1px solid #f0e0c0">
+            <div style="color:#888;font-size:10px;text-transform:uppercase">Fórmula:</div>
+            <div style="font-weight:700;color:#333">costo total / (1 − margen)</div>
+            <div style="color:#999;font-size:10px;margin-top:2px">precio = $${costos.total.toLocaleString('es-MX',{minimumFractionDigits:2})} / (1 − ${(((1 - costos.total/costos.precio_venta_sugerido)*100)).toFixed(0)}%)</div>
+          </div>
+        `}
+        <table style="width:100%;font-size:12px;border-collapse:collapse">
+          ${(esLetras || esPlanas) ? `
+            <tr>
+              <td style="padding:4px 0;color:#666">Suma fórmula (${d.desglose_letras?.length||0} piezas)</td>
+              <td style="text-align:right;color:#333">$${(costos.precio_sin_ajuste||0).toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+            </tr>
+            ${costos.ajuste_pct !== 0 ? `
+            <tr>
+              <td style="padding:4px 0;color:${costos.ajuste_pct>0?'#2e7d32':'#c62828'}">${costos.ajuste_pct>0?'+':''}${costos.ajuste_pct}% ajuste</td>
+              <td style="text-align:right;color:${costos.ajuste_pct>0?'#2e7d32':'#c62828'}">${costos.ajuste_pct>0?'+':''}$${(costos.precio_venta_sugerido - costos.precio_sin_ajuste).toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+            </tr>` : ''}
+            <tr style="border-top:1px solid #f0d0a0">
+              <td style="padding:4px 0;color:#333;font-weight:700">Precio fabricación</td>
+              <td style="text-align:right;color:#333;font-weight:700">$${costos.precio_venta_sugerido.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+            </tr>
+          ` : `
+            <tr style="border-top:1px solid #f0d0a0">
+              <td style="padding:4px 0;color:#333;font-weight:700">Precio fabricación</td>
+              <td style="text-align:right;color:#333;font-weight:700">$${costos.precio_venta_sugerido.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+            </tr>
+          `}
+          ${costos.mo_total > 0 ? `
+          <tr>
+            <td style="padding:4px 0;color:#558b2f">+ Mano de obra</td>
+            <td style="text-align:right;color:#558b2f">+$${costos.mo_total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+          </tr>` : ''}
+          ${d.instalacion?.activa ? `
+          <tr>
+            <td style="padding:4px 0;color:#e65100">+ Instalación</td>
+            <td style="text-align:right;color:#e65100">+$${d.instalacion.total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+          </tr>` : ''}
+          <tr style="border-top:2px solid #e65100">
+            <td style="padding:8px 0 0;color:#e65100;font-weight:800;font-size:13px">= TOTAL CLIENTE</td>
+            <td style="text-align:right;color:#e65100;font-weight:800;font-size:15px;padding:8px 0 0">$${precioFinal.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- COLUMNA DERECHA: en qué se va el costo (componentes) -->
+      <div style="background:#f5f7fc;border:1px solid #c5cae9;border-radius:10px;padding:14px">
+        <h3 style="margin:0 0 10px;color:#1a237e;font-size:13px;display:flex;align-items:center;gap:6px">
+          🛠️ ¿En qué se va el costo?
+          <span style="font-weight:400;color:#999;font-size:11px;margin-left:auto">desglose real por componente</span>
+        </h3>
+        ${(() => {
+          const comp = d.desglose_costos_componentes || {};
+          const labels = {
+            cara: 'Cara', cercha: 'Cercha', sercha: 'Sercha', fondo: 'Fondo',
+            leds: 'LEDs', fuente: 'Fuente', pegamento: 'Pegamento',
+            distanciadores: 'Distanciadores', silvatrim: 'Silvatrim',
+            vinil_cercha: 'Vinil cercha',
+            cables: 'Cables', mano_obra: 'Mano de obra',
+            maquila: 'Maquila (cortes)', flete: 'Flete maquila',
+            estructura: 'Sercha',  // legacy: cotizaciones viejas usaban "estructura"
+          };
+          // Nombres de material por componente (cuando los devuelve el backend).
+          const matNames = {
+            cara: d.materiales?.cara?.nombre,
+            cercha: d.materiales?.cercha?.nombre,
+            sercha: d.materiales?.cercha?.nombre,       // mismo material que cercha
+            estructura: d.materiales?.cercha?.nombre,   // legacy
+            fondo: d.materiales?.fondo?.nombre,
+            leds: d.iluminacion?.led,
+            fuente: d.iluminacion?.fuente,
+            pegamento: d.pegamento?.nombre,
+            silvatrim: d.silvatrim?.nombre,
+            vinil_cercha: d.vinil_cercha?.nombre,
+            cables: 'Cable Radox cal 22 + POT cal 18',
+            mano_obra: 'Taller SGI',
+          };
+          const items = Object.entries(comp)
+            .filter(([k, v]) => k !== 'total_material' && (v || 0) > 0)
+            .sort((a, b) => b[1] - a[1]);
+          const total = comp.total_material || items.reduce((s, [, v]) => s + v, 0);
+          if (items.length === 0) return '<div style="color:#999;font-size:12px;text-align:center;padding:20px">Sin desglose por componente disponible</div>';
+          return `
+            <table style="width:100%;font-size:12px;border-collapse:collapse">
+              ${items.map(([k, v]) => {
+                const pct = total > 0 ? (v / total * 100) : 0;
+                const barW = Math.max(3, pct);
+                const matName = matNames[k];
+                const labelHtml = matName
+                  ? `<div style="font-weight:600">${labels[k] || k}</div><div style="font-size:10px;color:#888;line-height:1.2">${matName}</div>`
+                  : `${labels[k] || k}`;
+                return `<tr>
+                  <td style="padding:3px 0;width:30%;color:#333">${labelHtml}</td>
+                  <td style="padding:3px 6px;width:50%">
+                    <div style="background:#e3e7ee;height:8px;border-radius:4px;overflow:hidden">
+                      <div style="background:#3f51b5;height:100%;width:${barW}%;border-radius:4px"></div>
+                    </div>
+                  </td>
+                  <td style="padding:3px 0;text-align:right;color:#666;font-size:11px;width:14%">${pct.toFixed(0)}%</td>
+                  <td style="padding:3px 0 3px 4px;text-align:right;color:#333;font-weight:600">$${v.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+                </tr>`;
+              }).join("")}
+              <tr style="border-top:1px solid #c5cae9">
+                <td colspan="3" style="padding:6px 0;color:#1a237e;font-weight:700">Subtotal materiales</td>
+                <td style="text-align:right;color:#1a237e;font-weight:700;padding:6px 0">$${total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+              </tr>
+              <tr>
+                <td colspan="3" style="padding:3px 0;color:#666">+ IVA 16%</td>
+                <td style="text-align:right;color:#666;padding:3px 0">+$${costos.iva.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+              </tr>
+              ${costos.mo_total > 0 ? `
+              <tr>
+                <td colspan="3" style="padding:3px 0;color:#558b2f">+ Mano de obra</td>
+                <td style="text-align:right;color:#558b2f;padding:3px 0">+$${costos.mo_total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+              </tr>` : ''}
+              ${d.instalacion?.activa ? `
+              <tr>
+                <td colspan="3" style="padding:3px 0;color:#e65100">+ Instalación</td>
+                <td style="text-align:right;color:#e65100;padding:3px 0">+$${d.instalacion.total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+              </tr>` : ''}
+              <tr style="border-top:2px solid #1a237e">
+                <td colspan="3" style="padding:8px 0 0;color:#1a237e;font-weight:800;font-size:13px">= COSTO TOTAL</td>
+                <td style="text-align:right;color:#1a237e;font-weight:800;font-size:15px;padding:8px 0 0">$${costoConstruccion.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+              </tr>
+            </table>
+          `;
+        })()}
+      </div>
+    </div>
+
     ${(esLetras || esPlanas) && d.desglose_letras && d.desglose_letras.length ? `
-    <!-- ── COTIZACIÓN POR LETRA (fórmula Excel) ── -->
+    <!-- ── COTIZACIÓN POR PIEZA (fórmula Excel) ── -->
     <h3 style="color:var(--azul);margin:0 0 8px;font-size:14px">
-      Cotización por letra
-      <span style="font-weight:400;color:#888;font-size:12px">
-        — ${MULT_LABELS[costos.tipo_multiplicador] || costos.tipo_multiplicador}
-      </span>
+      Cotización pieza por pieza
+      <span style="font-weight:400;color:#888;font-size:12px">— margen real por pieza vs costo de construcción</span>
     </h3>
-    <p style="font-size:11px;color:#999;margin:0 0 6px">
-      Fórmula: altura × $${(catalog?.precios_base?.precio_cm || 10)}/cm × ${costos.multiplicador_valor}
-      ${costos.ajuste_pct !== 0 ? `
-        <span style="margin-left:8px;font-weight:700;color:${costos.ajuste_pct>0?'#2e7d32':'#c62828'}">
-          ${costos.ajuste_pct > 0 ? '+' : ''}${costos.ajuste_pct}% ajuste
-        </span>
-        <span style="margin-left:6px;color:#aaa">
-          (base: $${(costos.precio_sin_ajuste||0).toLocaleString('es-MX',{minimumFractionDigits:2})})
-        </span>` : ''}
-    </p>
     <table class="desglose-table" style="margin-bottom:20px">
       <thead><tr>
         <th>Letra</th>
@@ -2909,63 +3292,65 @@ function renderResult(d) {
         <th class="amount">Ancho</th>
         <th class="amount">Cara (A×A)</th>
         ${!esPlanas ? `<th class="amount">Cercha (P×P)</th>` : ''}
-        <th class="amount" style="color:#555">Costo mat.</th>
+        <th class="amount" style="color:#555">Costo real</th>
         <th class="amount" style="color:#e87c2a">Precio venta</th>
+        <th class="amount" style="color:#666" title="Margen real = (precio − costo) / precio">Margen %</th>
       </tr></thead>
       <tbody>
-        ${d.desglose_letras.map(l => `<tr>
+        ${d.desglose_letras.map(l => {
+          const mp = l.margen_real_pct;
+          const margenColor = mp >= 50 ? '#2e7d32' : mp >= 25 ? '#f57c00' : '#c62828';
+          const margenIcon = mp >= 50 ? '✓' : mp >= 25 ? '⚠' : '✗';
+          const costoReal = l.costo_total ?? l.costo_mat ?? 0;
+          return `<tr>
           <td><strong>${l.id}</strong></td>
           <td class="amount">${l.alto_cm} cm</td>
           <td class="amount">${l.ancho_cm} cm</td>
           <td class="amount">${(l.area_bbox_cm2||0).toFixed(0)} cm²</td>
           ${!esPlanas ? `<td class="amount">${(l.cercha_area_cm2||0).toFixed(0)} cm²</td>` : ''}
           <td class="amount" style="color:#555;font-size:12px">
-            $${(l.costo_mat||0).toLocaleString('es-MX',{minimumFractionDigits:2})}
+            $${costoReal.toLocaleString('es-MX',{minimumFractionDigits:2})}
           </td>
           <td class="amount" style="font-weight:700;color:var(--naranja)">
             $${l.precio_letra.toLocaleString('es-MX',{minimumFractionDigits:2})}
           </td>
-        </tr>`).join("")}
-        <tr style="background:#fff8f0;font-weight:700;font-size:14px">
-          <td>TOTAL (${d.desglose_letras.length} letras)</td>
+          <td class="amount" style="font-weight:700;color:${margenColor}">
+            ${margenIcon} ${mp != null ? mp.toFixed(1)+'%' : '—'}
+          </td>
+        </tr>`;}).join("")}
+        ${(() => {
+          const totalCosto = d.desglose_letras.reduce((s,l)=>s+(l.costo_total??l.costo_mat??0),0);
+          const totalPrecio = costos.precio_venta_sugerido;
+          const margenTotal = totalPrecio > 0 ? ((totalPrecio - totalCosto)/totalPrecio*100) : 0;
+          const margenColor = margenTotal >= 50 ? '#2e7d32' : margenTotal >= 25 ? '#f57c00' : '#c62828';
+          return `<tr style="background:#fff8f0;font-weight:700;font-size:14px">
+          <td>TOTAL (${d.desglose_letras.length} ${esPlanas?'piezas':'letras'})</td>
           <td class="amount">—</td>
           <td class="amount">—</td>
           <td class="amount">${d.desglose_letras.reduce((s,l)=>s+(l.area_bbox_cm2||0),0).toFixed(0)} cm²</td>
           ${!esPlanas ? `<td class="amount">${d.desglose_letras.reduce((s,l)=>s+(l.cercha_area_cm2||0),0).toFixed(0)} cm²</td>` : ''}
           <td class="amount" style="color:#555">
-            $${d.desglose_letras.reduce((s,l)=>s+(l.costo_mat||0),0).toLocaleString('es-MX',{minimumFractionDigits:2})}
+            $${totalCosto.toLocaleString('es-MX',{minimumFractionDigits:2})}
           </td>
           <td class="amount" style="color:var(--naranja);font-size:16px">
-            $${costos.precio_venta_sugerido.toLocaleString('es-MX',{minimumFractionDigits:2})}
+            $${totalPrecio.toLocaleString('es-MX',{minimumFractionDigits:2})}
           </td>
-        </tr>
+          <td class="amount" style="color:${margenColor};font-size:14px">
+            ${margenTotal.toFixed(1)}%
+          </td>
+        </tr>`; })()}
       </tbody>
     </table>
 
-    <!-- ── REFERENCIA: precio por costo ── -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
-      <div class="stat-card highlight">
-        <div class="label">Total al cliente</div>
-        <div class="value">$${precioFinal.toLocaleString('es-MX',{minimumFractionDigits:2})}</div>
-        <div class="sub">Fabricación${costos.mo_total>0?' + MO':''}${d.instalacion?.activa?' + instalación':''}</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Precio mínimo (por costo)</div>
-        <div class="value" style="font-size:17px">$${costos.precio_venta_costo.toLocaleString('es-MX',{minimumFractionDigits:2})}</div>
-        <div class="sub">Costo + IVA + margen</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Margen real</div>
-        <div class="value" style="color:#2e7d32">${pct !== null ? pct+'%' : '—'}</div>
-        <div class="sub">${precioFinal > costoTotal
-          ? '✓ Precio cubre costos' : '⚠ Precio bajo costos'}</div>
-      </div>
-    </div>` : ""}
+    ` : ""}
 
-    <!-- ── STATS: iluminación y materiales ── -->
-    <div class="result-grid" style="margin-bottom:20px">
+    <!-- ─── ZONA 4: RECETA TÉCNICA (materiales en uso) ─── -->
+    <h3 style="color:var(--azul);margin:18px 0 8px;font-size:14px">📦 Receta de fabricación</h3>
+    <div class="result-grid" style="margin-bottom:14px">
       ${stat("Área cara total", (m.area_cara_cm2/10000).toFixed(4)+" m²", m.area_cara_cm2.toFixed(0)+" cm²")}
-      ${stat("Cercha total", (m.perimetro_total_cm/100).toFixed(2)+" m", "prof. "+m.cercha_altura_cm+" cm")}
+      ${m.cercha_altura_cm > 0
+          ? stat("Cercha total", (m.perimetro_total_cm/100).toFixed(2)+" m", "prof. "+m.cercha_altura_cm+" cm")
+          : stat("Perímetro total", (m.perimetro_total_cm/100).toFixed(2)+" m", "sin cercha")}
       ${stat("Módulos LED", il.modulos+" uds", il.led)}
       ${stat("Watts", il.watts_total+" W", il.fuente)}
       ${stat("Material cara", mats.cara.nombre+(mats.cara.base ? " / "+mats.cara.base : ""), mats.cara.laminas+" lám.")}
@@ -2984,64 +3369,56 @@ function renderResult(d) {
         ) : ""}
     </div>
 
-    <!-- ── DESGLOSE DE COSTOS ── -->
-    <h3 style="color:var(--azul);margin:0 0 10px;font-size:14px">Desglose de costos (referencia interna)</h3>
-    <table class="desglose-table">
-      <thead><tr><th>Concepto</th><th class="amount">Costo</th></tr></thead>
-      <tbody>
-        ${d.desglose.map(r=>`<tr>
-          <td>${r.concepto}</td>
-          <td class="amount">$${r.costo.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
-        </tr>`).join("")}
-        <tr class="total-row">
-          <td>Subtotal</td>
-          <td class="amount">$${costos.subtotal.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
-        </tr>
-        <tr class="total-row">
-          <td>IVA 16%</td>
-          <td class="amount">$${costos.iva.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
-        </tr>
-        <tr class="total-row">
-          <td>Total costo con IVA</td>
-          <td class="amount">$${costos.total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
-        </tr>
-        <tr class="venta-row">
-          <td>Precio fabricación (fórmula)</td>
-          <td class="amount">$${costos.precio_venta_sugerido.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
-        </tr>
-        ${costos.mo_total > 0 ? `
-        <tr style="background:#e8f5e9">
-          <td>🔧 Mano de obra</td>
-          <td class="amount">$${costos.mo_total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
-        </tr>` : ''}
-        ${d.instalacion?.activa ? `
-        <tr style="background:#fff3e0">
-          <td colspan="2" style="font-weight:700;font-size:12px;color:#e65100;padding-top:8px">
-            📍 Instalación — ${d.instalacion.lugar || 'sin lugar especificado'}
-          </td>
-        </tr>
-        ${d.instalacion.viaticos > 0 ? `<tr style="background:#fff3e0">
-          <td style="padding-left:20px">Viáticos</td>
-          <td class="amount">$${d.instalacion.viaticos.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
-        </tr>` : ''}
-        ${d.instalacion.costo_grua > 0 ? `<tr style="background:#fff3e0">
-          <td style="padding-left:20px">Equipo (${d.instalacion.grua})</td>
-          <td class="amount">$${d.instalacion.costo_grua.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
-        </tr>` : ''}
-        ${d.instalacion.extras > 0 ? `<tr style="background:#fff3e0">
-          <td style="padding-left:20px">Extras instalación</td>
-          <td class="amount">$${d.instalacion.extras.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
-        </tr>` : ''}
-        <tr style="background:#ffe0b2;font-weight:700">
-          <td>Total instalación</td>
-          <td class="amount">$${d.instalacion.total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
-        </tr>` : ''}
-        <tr style="background:#1a237e;color:#fff;font-size:15px;font-weight:700">
-          <td>💰 TOTAL AL CLIENTE</td>
-          <td class="amount">$${precioFinal.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
-        </tr>
-      </tbody>
-    </table>
+    <!-- ─── DETALLE TÉCNICO (collapsible, para taller / auditoría) ─── -->
+    <details style="margin-top:8px;background:#fafbfd;border:1px solid #e3e7ee;border-radius:8px;padding:10px 14px">
+      <summary style="cursor:pointer;font-weight:600;color:#555;font-size:12px;user-select:none">
+        📋 Detalle técnico de materiales (referencia para taller)
+      </summary>
+      <table class="desglose-table" style="margin-top:10px;font-size:12px">
+        <thead><tr><th>Concepto</th><th class="amount">Costo</th></tr></thead>
+        <tbody>
+          ${d.desglose.map(r=>`<tr>
+            <td>${r.concepto}</td>
+            <td class="amount">$${r.costo.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+          </tr>`).join("")}
+          <tr class="total-row">
+            <td>Subtotal materiales</td>
+            <td class="amount">$${costos.subtotal.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+          </tr>
+          <tr class="total-row">
+            <td>IVA 16%</td>
+            <td class="amount">$${costos.iva.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+          </tr>
+          ${costos.mo_total > 0 ? `
+          <tr style="background:#e8f5e9"><td>🔧 Mano de obra</td>
+            <td class="amount">$${costos.mo_total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>` : ''}
+          ${d.instalacion?.activa ? `
+          <tr style="background:#fff3e0">
+            <td colspan="2" style="font-weight:700;font-size:11px;color:#e65100">📍 Instalación — ${d.instalacion.lugar || 'sin lugar'}</td>
+          </tr>
+          ${d.instalacion.viaticos > 0 ? `<tr style="background:#fff3e0">
+            <td style="padding-left:20px">Viáticos</td>
+            <td class="amount">$${d.instalacion.viaticos.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>` : ''}
+          ${d.instalacion.costo_grua > 0 ? `<tr style="background:#fff3e0">
+            <td style="padding-left:20px">Equipo (${d.instalacion.grua})</td>
+            <td class="amount">$${d.instalacion.costo_grua.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>` : ''}
+          ${d.instalacion.extras > 0 ? `<tr style="background:#fff3e0">
+            <td style="padding-left:20px">Extras</td>
+            <td class="amount">$${d.instalacion.extras.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>` : ''}
+          <tr style="background:#ffe0b2;font-weight:700">
+            <td>Total instalación</td>
+            <td class="amount">$${d.instalacion.total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>` : ''}
+          <tr style="background:#1a237e;color:#fff;font-size:13px;font-weight:700">
+            <td>💰 TOTAL AL CLIENTE</td>
+            <td class="amount">$${precioFinal.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+          </tr>
+          <tr style="background:#fff8f0">
+            <td style="color:#888;font-size:11px">Piso por costo (referencia)</td>
+            <td class="amount" style="color:#888;font-size:11px">$${costos.precio_venta_costo.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+          </tr>
+        </tbody>
+      </table>
+    </details>
   `;
 }
 
@@ -4057,7 +4434,10 @@ function actualizarPdfUrl(quoteId) {
 function actualizarDocUrl(tipo, quoteId) {
   const qs  = _pdfParams();
   const url = `/api/${tipo}/${quoteId}` + (qs ? `?${qs}` : "");
-  const btnSuffix = {entrega: "ent", excel: "xls"}[tipo] || tipo;
+  const btnSuffix = {
+    entrega: "ent", excel: "xls",
+    plano: "pln", "plano-taller": "plt",
+  }[tipo] || tipo;
   const btn = document.getElementById(`btn-${btnSuffix}-link`);
   if (btn) btn.href = url;
   return true;
@@ -4184,6 +4564,21 @@ async function openCfgModal() {
   if (cfgVcSel && vinilMain) {
     cfgVcSel.value = vinilMain;
     onCfgVinilCerchaSelChange();
+  }
+
+  // Pre-popular Silvatrim desde el select oculto del sidebar.
+  // Cuidado: "" (sin silvatrim) es válido — no usar || que lo trataría como falsy.
+  const svElMain = document.getElementById("silvatrim-id");
+  const svMain   = svElMain ? svElMain.value : "auto";
+  const svCards = document.querySelectorAll("#cfg-silvatrim-cards .cfg-card");
+  svCards.forEach(c => c.classList.toggle("active", c.dataset.val === (svMain === "" ? "no" : "si")));
+  const svOpts = document.getElementById("cfg-silvatrim-opts");
+  if (svOpts) svOpts.style.display = svMain === "" ? "none" : "";
+  populateSilvatrim();
+  const cfgSvSel = document.getElementById("cfg-silvatrim-sel");
+  if (cfgSvSel && svMain !== "") {
+    cfgSvSel.value = svMain;
+    onCfgSilvatrimSelChange();
   }
 
   // Profundidad caja
@@ -4415,6 +4810,14 @@ function aplicarConfiguracion() {
       : "";
     const hidSel = document.getElementById("vinil-cercha-id");
     if (hidSel) hidSel.value = vinilId;
+
+    // Silvatrim: leer del modal → copiar al select oculto del sidebar
+    const svCardVal = _cfgCardVal("cfg-silvatrim-cards");
+    const svId = svCardVal === "no"
+      ? ""
+      : (document.getElementById("cfg-silvatrim-sel")?.value || "auto");
+    const hidSvSel = document.getElementById("silvatrim-id");
+    if (hidSvSel) hidSvSel.value = svId;
 
     // Paso 4: material cara, material cercha, espaciado LED, LED elegido
     const matCaraVal   = document.getElementById("cfg-mat-cara")?.value   || "auto";
@@ -4738,6 +5141,10 @@ async function reabrirCotizacion(qid) {
     if (p.vinil_cercha_id !== undefined) {
       const el = document.getElementById("vinil-cercha-id");
       if (el) { el.value = p.vinil_cercha_id; onVinilCerchaChange(); }
+    }
+    if (p.silvatrim_id !== undefined) {
+      const el = document.getElementById("silvatrim-id");
+      if (el) el.value = p.silvatrim_id;
     }
     if (p.base_cara_vinil) {
       const el = document.getElementById("base-cara-caja");

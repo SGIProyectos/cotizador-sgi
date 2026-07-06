@@ -55,6 +55,10 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_quotes_tipo    ON quotes(tipo);
             CREATE INDEX IF NOT EXISTS idx_clients_nombre ON clients(nombre);
         """)
+        # Migración defensiva: DBs creadas antes de añadir svg_text al esquema
+        cols = {r[1] for r in c.execute("PRAGMA table_info(quotes)").fetchall()}
+        if "svg_text" not in cols:
+            c.execute("ALTER TABLE quotes ADD COLUMN svg_text TEXT DEFAULT ''")
 
 
 def next_folio() -> str:
