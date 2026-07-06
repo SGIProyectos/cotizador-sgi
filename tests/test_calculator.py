@@ -371,11 +371,60 @@ class TestCotizarLetras:
         assert r.costo_led == 0.0
         assert r.modulos_led == 0
 
+    def test_modulos_led_por_area_no_perimetro(self, square_svg):
+        """Módulos LED se calculan por cobertura de área (cercha × esp × 2),
+        no por perímetro/espaciado. Una letra de 25cm con cercha 6cm debe
+        dar ~6-9 módulos, no 17+ (que sería el resultado por perímetro).
+        Regla Signalux: 6-8 módulos por letra de 25cm de altura."""
+        r = self._quote(square_svg, altura_letra_cm=25.0, cercha_cm=6.0,
+                        espaciado_led_cm=6.0)
+        # Una sola letra cuadrada 25cm → área ≈ 625 cm² / (6×6×2=72) ≈ 9 módulos
+        assert 6 <= r.modulos_led <= 12, (
+            f"Esperado 6-12 módulos para 25cm cuadrada, obtenido {r.modulos_led}"
+        )
+
+    def test_modulos_led_piso_minimo_3(self, square_svg):
+        """Letras muy chicas (10cm) siempre deben tener al menos 3 módulos
+        por pieza para uniformidad lumínica."""
+        r = self._quote(square_svg, altura_letra_cm=10.0, cercha_cm=4.0,
+                        espaciado_led_cm=6.0)
+        # 1 letra · piso = 3
+        assert r.modulos_led >= 3
+
+    def test_led_recomendado_evita_110v(self):
+        """led_recomendado debe preferir 12V sobre 110V cuando ambos cubren
+        el rango de profundidad — el 110V solo gana si no hay alternativa."""
+        from catalog_data import led_recomendado
+        # Cercha 6cm exterior: tanto Sign 03 PRO (12V) como Sign 03 AC (110V) aplican
+        rec = led_recomendado(6.0, "exterior")
+        assert rec.get("voltaje", 12) == 12, (
+            f"Esperado LED 12V, obtenido {rec['nombre']} ({rec.get('voltaje')}V)"
+        )
+
     def test_silvatrim_se_agrega(self, square_svg):
         r = self._quote(square_svg)
         assert r.silvatrim
         assert r.metros_silvatrim > 0
         assert r.costo_silvatrim > 0
+
+    def test_silvatrim_omitido(self, square_svg):
+        """silvatrim_id='' → sin Silvatrim, costo y metros en cero, no aparece en desglose."""
+        r = self._quote(square_svg, silvatrim_id="")
+        assert r.silvatrim == {}
+        assert r.metros_silvatrim == 0
+        assert r.costo_silvatrim == 0
+        # No debe aparecer línea de Silvatrim en el desglose
+        assert not any("Silvatrim" in d["concepto"] for d in r.desglose)
+
+    def test_silvatrim_override_especifico(self, square_svg):
+        """silvatrim_id explícito (ej. 2\") debe usarse aunque la cercha sea pequeña."""
+        # Cercha pequeña → auto recomendaría silvatrim_34 (3/4")
+        r_auto = self._quote(square_svg, cercha_cm=4.0, silvatrim_id="auto")
+        r_over = self._quote(square_svg, cercha_cm=4.0, silvatrim_id="silvatrim_2")
+        assert r_auto.silvatrim["id"] == "silvatrim_34"
+        assert r_over.silvatrim["id"] == "silvatrim_2"
+        # El override es más caro porque el precio_ml de 2" > 3/4"
+        assert r_over.costo_silvatrim > r_auto.costo_silvatrim
 
     def test_fase_d_material_por_pieza_individual(self):
         """Fase D: en auto, cada pieza recibe material según su propia altura,
@@ -490,8 +539,10 @@ class TestCotizarCaja:
 
     def test_iva_y_total(self, caja_svg):
         r = self._quote(caja_svg)
-        assert r.iva == pytest.approx(r.subtotal * 0.16, rel=1e-6)
-        assert r.total == pytest.approx(r.subtotal + r.iva, rel=1e-6)
+        # subtotal interpretado como sin IVA; iva = 16% del subtotal.
+        # abs=0.01 tolera ruido de redondeo a centavos.
+        assert r.iva == pytest.approx(r.subtotal * 0.16, abs=0.01)
+        assert r.total == pytest.approx(r.subtotal + r.iva, abs=0.01)
 
     def test_precio_venta_es_total_dividido_por_1_menos_margen(self, caja_svg):
         r = self._quote(caja_svg, margen_ganancia=0.4)

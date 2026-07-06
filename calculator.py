@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from svgpathtools import parse_path
 
 from catalog_data import (
+    CABLES,
     DISTANCIADORES,
     LAMINAS,
     LEDS_CAJA,
@@ -14,6 +15,7 @@ from catalog_data import (
     PEGAMENTOS,
     PRECIOS_BASE,
     PRECIOS_CAJA_M2,
+    SILVATRIM,
     TIPOS_CONSTRUCCION,
     VINILOS_CERCHA,
     cercha_rango_cm,
@@ -125,6 +127,10 @@ class QuoteResult:
     inst_extras: float = 0.0
     inst_total: float = 0.0
     precio_final: float = 0.0           # precio_venta_sugerido + inst_total
+
+    # Fase G — Desglose interno (interno al dueño, no se imprime al cliente)
+    desglose_costos_componentes: dict = field(default_factory=dict)  # {cara, cercha, leds, fuente, pegamento, dist, fondo, extras}
+    warnings: list[str] = field(default_factory=list)                # avisos de inconsistencia (ej. "con luz + 0 LEDs")
 
 
 # ─── PARSEO DE SVG ───────────────────────────────────────────────────────────
@@ -632,6 +638,7 @@ def cotizar_letras(
     tipo_multiplicador: str = "acrilico_con_luz_std",
     ajuste_pct: float = 0.0,
     vinil_cercha_id: str = "",
+    silvatrim_id: str = "auto",
     led_id: str = "auto",
 ) -> QuoteResult:
 
@@ -744,13 +751,22 @@ def cotizar_letras(
         c_fondo   = 0.0
 
     # ── LEDS Y FUENTE ─────────────────────────────────────────────────────────
+    # Módulos LED se distribuyen sobre el ÁREA del cara desde el interior del canal
+    # (no en el perímetro). Cada módulo con ángulo de apertura 160° proyecta sobre
+    # un rectángulo de cobertura ≈ cercha × espaciado × 2 sobre el fondo del canal.
+    # Por eso:  modulos_por_letra = ceil(area_letra / cobertura_por_modulo)
+    # Mínimo 3 módulos por pieza para garantizar uniformidad en letras chicas.
     if config["leds"]:
-        modulos = math.ceil(perimetro_total / espaciado_led_cm)
         led     = None
         if led_id and led_id != "auto":
             led = next((l for l in LEDS_CANAL if l.get("id") == led_id), None)
         if led is None:
             led = led_recomendado(cercha_cm, uso)
+        cobertura_modulo = max(1.0, cercha_cm * espaciado_led_cm * 2)
+        modulos = sum(
+            max(3, math.ceil((p.bbox["h"] * sf) * (p.bbox["w"] * sf) / cobertura_modulo))
+            for p in letras
+        )
         watts   = modulos * led["watts_modulo"]
         fuente  = fuente_optima(watts, uso)
         c_led   = modulos * led["precio_modulo"]
@@ -782,18 +798,31 @@ def cotizar_letras(
     mat_cercha_tipo = "alucobon" if "alucobon" in mat_cercha_id else "aluminio"
     peg_key   = (mat_cercha_tipo, mat_cara_tipo)
     pegamento = PEGAMENTOS.get(peg_key, PEGAMENTOS.get((mat_cara_tipo, mat_cercha_tipo),
-                {"nombre": "Silicón Transparente Arquitectónico", "precio_aprox": 90, "metros_por_envase": 5}))
+                {"nombre": "Silicón Transparente Arquitectónico", "precio_aprox": 90, "metros_por_envase": 11}))
     # Cordón de pegamento en metros: perímetro total × cantidad de juntas (cara + fondo si aplica)
     juntas    = (1 if config["cara"] != "ninguna" else 0) + (1 if config["fondo_pvc"] else 0)
     metros_peg = perimetro_total / 100 * max(1, juntas)
-    envases   = max(0.15, metros_peg / pegamento.get("metros_por_envase", 5))
+    # Piso 5% = consumo mínimo realista por cotización (limpieza, descarga inicial, mermas).
+    # Antes era 15% — inflaba el costo de letras chicas; cotizaciones medianas/grandes lo superan y no cambian.
+    envases   = max(0.05, metros_peg / pegamento.get("metros_por_envase", 11))
     c_peg     = round(envases * pegamento["precio_aprox"], 2)
 
-    # ── SILVATRIM ─────────────────────────────────────────────────────────────
-    sv         = silvatrim_recomendado(cercha_cm)
-    metros_sv  = round(perimetro_total / 100, 2)   # cm → metros
-    c_silvatrim = round(metros_sv * sv["precio_ml"], 2)
-    desglose_sv = f"Silvatrim {sv['nombre']} · {metros_sv:.1f} m × ${sv['precio_ml']:.2f}/m"
+    # ── SILVATRIM (opcional) ──────────────────────────────────────────────────
+    # silvatrim_id: ""=sin silvatrim · "auto"=recomendado por cercha · "<id>"=override
+    if silvatrim_id == "":
+        sv = {}
+        metros_sv = 0.0
+        c_silvatrim = 0.0
+        desglose_sv = ""
+    else:
+        if silvatrim_id == "auto":
+            sv = silvatrim_recomendado(cercha_cm)
+        else:
+            sv = next((s for s in SILVATRIM if s["id"] == silvatrim_id),
+                      silvatrim_recomendado(cercha_cm))
+        metros_sv  = round(perimetro_total / 100, 2)   # cm → metros
+        c_silvatrim = round(metros_sv * sv["precio_ml"], 2)
+        desglose_sv = f"Silvatrim {sv['nombre']} · {metros_sv:.1f} m × ${sv['precio_ml']:.2f}/m"
 
     # ── VINIL CERCHA ──────────────────────────────────────────────────────────
     vc = next((v for v in VINILOS_CERCHA if v["id"] == vinil_cercha_id), None)
@@ -837,7 +866,8 @@ def cotizar_letras(
     if config["distanciadores"]:
         desglose.append({"concepto": f"{DISTANCIADORES['nombre']} × {n_letras_dist} letras", "costo": c_dist})
     desglose.append({"concepto": f"Pegamento {pegamento['nombre']} · {metros_peg:.1f}m ({envases:.2f} env.)", "costo": c_peg})
-    desglose.append({"concepto": desglose_sv, "costo": c_silvatrim})
+    if desglose_sv:
+        desglose.append({"concepto": desglose_sv, "costo": c_silvatrim})
     if vc:
         desglose.append({"concepto": f"Vinil cercha {vc['nombre']} · {metros_vc:.1f} m × ${vc['precio_ml']:.2f}/m", "costo": c_vinil_cercha})
 
@@ -846,29 +876,61 @@ def cotizar_letras(
     precio_cm     = PRECIOS_BASE["precio_cm"]
     multiplicador = PRECIOS_BASE["multiplicadores"].get(tipo_multiplicador, 4.5)
 
+    # ── Fase G: desglose por pieza de TODOS los componentes (no prorrateo
+    # falso). Cada pieza ya tiene su costo de cara (cara_por_pieza); aquí
+    # añadimos cercha, fondo, leds, fuente, pegamento, dist, extras —
+    # cada uno con su share REAL para esa pieza.
     desglose_letras = []
     precio_formula_total = 0.0
+    # svg_id_for(p): para cards de UI / plano que usan svg_id como llave estable
     for i, p in enumerate(letras):
         alto_cm    = round(p.bbox["h"] * svg_data.scale_factor, 2)
         ancho_cm   = round(p.bbox["w"] * svg_data.scale_factor, 2)
-        area_bbox  = round(alto_cm * ancho_cm, 2)           # alto × ancho (bounding box)
-        tira_neta  = round(p.perimeter_cm, 1)
-        tira_total = round(p.perimeter_cm * 1.10, 1)
-        cercha_area_letra = round(tira_neta * cercha_cm, 2)  # perímetro × profundidad
+        area_bbox  = round(alto_cm * ancho_cm, 2)
+        perim_pz   = p.perimeter_cm
+        tira_neta  = round(perim_pz, 1)
+        tira_total = round(perim_pz * 1.10, 1)
+        cercha_area_letra = round(tira_neta * cercha_cm, 2)
 
-        # Material y costo cara reales de esta pieza (de cara_por_pieza)
         pieza_mat_id, _, pieza_costo_cara_raw = cara_por_pieza[i]
         costo_cara_letra   = round(pieza_costo_cara_raw, 2)
         costo_cercha_letra = round(cercha_area_letra * ppcm2_cercha, 2)
         costo_fondo_letra  = round(area_bbox * ppcm2_fondo, 2)
-        costo_mat_letra    = round(costo_cara_letra + costo_cercha_letra + costo_fondo_letra, 2)
+
+        # Leds por pieza: ceil(perim/espaciado) si lleva luz
+        if config["leds"]:
+            n_modulos_pz = math.ceil(perim_pz / espaciado_led_cm)
+            watts_pz     = n_modulos_pz * led["watts_modulo"]
+            costo_leds_pz = round(n_modulos_pz * led["precio_modulo"], 2)
+        else:
+            n_modulos_pz = 0
+            watts_pz     = 0.0
+            costo_leds_pz = 0.0
+
+        # Fuente: share por watts. Pegamento/silvatrim/vinil: share por perímetro.
+        share_perim = (perim_pz / perimetro_total) if perimetro_total > 0 else 0
+        share_watts = (watts_pz / watts) if (config["leds"] and watts > 0) else 0
+        costo_fuente_pz   = round(c_fuente   * share_watts, 2) if config["leds"] else 0.0
+        costo_peg_pz      = round(c_peg      * share_perim, 2)
+        costo_silvatrim_pz = round(c_silvatrim * share_perim, 2)
+        costo_vinil_cercha_pz = round(c_vinil_cercha * share_perim, 2) if vc else 0.0
+        costo_dist_pz     = round(DISTANCIADORES["precio"], 2) if config["distanciadores"] else 0.0
+        costo_extras_pz   = round(costo_silvatrim_pz + costo_vinil_cercha_pz, 2)
+
+        costo_mat_letra = round(costo_cara_letra + costo_cercha_letra + costo_fondo_letra, 2)
+        costo_total_pz  = round(costo_cara_letra + costo_cercha_letra + costo_fondo_letra
+                                + costo_leds_pz + costo_fuente_pz + costo_dist_pz
+                                + costo_peg_pz + costo_extras_pz, 2)
 
         precio_letra = round(alto_cm * precio_cm * multiplicador, 2)
         precio_formula_total += precio_letra
 
+        margen_pct = round((precio_letra - costo_total_pz) / precio_letra * 100, 1) if precio_letra > 0 else 0.0
+
         pieza_mat_nombre = LAMINAS[pieza_mat_id]["nombre"] if pieza_mat_id else "Sin cara"
         desglose_letras.append({
             "id":               p.id,
+            "svg_id":           getattr(p, "svg_id", "") or p.id,
             "alto_cm":          alto_cm,
             "ancho_cm":         ancho_cm,
             "area_bbox_cm2":    area_bbox,
@@ -880,15 +942,58 @@ def cotizar_letras(
             "cercha_altura_cm": round(cercha_cm, 1),
             "material_cara_id":     pieza_mat_id or "",
             "material_cara_nombre": pieza_mat_nombre,
-            "costo_cara":       costo_cara_letra,
-            "costo_cercha":     costo_cercha_letra,
-            "costo_mat":        costo_mat_letra,
-            "precio_letra":     precio_letra,
+            # Receta — qué lleva ESTA pieza
+            "lleva_cercha":     cercha_cm > 0,
+            "lleva_luz":        config["leds"] and n_modulos_pz > 0,
+            "lleva_fondo":      config["fondo_pvc"],
+            "lleva_distanciadores": config["distanciadores"],
+            "n_modulos_led":    n_modulos_pz,
+            "watts":            round(watts_pz, 2),
+            # Costos por componente (suma = costo_total_pieza)
+            "costo_cara":           costo_cara_letra,
+            "costo_cercha":         costo_cercha_letra,
+            "costo_fondo":          costo_fondo_letra,
+            "costo_leds":           costo_leds_pz,
+            "costo_fuente":         costo_fuente_pz,
+            "costo_pegamento":      costo_peg_pz,
+            "costo_distanciadores": costo_dist_pz,
+            "costo_extras":         costo_extras_pz,
+            "costo_mat":            costo_mat_letra,   # solo cara+cercha+fondo (compat anterior)
+            "costo_total":          costo_total_pz,    # NUEVO: costo real total per pieza
+            "precio_letra":         precio_letra,
+            "margen_real_pct":      margen_pct,
         })
 
     precio_formula_total   = round(precio_formula_total, 2)
     precio_formula_ajustado = round(precio_formula_total * (1 + ajuste_pct / 100), 2)
     precio_venta_costo      = round(total / (1 - margen_ganancia), 2)  # piso por costo
+
+    # ── Fase G: desglose de costos por componente (totales globales reales) ─
+    desglose_costos_componentes = {
+        "cara":           round(c_cara, 2),
+        "cercha":         round(c_cercha, 2),
+        "fondo":          round(c_fondo, 2),
+        "leds":           round(c_led, 2),
+        "fuente":         round(c_fuente, 2),
+        "pegamento":      round(c_peg, 2),
+        "distanciadores": round(c_dist, 2),
+        "silvatrim":      round(c_silvatrim, 2),
+        "vinil_cercha":   round(c_vinil_cercha, 2),
+        "total_material": round(subtotal, 2),
+    }
+
+    # ── Fase H: warnings de inconsistencia ──────────────────────────────────
+    warnings: list[str] = []
+    if "con_luz" in tipo_multiplicador and not config["leds"]:
+        warnings.append(
+            f"Multiplicador '{tipo_multiplicador}' (×{multiplicador}) implica iluminación, "
+            f"pero el tipo de construcción '{tipo_construccion}' NO lleva LEDs. "
+            f"Considera cambiar a un multiplicador sin luz para evitar cobrar al cliente por iluminación que no recibe."
+        )
+    if config["leds"] and modulos == 0:
+        warnings.append("El tipo de construcción lleva LEDs pero el cálculo dio 0 módulos. Verifica el espaciado.")
+    if cercha_cm <= 0:
+        warnings.append("Profundidad de cercha es 0 cm — el costo de cercha se omite. Usa 'Perímetro total' en vez de 'Cercha total'.")
 
     return QuoteResult(
         tipo="letras_3d",
@@ -936,6 +1041,8 @@ def cotizar_letras(
         costo_vinil_cercha=c_vinil_cercha,
         desglose=desglose,
         desglose_letras=desglose_letras,
+        desglose_costos_componentes=desglose_costos_componentes,
+        warnings=warnings,
     )
 
 
@@ -977,6 +1084,7 @@ def cotizar_planas(
     precio_cm     = PRECIOS_BASE["precio_cm"]
     multiplicador = PRECIOS_BASE["multiplicadores"].get(tipo_multiplicador, 2.0)
 
+    # Fase G: per-pieza con costo + receta (planas NO llevan luz/cercha/fuente)
     desglose_letras = []
     precio_formula_total = 0.0
     for p in letras:
@@ -986,8 +1094,10 @@ def cotizar_planas(
         costo_mat = round(area_bbox * ppcm2_mat, 2)
         precio_letra = round(alto_cm * precio_cm * multiplicador, 2)
         precio_formula_total += precio_letra
+        margen_pct = round((precio_letra - costo_mat) / precio_letra * 100, 1) if precio_letra > 0 else 0.0
         desglose_letras.append({
             "id":               p.id,
+            "svg_id":           getattr(p, "svg_id", "") or p.id,
             "alto_cm":          alto_cm,
             "ancho_cm":         ancho_cm,
             "area_bbox_cm2":    area_bbox,
@@ -997,15 +1107,59 @@ def cotizar_planas(
             "cercha_total_cm":  0,
             "cercha_area_cm2":  0,
             "cercha_altura_cm": 0,
-            "costo_cara":       costo_mat,
-            "costo_cercha":     0,
-            "costo_mat":        costo_mat,
-            "precio_letra":     precio_letra,
+            "material_cara_id":     material_id,
+            "material_cara_nombre": mat["nombre"],
+            # Receta: planas son corte plano único, sin cercha ni iluminación
+            "lleva_cercha":         False,
+            "lleva_luz":            False,
+            "lleva_fondo":          False,
+            "lleva_distanciadores": False,
+            "n_modulos_led":        0,
+            "watts":                0.0,
+            "costo_cara":           costo_mat,
+            "costo_cercha":         0.0,
+            "costo_fondo":          0.0,
+            "costo_leds":           0.0,
+            "costo_fuente":         0.0,
+            "costo_pegamento":      0.0,
+            "costo_distanciadores": 0.0,
+            "costo_extras":         0.0,
+            "costo_mat":            costo_mat,
+            "costo_total":          costo_mat,
+            "precio_letra":         precio_letra,
+            "margen_real_pct":      margen_pct,
         })
 
     precio_formula_total    = round(precio_formula_total, 2)
     precio_formula_ajustado = round(precio_formula_total * (1 + ajuste_pct / 100), 2)
     precio_venta_costo      = round(total / (1 - margen_ganancia), 2)
+
+    # Fase G: desglose por componente (planas solo tienen cara)
+    desglose_costos_componentes = {
+        "cara":           round(c_mat, 2),
+        "cercha":         0.0,
+        "fondo":          0.0,
+        "leds":           0.0,
+        "fuente":         0.0,
+        "pegamento":      0.0,
+        "distanciadores": 0.0,
+        "silvatrim":      0.0,
+        "vinil_cercha":   0.0,
+        "total_material": round(subtotal, 2),
+    }
+
+    # Fase H: warnings — planas nunca son iluminadas
+    warnings: list[str] = []
+    if "con_luz" in tipo_multiplicador:
+        warnings.append(
+            f"Letras planas con multiplicador '{tipo_multiplicador}' (×{multiplicador}) que implica iluminación. "
+            f"Las letras planas NO se iluminan — usa un multiplicador 'sin luz' (≤2.0)."
+        )
+    if multiplicador > 3.0:
+        warnings.append(
+            f"Multiplicador ×{multiplicador} es alto para letras planas (típico es 1.5-2.5). "
+            f"Verifica que sea intencional."
+        )
 
     return QuoteResult(
         tipo="letras_planas",
@@ -1044,6 +1198,8 @@ def cotizar_planas(
         ajuste_pct=ajuste_pct,
         desglose=[{"concepto": f"{mat['nombre']} · {area_total:.0f} cm² × ${ppcm2_mat:.4f}/cm² ({lam} lám.)", "costo": c_mat}],
         desglose_letras=desglose_letras,
+        desglose_costos_componentes=desglose_costos_componentes,
+        warnings=warnings,
     )
 
 
@@ -1139,6 +1295,14 @@ def cotizar_caja(
     uso: str = "exterior",
     vistas: int = 1,
     margen_ganancia: float = 0.35,
+    # Maquila y flete — montos manuales por cotización (varían por proveedor)
+    corte_laser: float = 0.0,
+    corte_cnc: float = 0.0,
+    corte_plotter: float = 0.0,
+    flete_maquila: float = 0.0,
+    # Mano de obra del taller — se mete al costo para que el margen aplique a ella
+    mo_horas: float = 0.0,
+    mo_tarifa: float = 0.0,
 ) -> QuoteResult:
 
     svg_data = apply_scale(svg_data, real_width_cm)
@@ -1227,11 +1391,14 @@ def cotizar_caja(
         c_cara_base         = c_cara
         vinil_total_area_m2 = 0.0
 
-    # Estructura (aluminio cal 18 para el cajón)
-    mat_struct = LAMINAS["aluminio_cal18"]
-    area_struct = perimetro * profundidad_cm
-    lam_struct  = laminas_necesarias(area_struct, "aluminio_cal18")
-    c_struct    = lam_struct * mat_struct["precio"]
+    # Sercha (aluminio cal 18 para el cajón, mismo concepto que cercha en
+    # letras 3D) — costo proporcional al área usada, NO whole-sheet: la sobra
+    # de cada caja queda para la siguiente, así que cobrar lámina entera infla
+    # el precio injustamente.
+    mat_sercha  = LAMINAS["aluminio_cal18"]
+    area_sercha = perimetro * profundidad_cm
+    lam_sercha  = laminas_necesarias(area_sercha, "aluminio_cal18")  # informativo
+    c_sercha    = round(area_sercha * precio_cm2(mat_sercha), 2)
 
     # Fondo — Alucobon 3mm para 1 vista (rigidez), PVC para 2 vistas (peso)
     if vistas == 1:
@@ -1253,18 +1420,39 @@ def cotizar_caja(
         led  = recs[0] if recs else (LEDS_CAJA[uso][0] if LEDS_CAJA[uso] else all_leds[0])
 
     tipo_led = led.get("tipo_led", "backlite")
-    if tipo_led == "edgelite":
-        largo_cm = led.get("largo_cm", 56)
-        tiras    = max(1, math.ceil(perimetro / largo_cm))
-        c_led    = round(tiras * led["precio"], 2)
+    if tipo_led == "modulo_panel":
+        # Módulos discretos en grid sobre el alucobon, asumiendo interior
+        # ultra blanco. Densidad por defecto 25 mod/m² (grid 20×20 cm).
+        # Para vistas==2 se duplica la densidad (ambas caras).
+        densidad_m2 = led.get("densidad_modulos_m2", 25)
+        if vistas == 2:
+            densidad_m2 *= 2
+        tiras = max(1, math.ceil(area_m2 * densidad_m2))
+        c_led = round(tiras * led["precio"], 2)
+    elif tipo_led == "edgelite":
+        # Barras paralelas montadas en los lados largos del interior, espaciado
+        # típico 40 cm entre centros (calibrado para interior ultra blanco con
+        # buena reflexión, ~20-30% menos LEDs que el espaciado nominal de 30 cm).
+        # Para vistas==2 se iluminan ambas caras → 4 filas en lugar de 2.
+        espaciado_cm   = led.get("espaciado_barras_cm", 40)
+        lado_largo_cm  = max(caja_w_cm, caja_h_cm)
+        lados          = 4 if vistas == 2 else 2
+        barras_por_lado = max(1, math.ceil(lado_largo_cm / espaciado_cm))
+        tiras          = barras_por_lado * lados
+        c_led          = round(tiras * led["precio"], 2)
     elif tipo_led == "perimetral":
         espaciado_cm = led.get("espaciado_cm", 4.3)
         tiras        = max(1, math.ceil(perimetro / espaciado_cm))
         c_led        = round(tiras * led.get("precio_modulo", led["precio"]), 2)
-    else:  # backlite — filas horizontales cada 18 cm de profundidad
-        filas_led = max(1, math.ceil(profundidad_cm / 18))
-        tiras     = filas_led
-        c_led     = round(tiras * led["precio"], 2)
+    else:  # backlite — filas horizontales paralelas a lo ancho de la caja
+        # Filas espaciadas cada 25 cm a lo largo del lado vertical (eje corto).
+        # Asume interior ultra blanco para extender el alcance vs el viejo
+        # "1 fila cada 18 cm de profundidad" que era contraintuitivo.
+        espaciado_filas_cm = led.get("espaciado_filas_cm", 25)
+        lado_corto_cm      = min(caja_w_cm, caja_h_cm)
+        filas_led          = max(1, math.ceil(lado_corto_cm / espaciado_filas_cm))
+        tiras              = filas_led
+        c_led              = round(tiras * led["precio"], 2)
 
     watts     = round(tiras * led["watts"], 2)
     fuente    = fuente_optima(watts, uso)
@@ -1275,10 +1463,37 @@ def cotizar_caja(
                 {"nombre": "Soudaflex 40FC", "precio_aprox": 180})
     c_peg = pegamento["precio_aprox"]
 
-    subtotal = c_cara + c_struct + c_fondo + c_led + c_fuente + c_peg
-    iva      = subtotal * 0.16
-    total    = subtotal + iva
-    venta    = total / (1 - margen_ganancia)
+    # Maquila y flete — montos manuales por cotización (corte láser/CNC/plotter
+    # y flete del maquilador). Se suman al costo c/IVA antes del margen para
+    # que el margen también se aplique a estos costos.
+    c_maquila = round(corte_laser + corte_cnc + corte_plotter, 2)
+    c_flete   = round(flete_maquila, 2)
+
+    # Cables — consumo basado en el perímetro de la caja.
+    # LED: cable estañado calibre 22 (Radox) por dentro, perímetro × 1.2
+    # (vuelta + ramal a la fuente). Mínimo 5 m para evitar tramos absurdos.
+    # POT: cable cal 18 para acometida 110V, fijo 5 m.
+    metros_cable_led = max(5.0, round(perimetro / 100 * 1.2, 1))
+    metros_cable_pot = 5.0
+    cable_led_mat    = CABLES["led_radox_cal22"]
+    cable_pot_mat    = CABLES["pot_cal18"]
+    c_cable_led      = round(metros_cable_led * cable_led_mat["precio_m"], 2)
+    c_cable_pot      = round(metros_cable_pot * cable_pot_mat["precio_m"], 2)
+    c_cable          = round(c_cable_led + c_cable_pot, 2)
+
+    # Mano de obra del taller — se incluye al costo para que el margen aplique
+    # (típico: 8 hrs × $62.50/hr = $500 para una caja mediana).
+    c_mo = round(mo_horas * mo_tarifa, 2)
+
+    # Costo real con IVA (precios del catálogo ya incluyen IVA del proveedor).
+    # Se descompone en subtotal sin IVA + IVA para mostrar la factura,
+    # pero el margen se aplica SOBRE el costo c/IVA (no se acumula doble).
+    costo_con_iva = (c_cara + c_sercha + c_fondo + c_led + c_fuente + c_peg
+                     + c_cable + c_mo + c_maquila + c_flete)
+    subtotal = round(costo_con_iva / 1.16, 2)
+    iva      = round(costo_con_iva - subtotal, 2)
+    total    = round(costo_con_iva, 2)
+    venta    = round(costo_con_iva / (1 - margen_ganancia), 2)
 
     if tipo_cara == "vinil_corte":
         if len(vinil_filas) == 1:
@@ -1298,12 +1513,31 @@ def cotizar_caja(
         ]
 
     desglose += [
-        {"concepto": f"Estructura cajón ({mat_struct['nombre']}) × {lam_struct} lám.", "costo": c_struct},
+        {"concepto": f"Sercha cajón ({mat_sercha['nombre']}) × {lam_sercha} lám.", "costo": c_sercha},
         {"concepto": f"Fondo ({mat_fondo['nombre']}) × {lam_fondo} lám.", "costo": c_fondo},
-        {"concepto": f"{led['nombre']} × {tiras} {'barras' if tipo_led=='edgelite' else 'módulos' if tipo_led=='perimetral' else 'tiras'}", "costo": c_led},
+        {"concepto": f"{led['nombre']} × {tiras} {'barras' if tipo_led=='edgelite' else 'módulos' if tipo_led in ('perimetral','modulo_panel') else 'tiras'}", "costo": c_led},
         {"concepto": fuente["nombre"], "costo": c_fuente},
         {"concepto": f"Pegamento: {pegamento['nombre']}", "costo": c_peg},
+        {"concepto": f"Cable LED Radox cal 22 · {metros_cable_led:.1f} m", "costo": c_cable_led},
+        {"concepto": f"Cable POT cal 18 · {metros_cable_pot:.1f} m",       "costo": c_cable_pot},
     ]
+
+    # Mano de obra del taller — opcional según horas/tarifa indicadas
+    if c_mo > 0:
+        desglose.append({
+            "concepto": f"Mano de obra · {mo_horas:.1f} hrs × ${mo_tarifa:.2f}/hr",
+            "costo":    c_mo,
+        })
+
+    # Líneas opcionales de maquila y flete (solo si > 0)
+    if corte_laser > 0:
+        desglose.append({"concepto": "Corte láser (maquila)",   "costo": round(corte_laser, 2)})
+    if corte_cnc > 0:
+        desglose.append({"concepto": "Corte CNC (maquila)",     "costo": round(corte_cnc, 2)})
+    if corte_plotter > 0:
+        desglose.append({"concepto": "Corte plotter (maquila)", "costo": round(corte_plotter, 2)})
+    if flete_maquila > 0:
+        desglose.append({"concepto": "Flete maquila",           "costo": round(flete_maquila, 2)})
 
     mat_cara_info: dict = {"nombre": tipo_cara, "precio": c_cara}
     if tipo_cara == "vinil_corte":
@@ -1311,18 +1545,45 @@ def cotizar_caja(
         mat_cara_info["vinil_filas"]   = vinil_filas
         mat_cara_info["vinil_area_m2"] = vinil_total_area_m2
 
+    # Fase G: desglose por componente para caja (cara, estructura, fondo, leds,
+    # fuente, pegamento). La "caja" se trata como UNA pieza (la caja en sí); las
+    # vinil_filas son sub-elementos de la cara, ya van dentro de c_cara.
+    desglose_costos_componentes = {
+        "cara":           round(c_cara, 2),
+        "sercha":         round(c_sercha, 2),
+        "fondo":          round(c_fondo, 2),
+        "leds":           round(c_led, 2),
+        "fuente":         round(c_fuente, 2),
+        "pegamento":      round(c_peg, 2),
+        "cables":         c_cable,
+    }
+    if c_mo > 0:
+        desglose_costos_componentes["mano_obra"] = c_mo
+    if c_maquila > 0:
+        desglose_costos_componentes["maquila"] = c_maquila
+    if c_flete > 0:
+        desglose_costos_componentes["flete"]   = c_flete
+    desglose_costos_componentes["total_material"] = round(subtotal, 2)
+
+    # Fase H: warnings — caja con prof 0 es físicamente imposible
+    warnings: list[str] = []
+    if profundidad_cm <= 0:
+        warnings.append("Profundidad de caja es 0 cm — una caja sin profundidad no es una caja. Verifica el valor.")
+    if vistas == 2 and tipo_cara not in ("acrilico_2vistas", "lona"):
+        warnings.append(f"Caja a 2 vistas con cara '{tipo_cara}' — para 2 vistas usa acrílico 2 vistas o lona translúcida.")
+
     return QuoteResult(
         tipo="caja_luz",
         paths_count=1,
         area_cara_cm2=caja_area_cm2,
         perimetro_total_cm=perimetro,
         cercha_altura_cm=profundidad_cm,
-        cercha_area_cm2=area_struct,
+        cercha_area_cm2=area_sercha,
         material_cara=mat_cara_info,
-        material_cercha=mat_struct,
+        material_cercha=mat_sercha,
         material_fondo=mat_fondo,
         laminas_cara=1,
-        laminas_cercha=lam_struct,
+        laminas_cercha=lam_sercha,
         laminas_fondo=lam_fondo,
         led=led,
         modulos_led=tiras,
@@ -1330,7 +1591,7 @@ def cotizar_caja(
         fuente=fuente,
         pegamento=pegamento,
         costo_material_cara=c_cara,
-        costo_material_cercha=c_struct,
+        costo_material_cercha=c_sercha,
         costo_material_fondo=c_fondo,
         costo_led=c_led,
         costo_fuente=c_fuente,
@@ -1340,4 +1601,6 @@ def cotizar_caja(
         total=total,
         precio_venta_sugerido=venta,
         desglose=desglose,
+        desglose_costos_componentes=desglose_costos_componentes,
+        warnings=warnings,
     )

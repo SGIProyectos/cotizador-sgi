@@ -10,14 +10,18 @@ _CATALOG_FILE = Path(__file__).parent / "catalog.json"
 
 # ─── PEGAMENTOS POR COMBINACIÓN DE MATERIALES ───────────────────────────────
 PEGAMENTOS = {
-    # metros_por_envase: cuántos metros lineales de cordón cubre un envase
-    ("aluminio", "aluminio"):  {"nombre": "Soudaflex 40FC",                      "precio_aprox": 180, "metros_por_envase": 3},
-    ("aluminio", "acrilico"):  {"nombre": "Silicón Transparente Arquitectónico", "precio_aprox":  90, "metros_por_envase": 5},
-    ("acrilico", "acrilico"):  {"nombre": "Cloruro de Metileno",                 "precio_aprox":  60, "metros_por_envase": 8},
-    ("acrilico", "alucobon"):  {"nombre": "Silicón Transparente Arquitectónico", "precio_aprox":  90, "metros_por_envase": 5},
-    ("alucobon", "alucobon"):  {"nombre": "Soudaflex 40FC",                      "precio_aprox": 180, "metros_por_envase": 3},
-    ("aluminio", "pvc"):       {"nombre": "Silicón Transparente Arquitectónico", "precio_aprox":  90, "metros_por_envase": 5},
-    ("acrilico", "pvc"):       {"nombre": "Silicón Transparente Arquitectónico", "precio_aprox":  90, "metros_por_envase": 5},
+    # metros_por_envase: cuántos metros lineales de cordón de 5 mm cubre un envase.
+    # Rendimientos calibrados con datos de campo (cordón estanco, densidad industrial):
+    #   Soudaflex 40FC 290–310 ml → 10–12 m (sellado estructural, alta viscosidad)
+    #   Silicón Transparente Arquitectónico 280–300 ml → 10–12 m (sellado estético)
+    #   Cloruro de Metileno 1 L → 50–70 m (capilaridad, no relleno)
+    ("aluminio", "aluminio"):  {"nombre": "Soudaflex 40FC",                      "precio_aprox": 180, "metros_por_envase": 11},
+    ("aluminio", "acrilico"):  {"nombre": "Silicón Transparente Arquitectónico", "precio_aprox":  90, "metros_por_envase": 11},
+    ("acrilico", "acrilico"):  {"nombre": "Cloruro de Metileno",                 "precio_aprox":  60, "metros_por_envase": 60},
+    ("acrilico", "alucobon"):  {"nombre": "Silicón Transparente Arquitectónico", "precio_aprox":  90, "metros_por_envase": 11},
+    ("alucobon", "alucobon"):  {"nombre": "Soudaflex 40FC",                      "precio_aprox": 180, "metros_por_envase": 11},
+    ("aluminio", "pvc"):       {"nombre": "Silicón Transparente Arquitectónico", "precio_aprox":  90, "metros_por_envase": 11},
+    ("acrilico", "pvc"):       {"nombre": "Silicón Transparente Arquitectónico", "precio_aprox":  90, "metros_por_envase": 11},
 }
 
 # ─── LÁMINAS DE MATERIAL (precio por lámina 122×244 cm) ─────────────────────
@@ -73,7 +77,7 @@ LAMINAS = {
     },
     "alucobon_3mm": {
         "nombre": "Alucobon / Dibond 3mm",
-        "precio": 1800,
+        "precio": 904.80,
         "ancho_cm": 122, "alto_cm": 244,
         "grosor_mm": 3,
         "uso": ["fondo_premium", "cara_caja_exterior"],
@@ -427,6 +431,22 @@ LEDS_CAJA = {
             "profundidad_min": 8, "profundidad_max": 15,
             "vistas": 1,
         },
+        {
+            "id": "sign_03_high_panel",
+            "nombre": "Módulo LED Sign 03 HIGH (grid panel)",
+            "tipo_led": "modulo_panel",
+            # 25 módulos por m² = grid 20×20 cm, calibrado para interior
+            # ultra blanco (alucobon blanco brillante reduce ~25% el número de
+            # módulos necesarios vs el grid 15×15 estándar).
+            "densidad_modulos_m2": 25,
+            "precio": 18.51,
+            "watts": 1.08,
+            "lumenes": 165,
+            "ip": "IP66",
+            "profundidad_min": 8, "profundidad_max": 15,
+            "vistas": 1,
+            "nota": "Default para cajas medianas/grandes con interior ultra blanco.",
+        },
     ],
 }
 
@@ -516,6 +536,22 @@ def silvatrim_recomendado(cercha_cm: float) -> dict:
         return next(s for s in SILVATRIM if s["id"] == "silvatrim_2")
 
 
+# ─── CABLES ─────────────────────────────────────────────────────────────────
+# Precios por metro lineal con IVA. Rollo típico 100 m.
+CABLES = {
+    "led_radox_cal22": {
+        "nombre": "Cable LED Radox cal 22 estañado",
+        "precio_m": 3.50,    # rollo 100 m = $350
+        "uso": "interno (LEDs ↔ fuente)",
+    },
+    "pot_cal18": {
+        "nombre": "Cable POT cal 18",
+        "precio_m": 4.00,    # rollo 100 m = $400
+        "uso": "acometida 110V (fuente ↔ toma)",
+    },
+}
+
+
 # ─── FUENTES DE PODER ────────────────────────────────────────────────────────
 FUENTES = [
     {"nombre": "Fuente Exterior 60W",   "watts": 60,  "precio": 273.10,  "ip": "IP68", "uso": "exterior", "voltaje": 12},
@@ -544,10 +580,12 @@ PRECIOS_BASE = {
 }
 
 PRECIOS_CAJA_M2 = {
-    "lona":             1800,
-    "vinil_corte":      1200,
-    "acrilico":         2800,
-    "acrilico_2vistas": 3500,
+    # Costo real del material por m² (con IVA, base Excel +20% de margen proveedor).
+    # NO son precios de venta — el margen al cliente se aplica en cotizar_caja.
+    "lona":             250,   # lona translúcida (PLACEHOLDER — pendiente confirmar precio real)
+    "vinil_corte":      100,   # solo el vinil de diseño, se suma a la base
+    "acrilico":         380,   # acrílico blanco 3mm — $1127.52/lám ÷ 2.9768 m²
+    "acrilico_2vistas": 760,   # 2 caras de acrílico
 }
 
 # ─── VINILOS ADHESIVOS ────────────────────────────────────────────────────────
@@ -705,8 +743,16 @@ def recomendar_led_caja(
 ) -> list:
     """
     Devuelve lista de LEDs recomendados para caja de luz, ordenados por idoneidad.
-    Prioriza edgelite cuando el lado corto de la cara cabe dentro de max_cara_cm.
-    Para doble vista fuerza LEDs con vistas >= 2.
+
+    Prioridad (taller SGI, ajustado con NotebookLM):
+    1. modulo_panel — default para cajas medianas/grandes con interior ultra blanco
+       (Sign 03 HIGH grid 20×20 cm, 25 mod/m²). Más económico que edgelite.
+    2. edgelite — barras perimetrales (cuando el cliente las prefiere o la caja
+       es delgada y se necesita proyección hacia adelante).
+    3. perimetral — módulos discretos en el perímetro (Sign Edge 01).
+    4. backlite — barras de fondo (cajas con tela, 1 vista interior).
+
+    Para doble vista filtra solo LEDs con vistas >= 2.
     """
     pool = LEDS_CAJA.get(uso, LEDS_CAJA["exterior"])
 
@@ -722,6 +768,7 @@ def recomendar_led_caja(
         if l.get("profundidad_min", 0) <= profundidad_cm <= l.get("profundidad_max", 999)
     ]
 
+    modulo_panel = [l for l in compatibles if l.get("tipo_led") == "modulo_panel"]
     edgelite = sorted(
         [l for l in compatibles if l.get("tipo_led") == "edgelite" and lado_corto <= l.get("max_cara_cm", 0)],
         key=lambda x: x.get("lumenes") or 0,
@@ -730,7 +777,9 @@ def recomendar_led_caja(
     perimetral = [l for l in compatibles if l.get("tipo_led") == "perimetral"]
     backlite   = [l for l in compatibles if l.get("tipo_led") == "backlite"]
 
-    # Edgelite > perimetral > backlite según aplique; fallback a todo compatible
+    # Orden de preferencia: modulo_panel > edgelite > perimetral > backlite
+    if modulo_panel:
+        return modulo_panel + edgelite + perimetral + backlite
     if edgelite:
         return edgelite + perimetral + backlite
     if perimetral:
@@ -739,17 +788,33 @@ def recomendar_led_caja(
 
 
 # ─── CERCHA RECOMENDADA SEGÚN ALTURA DE LETRA ────────────────────────────────
-def cercha_recomendada_cm(altura_letra_cm: float) -> float:
-    if altura_letra_cm <= 10:
-        return 3.0
-    elif altura_letra_cm <= 20:
-        return 5.0
-    elif altura_letra_cm <= 35:
-        return 8.0
+def cercha_rango_cm(altura_letra_cm: float) -> dict:
+    """Rango de profundidad de cercha recomendado según altura de letra.
+
+    Basado en el catálogo Signalux (rangos de profundidad de LEDs por tamaño
+    de aplicación) más heurística estándar de fabricación de letras 3D.
+    Devuelve un dict con min, max, recomendado y categoría textual.
+    """
+    if altura_letra_cm <= 15:
+        return {"min": 2.0,  "max": 6.0,  "recomendado": 4.0,
+                "categoria": "Letra pequeña"}
+    elif altura_letra_cm <= 30:
+        return {"min": 4.0,  "max": 10.0, "recomendado": 6.0,
+                "categoria": "Letra pequeña-mediana"}
     elif altura_letra_cm <= 60:
-        return 12.0
+        return {"min": 8.0,  "max": 15.0, "recomendado": 10.0,
+                "categoria": "Letra mediana"}
+    elif altura_letra_cm <= 120:
+        return {"min": 10.0, "max": 20.0, "recomendado": 15.0,
+                "categoria": "Letra grande"}
     else:
-        return 15.0
+        return {"min": 12.0, "max": 25.0, "recomendado": 18.0,
+                "categoria": "Letra gigante"}
+
+
+def cercha_recomendada_cm(altura_letra_cm: float) -> float:
+    """Valor único recomendado dentro del rango (compatibilidad)."""
+    return cercha_rango_cm(altura_letra_cm)["recomendado"]
 
 # ─── LED RECOMENDADO SEGÚN PROFUNDIDAD DE CERCHA ─────────────────────────────
 def led_recomendado(profundidad_cm: float, uso: str = "exterior") -> dict:
@@ -757,9 +822,14 @@ def led_recomendado(profundidad_cm: float, uso: str = "exterior") -> dict:
                   if l["profundidad_min"] <= profundidad_cm <= l["profundidad_max"]]
     if not candidatos:
         candidatos = LEDS_CANAL
-    # Preferir exterior IP65+, mayor lúmenes
+    # Preferir exterior IP65+
     if uso == "exterior":
         candidatos = [l for l in candidatos if int(l["ip"].replace("IP","")) >= 65] or candidatos
+    # Preferir 12V (estándar) sobre 110V — el 110V requiere instalación eléctrica
+    # especial y solo gana si NO hay alternativa de 12V para el rango de profundidad.
+    candidatos_12v = [l for l in candidatos if l.get("voltaje", 12) == 12]
+    candidatos = candidatos_12v or candidatos
+    # Mayor lúmenes
     return sorted(candidatos, key=lambda x: x["lumenes"], reverse=True)[0]
 
 # ─── MATERIAL DE CERCHA SEGÚN ALTURA ─────────────────────────────────────────
@@ -805,6 +875,7 @@ def catalog_to_dict() -> dict:
             "multiplicadores": dict(PRECIOS_BASE["multiplicadores"]),
         },
         "precios_caja_m2": dict(PRECIOS_CAJA_M2),
+        "cables": dict(CABLES),
         "silvatrim": SILVATRIM,
         "vinilos": VINILOS,
         "vinilos_cercha": VINILOS_CERCHA,
@@ -852,6 +923,12 @@ def catalog_apply(raw: dict):
     if "precios_caja_m2" in raw:
         PRECIOS_CAJA_M2.clear()
         PRECIOS_CAJA_M2.update({k: float(v) for k, v in raw["precios_caja_m2"].items()})
+    if "cables" in raw:
+        for cid, cdata in raw["cables"].items():
+            if cid in CABLES:
+                CABLES[cid].update(cdata)
+            else:
+                CABLES[cid] = cdata
     if "silvatrim" in raw:
         SILVATRIM.clear()
         SILVATRIM.extend(raw["silvatrim"])
@@ -914,6 +991,12 @@ def _catalog_merge(raw: dict):
             PRECIOS_BASE["multiplicadores"].update(pb["multiplicadores"])
     if "precios_caja_m2" in raw:
         PRECIOS_CAJA_M2.update({k: float(v) for k, v in raw["precios_caja_m2"].items()})
+    if "cables" in raw:
+        for cid, cdata in raw["cables"].items():
+            if cid in CABLES:
+                CABLES[cid].update(cdata)
+            else:
+                CABLES[cid] = cdata
     if "silvatrim" in raw:
         raw_by_id = {s["id"]: s for s in raw["silvatrim"] if "id" in s}
         for sv in SILVATRIM:

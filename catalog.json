@@ -78,13 +78,152 @@
     },
     "alucobon_3mm": {
       "nombre": "Alucobon / Dibond 3mm",
-      "precio": 1800,
+      "precio": 904.8,
       "ancho_cm": 122,
       "alto_cm": 244,
       "grosor_mm": 3,
       "uso": [
         "fondo_premium",
         "cara_caja_exterior"
+      ]
+    },
+    "acrilico_3mm_blanco": {
+      "nombre": "Acrílico Blanco 3mm",
+      "precio": 1200,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 3,
+      "uso": [
+        "cara_letra_pequena",
+        "cara_letra_mediana",
+        "cara_caja"
+      ]
+    },
+    "acrilico_3mm_colores": {
+      "nombre": "Acrílico Color 3mm",
+      "precio": 1100,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 3,
+      "colores": [
+        "Rojo",
+        "Amarillo",
+        "Azul",
+        "Azul Rey",
+        "Verde",
+        "Verde Pemex",
+        "Negro",
+        "Naranja"
+      ],
+      "uso": [
+        "cara_letra_pequena",
+        "cara_letra_mediana",
+        "cara_caja"
+      ]
+    },
+    "acrilico_3mm_translucido": {
+      "nombre": "Acrílico Translúcido 3mm",
+      "precio": 1250,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 3,
+      "colores": [
+        "Verde",
+        "Azul",
+        "Rojo"
+      ],
+      "uso": [
+        "cara_letra_pequena",
+        "cara_caja"
+      ]
+    },
+    "acrilico_3mm_espejo": {
+      "nombre": "Acrílico Espejo 3mm",
+      "precio": 1500,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 3,
+      "colores": [
+        "Plata",
+        "Dorado",
+        "Rosa"
+      ],
+      "uso": [
+        "cara_letra",
+        "decoracion"
+      ]
+    },
+    "acrilico_5mm": {
+      "nombre": "Acrílico 5mm",
+      "precio": 1740,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 5,
+      "uso": [
+        "cara_letra_grande"
+      ]
+    },
+    "acrilico_9mm": {
+      "nombre": "Acrílico 9mm",
+      "precio": 3016,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 9,
+      "uso": [
+        "cara_letra_premium"
+      ]
+    },
+    "alucom_base": {
+      "nombre": "Alucom Color Base",
+      "precio": 754,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 3,
+      "colores": [
+        "Blanco",
+        "Negro",
+        "Rojo",
+        "Azul Telecom",
+        "Gris",
+        "Verde Pemex",
+        "Amarillo"
+      ],
+      "uso": [
+        "cara_letra",
+        "fondo_premium",
+        "cara_caja_exterior"
+      ]
+    },
+    "alucom_especial": {
+      "nombre": "Alucom Acabado Especial",
+      "precio": 1009,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 3,
+      "colores": [
+        "Madera Cerezo",
+        "Plata Satinado",
+        "Plata Cepillado",
+        "Dorado Cepillado"
+      ],
+      "uso": [
+        "cara_letra",
+        "decoracion"
+      ]
+    },
+    "alucom_espejo": {
+      "nombre": "Alucom Espejo",
+      "precio": 1009,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 3,
+      "colores": [
+        "Plata Espejo",
+        "Dorado Espejo"
+      ],
+      "uso": [
+        "cara_letra",
+        "decoracion"
       ]
     }
   },
@@ -268,6 +407,7 @@
       {
         "id": "backlite_rgb",
         "nombre": "Barra LED Backlite RGB",
+        "tipo_led": "backlite",
         "precio": 93.52,
         "watts": 6,
         "lumenes": null,
@@ -279,6 +419,7 @@
       {
         "id": "backlite",
         "nombre": "Barra LED Backlite",
+        "tipo_led": "backlite",
         "precio_serie_10": 551.0,
         "precio": 55.1,
         "watts": 5,
@@ -291,6 +432,7 @@
       {
         "id": "signaflex_cct",
         "nombre": "Tira LED Signaflex CCT",
+        "tipo_led": "backlite",
         "precio_tira_5m": 662.36,
         "precio": 662.36,
         "watts": 50,
@@ -305,6 +447,9 @@
       {
         "id": "edgelite_42",
         "nombre": "Barra LED Edgelite Osram 42",
+        "tipo_led": "edgelite",
+        "largo_cm": 42,
+        "max_cara_cm": 120,
         "precio": 375.93,
         "watts": 0.15,
         "lumenes": 1650,
@@ -316,6 +461,9 @@
       {
         "id": "edgelite_21",
         "nombre": "Barra LED Edgelite Osram 21",
+        "tipo_led": "edgelite",
+        "largo_cm": 21,
+        "max_cara_cm": 90,
         "precio": 250.62,
         "watts": 7.5,
         "lumenes": 750,
@@ -329,6 +477,9 @@
       {
         "id": "eco_edgelite_56",
         "nombre": "Barra LED Eco Edgelite 56",
+        "tipo_led": "edgelite",
+        "largo_cm": 56,
+        "max_cara_cm": 120,
         "precio": 399.9,
         "watts": 14,
         "lumenes": 1260,
@@ -340,6 +491,9 @@
       {
         "id": "eco_edgelite_24",
         "nombre": "Barra LED Eco Edgelite 24",
+        "tipo_led": "edgelite",
+        "largo_cm": 24,
+        "max_cara_cm": 80,
         "precio": 196.25,
         "watts": 6,
         "lumenes": 540,
@@ -351,6 +505,11 @@
       {
         "id": "sign_edge_01",
         "nombre": "Módulo LED Sign Edge 01",
+        "tipo_led": "perimetral",
+        "espaciado_cm": 4.3,
+        "largo_modulo_cm": 4.3,
+        "modulos_tira": 20,
+        "max_cara_cm": 60,
         "precio": 330.6,
         "precio_modulo": 16.53,
         "watts": 1.32,
@@ -359,6 +518,20 @@
         "profundidad_min": 8,
         "profundidad_max": 15,
         "vistas": 1
+      },
+      {
+        "id": "sign_03_high_panel",
+        "nombre": "Módulo LED Sign 03 HIGH (grid panel)",
+        "tipo_led": "modulo_panel",
+        "densidad_modulos_m2": 25,
+        "precio": 18.51,
+        "watts": 1.08,
+        "lumenes": 165,
+        "ip": "IP66",
+        "profundidad_min": 8,
+        "profundidad_max": 15,
+        "vistas": 1,
+        "nota": "Default para cajas medianas/grandes con interior ultra blanco."
       }
     ]
   },
@@ -440,37 +613,336 @@
     "aluminio|aluminio": {
       "nombre": "Soudaflex 40FC",
       "precio_aprox": 180,
-      "metros_por_envase": 3
+      "metros_por_envase": 11
     },
     "aluminio|acrilico": {
       "nombre": "Silicón Transparente Arquitectónico",
       "precio_aprox": 90,
-      "metros_por_envase": 5
+      "metros_por_envase": 11
     },
     "acrilico|acrilico": {
       "nombre": "Cloruro de Metileno",
       "precio_aprox": 60,
-      "metros_por_envase": 8
+      "metros_por_envase": 60
     },
     "acrilico|alucobon": {
       "nombre": "Silicón Transparente Arquitectónico",
       "precio_aprox": 90,
-      "metros_por_envase": 5
+      "metros_por_envase": 11
     },
     "alucobon|alucobon": {
       "nombre": "Soudaflex 40FC",
       "precio_aprox": 180,
-      "metros_por_envase": 3
+      "metros_por_envase": 11
     },
     "aluminio|pvc": {
       "nombre": "Silicón Transparente Arquitectónico",
       "precio_aprox": 90,
-      "metros_por_envase": 5
+      "metros_por_envase": 11
     },
     "acrilico|pvc": {
       "nombre": "Silicón Transparente Arquitectónico",
       "precio_aprox": 90,
-      "metros_por_envase": 5
+      "metros_por_envase": 11
     }
-  }
+  },
+  "precios_base": {
+    "precio_cm": 10.0,
+    "multiplicadores": {
+      "aluminio_sin_luz": 2.5,
+      "aluminio_con_luz": 3.0,
+      "aluminio_acrilico_con_luz": 4.0,
+      "acrilico_con_luz_std": 5.0,
+      "acrilico_con_luz_premium": 5.5
+    }
+  },
+  "precios_caja_m2": {
+    "lona": 250.0,
+    "vinil_corte": 100.0,
+    "acrilico": 380.0,
+    "acrilico_2vistas": 760.0
+  },
+  "cables": {
+    "led_radox_cal22": {
+      "nombre": "Cable LED Radox cal 22 estañado",
+      "precio_m": 3.5,
+      "uso": "interno (LEDs ↔ fuente)"
+    },
+    "pot_cal18": {
+      "nombre": "Cable POT cal 18",
+      "precio_m": 4.0,
+      "uso": "acometida 110V (fuente ↔ toma)"
+    }
+  },
+  "silvatrim": [
+    {
+      "id": "silvatrim_34",
+      "nombre": "Silvatrim Gemini 3/4\"",
+      "ancho_pulg": 0.75,
+      "ancho_mm": 19,
+      "precio_rollo": 1900,
+      "metros_rollo": 45.7,
+      "precio_ml": 41.58,
+      "colores": [
+        "Blanco",
+        "Negro",
+        "Rojo",
+        "Azul",
+        "Plata Metálico",
+        "Plata Cepillado",
+        "Dorado"
+      ],
+      "uso_recomendado": "Letras con cercha hasta 5 cm de profundidad"
+    },
+    {
+      "id": "silvatrim_1",
+      "nombre": "Silvatrim Gemini 1\"",
+      "ancho_pulg": 1.0,
+      "ancho_mm": 25,
+      "precio_rollo": 2089,
+      "metros_rollo": 45.7,
+      "precio_ml": 45.71,
+      "colores": [
+        "Blanco",
+        "Negro",
+        "Rojo",
+        "Azul",
+        "Plata Metálico",
+        "Plata Cepillado",
+        "Dorado"
+      ],
+      "uso_recomendado": "Letras con cercha de 5–12 cm de profundidad"
+    },
+    {
+      "id": "silvatrim_2",
+      "nombre": "Silvatrim Gemini 2\"",
+      "ancho_pulg": 2.0,
+      "ancho_mm": 50,
+      "precio_rollo": 2800,
+      "metros_rollo": 45.7,
+      "precio_ml": 61.27,
+      "colores": [
+        "Blanco",
+        "Negro",
+        "Plata Metálico"
+      ],
+      "uso_recomendado": "Letras grandes con cercha mayor a 12 cm"
+    },
+    {
+      "id": "silvatrim_gen",
+      "nombre": "Silvatrim Genérico 1\"",
+      "ancho_pulg": 1.0,
+      "ancho_mm": 25,
+      "precio_rollo": 1056,
+      "metros_rollo": 33.0,
+      "precio_ml": 32.0,
+      "colores": [
+        "Blanco",
+        "Negro"
+      ],
+      "uso_recomendado": "Uso interior o presupuesto ajustado"
+    }
+  ],
+  "vinilos": [
+    {
+      "id": "vinil_std",
+      "nombre": "Vinil Estándar",
+      "precio_ml": 58.0,
+      "ancho_rollo_m": 1.22,
+      "acabado": "opaco",
+      "colores": [
+        "Brimstone Yellow",
+        "Yellow",
+        "Golden Yellow",
+        "Orange",
+        "Crimson",
+        "Red",
+        "Cherry Red",
+        "Pink",
+        "Light Blue",
+        "Middle Blue",
+        "King Blue",
+        "Middle Green",
+        "Lilac",
+        "Dark Green",
+        "Middle Grey",
+        "Lightgrey",
+        "Light Brown",
+        "Coffee Brown",
+        "Azure Blue",
+        "Dark Blue",
+        "Silver Metallic",
+        "Gold Metallic",
+        "Pale Pink"
+      ]
+    },
+    {
+      "id": "vinil_std_plus",
+      "nombre": "Vinil Estándar Plus",
+      "precio_ml": 87.0,
+      "ancho_rollo_m": 1.22,
+      "acabado": "opaco",
+      "colores": [
+        "Ivory",
+        "Grey Blue"
+      ]
+    },
+    {
+      "id": "vinil_premium",
+      "nombre": "Vinil Premium",
+      "precio_ml": 120.0,
+      "ancho_rollo_m": 1.22,
+      "acabado": "opaco",
+      "colores": [
+        "Zinc Yellow",
+        "Yellow Orange",
+        "Dark Red",
+        "Heather Red",
+        "Violet",
+        "Intensive Blue",
+        "Grass Green",
+        "Gentian Blue",
+        "Black",
+        "White"
+      ]
+    },
+    {
+      "id": "vinil_premium_alto",
+      "nombre": "Vinil Premium Especial",
+      "precio_ml": 180.0,
+      "ancho_rollo_m": 1.22,
+      "acabado": "metalico",
+      "colores": [
+        "Light Red",
+        "Emerald",
+        "Coral Red",
+        "Gold"
+      ]
+    }
+  ],
+  "vinilos_cercha": [
+    {
+      "id": "vc_std",
+      "nombre": "Vinil Cercha Estándar",
+      "precio_ml": 48.0,
+      "ancho_rollo_m": 0.61,
+      "acabado": "opaco",
+      "colores": [
+        "Blanco",
+        "Negro",
+        "Rojo",
+        "Azul Rey",
+        "Verde",
+        "Amarillo",
+        "Naranja",
+        "Gris",
+        "Café"
+      ]
+    },
+    {
+      "id": "vc_metalico",
+      "nombre": "Vinil Cercha Metálico",
+      "precio_ml": 75.0,
+      "ancho_rollo_m": 0.61,
+      "acabado": "metalico",
+      "colores": [
+        "Plata Cromado",
+        "Dorado",
+        "Bronce",
+        "Cobre"
+      ]
+    },
+    {
+      "id": "vc_premium",
+      "nombre": "Vinil Cercha Premium",
+      "precio_ml": 98.0,
+      "ancho_rollo_m": 0.61,
+      "acabado": "opaco",
+      "colores": [
+        "Negro Mate",
+        "Blanco Mate",
+        "Rojo Oscuro",
+        "Azul Marino",
+        "Verde Pemex"
+      ]
+    }
+  ],
+  "tipos_construccion": {
+    "cajon_luz": {
+      "nombre": "Cajón con luz",
+      "descripcion": "Cara acrílico · cercha aluminio · fondo PVC · LEDs adelante",
+      "cara": "acrilico",
+      "fondo_pvc": true,
+      "leds": true,
+      "fuente": true,
+      "distanciadores": false,
+      "multiplicador_default": "acrilico_con_luz_std",
+      "altura_min_rec": 8.0
+    },
+    "retro_halo": {
+      "nombre": "Retroiluminada / Halo",
+      "descripcion": "Cara aluminio opaco · cercha aluminio · sin fondo PVC · LEDs atrás · distanciadores",
+      "cara": "aluminio",
+      "fondo_pvc": false,
+      "leds": true,
+      "fuente": true,
+      "distanciadores": true,
+      "multiplicador_default": "aluminio_con_luz",
+      "altura_min_rec": 0.0
+    },
+    "sin_luz": {
+      "nombre": "Sin luz (cajón)",
+      "descripcion": "Cara aluminio · cercha aluminio · fondo PVC · sin iluminación",
+      "cara": "aluminio",
+      "fondo_pvc": true,
+      "leds": false,
+      "fuente": false,
+      "distanciadores": false,
+      "multiplicador_default": "aluminio_sin_luz",
+      "altura_min_rec": 0.0
+    },
+    "abierta_luz": {
+      "nombre": "Abierta con luz",
+      "descripcion": "Sin cara frontal · cercha aluminio visible · fondo PVC · LEDs expuestos",
+      "cara": "ninguna",
+      "fondo_pvc": true,
+      "leds": true,
+      "fuente": true,
+      "distanciadores": false,
+      "multiplicador_default": "aluminio_con_luz",
+      "altura_min_rec": 30.0
+    }
+  },
+  "gruas": [
+    {
+      "id": "ninguna",
+      "nombre": "Sin equipo / acceso propio",
+      "precio_dia": 0
+    },
+    {
+      "id": "andamio",
+      "nombre": "Andamio metálico",
+      "precio_dia": 800
+    },
+    {
+      "id": "elevador",
+      "nombre": "Elevador / Brazo hidráulico",
+      "precio_dia": 1800
+    },
+    {
+      "id": "grua_pequena",
+      "nombre": "Grúa telescópica pequeña (hasta 15m)",
+      "precio_dia": 2500
+    },
+    {
+      "id": "grua_mediana",
+      "nombre": "Grúa telescópica mediana (15–30m)",
+      "precio_dia": 4500
+    },
+    {
+      "id": "grua_grande",
+      "nombre": "Grúa articulada grande (>30m)",
+      "precio_dia": 8000
+    }
+  ]
 }
