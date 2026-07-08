@@ -1,4 +1,11 @@
 {
+  "empresa": {
+    "razon_social": "SGI Impresión y Diseño",
+    "rfc": "",
+    "direccion": "",
+    "telefono": "",
+    "email": ""
+  },
   "laminas": {
     "acrilico_3mm": {
       "nombre": "Acrílico 3mm",
