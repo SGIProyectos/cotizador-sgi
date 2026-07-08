@@ -693,7 +693,7 @@ async def api_ot(quote_id: str, cliente: str = "", notas: str = ""):
                 vb_h = svg_data.viewbox_h
                 paths_info = [
                     {"svg_id": p.svg_id, "id": p.id, "bbox": p.bbox,
-                     "is_closed": p.is_closed}
+                     "is_closed": p.is_closed, "es_hueco": p.es_hueco}
                     for p in svg_data.paths
                 ]
             except Exception:
@@ -742,7 +742,8 @@ def _cargar_svg_para_plano(quote_id: str, result) -> tuple[str, list, float, flo
         return "", [], 0.0, 0.0, 0.0, 0.0
 
     paths_info = [
-        {"svg_id": p.svg_id, "id": p.id, "bbox": p.bbox, "is_closed": p.is_closed}
+        {"svg_id": p.svg_id, "id": p.id, "bbox": p.bbox, "is_closed": p.is_closed,
+         "es_hueco": p.es_hueco}
         for p in svg_data.paths
     ]
     cerrados = [p for p in svg_data.paths if p.is_closed]

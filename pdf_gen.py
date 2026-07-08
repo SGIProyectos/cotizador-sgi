@@ -683,7 +683,7 @@ class _OTDisenoFlowable(Flowable):
         # Calcular tamaño uniforme de badge basándose en la pieza más pequeña
         min_dim = float("inf")
         for p in self.paths_info:
-            if not p.get("is_closed"):
+            if not p.get("is_closed") or p.get("es_hueco"):
                 continue
             bb = p.get("bbox", {})
             md = min(bb.get("w", 0), bb.get("h", 0))
@@ -702,7 +702,7 @@ class _OTDisenoFlowable(Flowable):
         c.setFont("Helvetica-Bold", font_size_pt)
         num = 0
         for p in self.paths_info:
-            if not p.get("is_closed"):
+            if not p.get("is_closed") or p.get("es_hueco"):
                 continue
             num += 1
             bb     = p.get("bbox", {})
