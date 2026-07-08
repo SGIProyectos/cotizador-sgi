@@ -41,6 +41,8 @@ class PathInfo:
     perimeter_cm: float = 0.0
     area_cm2: float = 0.0
     svg_id: str = ""    # original id attribute from the SVG element
+    fill: str = ""      # fill resuelto (attr, style o clase CSS)
+    es_hueco: bool = False   # contador de letra o placa de fondo (fill blanco)
 
 @dataclass
 class SVGData:
@@ -467,6 +469,46 @@ def _bbox_perim_area(path_obj, matrix: tuple, is_closed: bool, samples: int = 24
 
 _SVG_PRIMITIVES = ("path", "rect", "circle", "ellipse", "polygon", "polyline", "line")
 
+_FILLS_BLANCOS = {"#fff", "#ffffff", "white", "rgb(255,255,255)"}
+
+
+def _es_fill_blanco(fill: str) -> bool:
+    return fill.strip().lower().replace(" ", "") in _FILLS_BLANCOS
+
+
+def _bbox_contenido(interior: dict, exterior: dict, tol: float) -> bool:
+    return (exterior["x"] - tol <= interior["x"]
+            and exterior["y"] - tol <= interior["y"]
+            and exterior["x"] + exterior["w"] + tol >= interior["x"] + interior["w"]
+            and exterior["y"] + exterior["h"] + tol >= interior["y"] + interior["h"])
+
+
+def _marcar_huecos(paths: list[PathInfo]) -> None:
+    """Marca es_hueco en piezas con fill blanco que son contadores de letra
+    (contenidas en el bbox de una pieza no-blanca) o placa de fondo del
+    artboard (contienen a la mayoría de las demás piezas). Los SVG de
+    rotulación pintan los huecos con el color del fondo (blanco); una pieza
+    blanca aislada (p.ej. letra blanca real) NO se marca."""
+    cerrados = [p for p in paths if p.is_closed]
+    if len(cerrados) < 2:
+        return
+    for p in cerrados:
+        if not _es_fill_blanco(p.fill):
+            continue
+        tol = max(p.bbox["w"], p.bbox["h"]) * 0.02 + 0.5
+        contador = any(
+            q is not p and not _es_fill_blanco(q.fill)
+            and _bbox_contenido(p.bbox, q.bbox, tol)
+            for q in cerrados
+        )
+        if contador:
+            p.es_hueco = True
+            continue
+        otras = [q for q in cerrados if q is not p]
+        dentro = sum(1 for q in otras if _bbox_contenido(q.bbox, p.bbox, tol))
+        if dentro / len(otras) >= 0.6:
+            p.es_hueco = True
+
 
 def _collect_primitives(elem, class_to_fill: dict, parent_matrix: tuple,
                         parent_class: str = "", out: list | None = None) -> list:
@@ -556,7 +598,10 @@ def parse_svg(svg_bytes: bytes) -> SVGData:
             bbox=bbox,
             is_closed=is_closed,
             svg_id=orig_id,
+            fill=info["fill"],
         ))
+
+    _marcar_huecos(path_infos)
 
     # 6. Ordenar por X y renombrar a "Pieza N" — el universo son piezas, no letras
     path_infos.sort(key=lambda p: p.bbox["x"])
@@ -623,6 +668,11 @@ def precio_cm2(mat: dict) -> float:
 
 
 # ─── COTIZACIÓN LETRAS 3D ────────────────────────────────────────────────────
+
+# Separación entre módulos en la corrida perimetral de letras halo (retroiluminadas).
+# Un módulo cada ~15 cm sobre el perímetro da un resplandor uniforme contra la pared.
+_ESPACIADO_HALO_CM = 15.0
+
 
 def cotizar_letras(
     svg_data: SVGData,
@@ -751,22 +801,31 @@ def cotizar_letras(
         c_fondo   = 0.0
 
     # ── LEDS Y FUENTE ─────────────────────────────────────────────────────────
-    # Módulos LED se distribuyen sobre el ÁREA del cara desde el interior del canal
-    # (no en el perímetro). Cada módulo con ángulo de apertura 160° proyecta sobre
-    # un rectángulo de cobertura ≈ cercha × espaciado × 2 sobre el fondo del canal.
-    # Por eso:  modulos_por_letra = ceil(area_letra / cobertura_por_modulo)
+    # modo_iluminacion "cara" (cajón de luz): los módulos iluminan la cara desde
+    # dentro del canal → se distribuyen sobre el ÁREA. Cada módulo con apertura
+    # 160° proyecta cobertura ≈ cercha × espaciado × 2, así que
+    # modulos_por_letra = ceil(area_letra / cobertura_por_modulo).
+    # modo_iluminacion "halo" (retroiluminada): los módulos apuntan a la pared →
+    # basta UNA corrida perimetral, modulos_por_letra = ceil(perimetro / espaciado).
     # Mínimo 3 módulos por pieza para garantizar uniformidad en letras chicas.
+    modo_ilum = config.get("modo_iluminacion", "cara")
     if config["leds"]:
         led     = None
         if led_id and led_id != "auto":
             led = next((l for l in LEDS_CANAL if l.get("id") == led_id), None)
         if led is None:
             led = led_recomendado(cercha_cm, uso)
-        cobertura_modulo = max(1.0, cercha_cm * espaciado_led_cm * 2)
-        modulos = sum(
-            max(3, math.ceil((p.bbox["h"] * sf) * (p.bbox["w"] * sf) / cobertura_modulo))
-            for p in letras
-        )
+        if modo_ilum == "halo":
+            modulos = sum(
+                max(3, math.ceil(p.perimeter_cm / _ESPACIADO_HALO_CM))
+                for p in letras
+            )
+        else:
+            cobertura_modulo = max(1.0, cercha_cm * espaciado_led_cm * 2)
+            modulos = sum(
+                max(3, math.ceil((p.bbox["h"] * sf) * (p.bbox["w"] * sf) / cobertura_modulo))
+                for p in letras
+            )
         watts   = modulos * led["watts_modulo"]
         fuente  = fuente_optima(watts, uso)
         c_led   = modulos * led["precio_modulo"]
@@ -809,6 +868,12 @@ def cotizar_letras(
 
     # ── SILVATRIM (opcional) ──────────────────────────────────────────────────
     # silvatrim_id: ""=sin silvatrim · "auto"=recomendado por cercha · "<id>"=override
+    # El silvatrim remata caras de ACRÍLICO (tapa el canto del canal donde asienta
+    # la placa). Caras de aluminio/alupanel van soldadas o dobladas — no lo llevan.
+    # En "auto" solo se agrega si la construcción tiene cara de acrílico; un id
+    # explícito siempre se respeta (decisión manual del cotizador).
+    if silvatrim_id == "auto" and config["cara"] != "acrilico":
+        silvatrim_id = ""
     if silvatrim_id == "":
         sv = {}
         metros_sv = 0.0
@@ -899,7 +964,8 @@ def cotizar_letras(
 
         # Leds por pieza: ceil(perim/espaciado) si lleva luz
         if config["leds"]:
-            n_modulos_pz = math.ceil(perim_pz / espaciado_led_cm)
+            esp_pz = _ESPACIADO_HALO_CM if modo_ilum == "halo" else espaciado_led_cm
+            n_modulos_pz = max(3, math.ceil(perim_pz / esp_pz))
             watts_pz     = n_modulos_pz * led["watts_modulo"]
             costo_leds_pz = round(n_modulos_pz * led["precio_modulo"], 2)
         else:

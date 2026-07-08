@@ -570,3 +570,59 @@ class TestCotizarCaja:
         r = self._quote(svg, real_width_cm=300.0)
         # Sin outline detectado → usa viewbox completo, alto proporcional
         assert r.area_cara_cm2 > 0
+
+
+class TestDeteccionHuecos:
+    """parse_svg marca es_hueco en contadores blancos y placas de fondo."""
+
+    def test_contador_blanco_dentro_de_letra_es_hueco(self):
+        svg = b"""<?xml version="1.0"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200">
+          <rect x="50" y="50" width="100" height="100" fill="#000000"/>
+          <rect x="80" y="80" width="40" height="40" fill="#FFFFFF"/>
+        </svg>"""
+        data = parse_svg(svg)
+        huecos = [p for p in data.paths if p.es_hueco]
+        assert len(huecos) == 1
+        assert huecos[0].bbox["w"] == pytest.approx(40)
+
+    def test_placa_fondo_blanca_es_hueco(self):
+        svg = b"""<?xml version="1.0"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200">
+          <rect x="10" y="10" width="380" height="180" fill="white"/>
+          <rect x="50" y="50" width="60" height="80" fill="#000"/>
+          <rect x="150" y="50" width="60" height="80" fill="#000"/>
+          <rect x="250" y="50" width="60" height="80" fill="#000"/>
+        </svg>"""
+        data = parse_svg(svg)
+        huecos = [p for p in data.paths if p.es_hueco]
+        assert len(huecos) == 1
+        assert huecos[0].bbox["w"] == pytest.approx(380)
+
+    def test_pieza_blanca_aislada_no_es_hueco(self):
+        svg = b"""<?xml version="1.0"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200">
+          <rect x="50" y="50" width="60" height="80" fill="#FFFFFF"/>
+          <rect x="150" y="50" width="60" height="80" fill="#000"/>
+        </svg>"""
+        data = parse_svg(svg)
+        assert not any(p.es_hueco for p in data.paths)
+
+    def test_fill_por_clase_css_se_resuelve(self):
+        svg = b"""<?xml version="1.0"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200">
+          <style type="text/css">.st0{fill:#FFFFFF;}</style>
+          <rect x="50" y="50" width="100" height="100"/>
+          <rect x="80" y="80" width="40" height="40" class="st0"/>
+        </svg>"""
+        data = parse_svg(svg)
+        huecos = [p for p in data.paths if p.es_hueco]
+        assert len(huecos) == 1
+
+    def test_diseno_sin_blancos_no_marca_huecos(self):
+        from pathlib import Path
+        svg = Path(__file__).parent.parent / "EJEMPLOS" / "karate1.svg"
+        if not svg.exists():
+            pytest.skip("karate1.svg no disponible")
+        data = parse_svg(svg.read_bytes())
+        assert not any(p.es_hueco for p in data.paths)
