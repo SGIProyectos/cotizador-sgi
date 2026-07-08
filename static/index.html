@@ -519,6 +519,40 @@ svg g.pieza-labels                 { pointer-events: none; }
 .desglose-table .venta-row td { color: var(--c-soft); font-weight: 700; font-size: 15px; }
 .amount { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
 
+/* ── Pestaña Cotización: sistema de tarjetas oscuro estandarizado ──
+   ámbar = dinero/precio · cian = técnico/costo · verde/ámbar/rojo = semáforo de margen */
+.rz-card { background: var(--k2); border: 1px solid var(--k4); border-radius: 10px; padding: 12px 14px; }
+.rz-card h3 { margin: 0 0 10px; font-size: 12.5px; color: var(--txt); font-weight: 700;
+              display: flex; align-items: center; gap: 6px; }
+.rz-card h3 .sub { font-weight: 400; color: var(--txt3); font-size: 10.5px; margin-left: auto; }
+.rz-formula { font-size: 12px; margin-bottom: 10px; font-family: var(--mono);
+              background: #10151D; padding: 8px 10px; border-radius: 7px; border: 1px solid var(--k4); }
+.rz-formula .t { color: var(--txt3); font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; }
+.rz-formula .f { font-weight: 700; color: var(--txt); }
+.rz-formula .n { color: var(--txt3); font-size: 10px; margin-top: 2px; }
+.rz-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+.rz-table td { padding: 4px 0; color: var(--txt2); }
+.rz-table td:last-child { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.rz-table tr.sep td { border-top: 1px solid var(--k4); font-weight: 700; color: var(--txt); }
+.rz-table tr.gran td { border-top: 2px solid var(--line2); padding-top: 8px; font-weight: 800; font-size: 13px; }
+.hero-card { border-radius: 10px; padding: 10px 12px; text-align: center;
+             border: 1px solid var(--k4); background: var(--k2);
+             box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+.hero-card .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: var(--txt2); }
+.hero-card .val { font-size: clamp(17px,1.8vw,24px); font-weight: 800; margin-top: 3px; line-height: 1.1;
+                  font-family: var(--mono); letter-spacing: -.01em; }
+.hero-card .sub { font-size: 10.5px; margin-top: 3px; color: var(--txt2); }
+.hero-am   { border-color: #5C4E1E; background: linear-gradient(180deg,#241F10,#1A160C); }
+.hero-am .val   { color: var(--am); }
+.hero-ci   { border-color: #1F4553; background: linear-gradient(180deg,#12252F,#0F1D26); }
+.hero-ci .val   { color: var(--c-soft); }
+.hero-ok   { border-color: #235C3C; background: linear-gradient(180deg,#14301F,#0F2417); }
+.hero-ok .val   { color: #4FDB95; }
+.hero-warn { border-color: #5C4E1E; background: linear-gradient(180deg,#241F10,#1A160C); }
+.hero-warn .val { color: var(--am); }
+.hero-bad  { border-color: #6B2C31; background: linear-gradient(180deg,#2A1518,#1F1012); }
+.hero-bad .val  { color: #F58B80; }
+
 /* rec cards */
 .rec-card { background: var(--k2); border: 1px solid var(--k4); border-left: 3px solid var(--c);
             border-radius: 0 10px 10px 0; padding: 13px 16px; margin-bottom: 11px; }
@@ -1320,7 +1354,7 @@ svg g.pieza-labels                 { pointer-events: none; }
         </select>
         <label>Ajuste % <span style="font-size:10px;opacity:.55">(+ sube, − baja)</span></label>
         <input type="number" id="ajuste-pct" value="0" min="-50" max="200" step="1">
-        <div id="formula-preview" class="info-tag" style="display:none;background:#e8f5e9;color:#1b5e20;font-weight:700;font-size:13px;margin-top:4px"></div>
+        <div id="formula-preview" class="info-tag" style="display:none;background:#14301F;border-color:#235C3C;color:#4FDB95;font-weight:700;font-size:12.5px;margin-top:4px"></div>
       </div>
 
       <label>% Ganancia <span style="font-size:10px;opacity:.55">(elige o escribe)</span></label>
@@ -3324,12 +3358,10 @@ function renderResult(d) {
 
   // Fase H: warnings banner (inconsistencias detectadas por el calculator)
   const warningsHtml = (d.warnings || []).length ? `
-    <div style="background:#fff3e0;border:1px solid #ffb74d;border-radius:8px;padding:10px 12px;margin-bottom:14px;display:flex;flex-direction:column;gap:6px">
+    <div style="margin-bottom:12px">
       ${(d.warnings || []).map(w => `
-        <div style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#7c4a00">
-          <span style="font-size:14px;line-height:1">⚠️</span>
-          <span style="flex:1">${w}</span>
-        </div>
+        <div class="alerta-y"><span style="font-size:14px;line-height:1">⚠️</span>
+          <span style="flex:1">${w}</span></div>
       `).join("")}
     </div>` : "";
 
@@ -3337,7 +3369,8 @@ function renderResult(d) {
   const costoMatTotal   = d.desglose_costos_componentes?.total_material || costos.subtotal || 0;
   const costoConstruccion = costoMatTotal + costos.iva + (costos.mo_total || 0) + (d.instalacion?.activa ? d.instalacion.total : 0);
   const margenPct       = precioFinal > 0 ? ((precioFinal - costoConstruccion) / precioFinal * 100) : 0;
-  const margenColor     = margenPct >= 50 ? '#2e7d32' : margenPct >= 25 ? '#f57c00' : '#c62828';
+  const margenColor     = margenPct >= 50 ? '#4FDB95' : margenPct >= 25 ? 'var(--am)' : '#F58B80';
+  const margenHero      = margenPct >= 50 ? 'hero-ok' : margenPct >= 25 ? 'hero-warn' : 'hero-bad';
   const margenIcon      = margenPct >= 50 ? '✓' : margenPct >= 25 ? '⚠' : '✗';
   const margenLabel     = margenPct >= 50 ? 'Saludable' : margenPct >= 25 ? 'Justo' : 'Bajo';
 
@@ -3346,13 +3379,13 @@ function renderResult(d) {
     <div style="margin-bottom:14px">
       <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">
         <h2 style="color:var(--azul);font-size:16px">Cotización — ${tipoLabel}</h2>
-        <p style="font-size:11.5px;color:#888">Folio: ${d.folio} · ${m.paths_detectados} elementos</p>
+        <p style="font-size:11.5px;color:var(--txt3)">Folio: ${d.folio} · ${m.paths_detectados} elementos</p>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px;margin-bottom:6px">
         <input id="pdf-cliente" type="text" placeholder="Cliente (opcional)"
-          style="height:30px;font-size:12px;padding:0 8px;border:1px solid #ccc;border-radius:6px">
+          style="height:30px;font-size:12px">
         <input id="pdf-notas" type="text" placeholder="Notas para los documentos (opcional)"
-          style="height:30px;font-size:12px;padding:0 8px;border:1px solid #ddd;border-radius:6px;color:#666">
+          style="height:30px;font-size:12px">
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:6px">
         <a class="btn-pdf" id="btn-pdf-link" href="${d.pdf_url}" target="_blank"
@@ -3383,30 +3416,22 @@ function renderResult(d) {
 
     <!-- ─── ZONA 1: 3 HEROES (precio cliente / costo construcción / margen) ─── -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;margin-bottom:14px">
-      <div style="background:linear-gradient(135deg,#fff4e6 0%,#ffe0b2 100%);border:2px solid #ff9800;border-radius:10px;padding:10px 12px;text-align:center">
-        <div style="font-size:10px;color:#7c4a00;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">💰 Precio al cliente</div>
-        <div style="font-size:clamp(17px,1.8vw,24px);font-weight:800;color:#e65100;margin-top:3px;line-height:1.1">
-          $${precioFinal.toLocaleString('es-MX',{minimumFractionDigits:2})}
-        </div>
-        <div style="font-size:10.5px;color:#7c4a00;margin-top:3px">
+      <div class="hero-card hero-am">
+        <div class="lbl">💰 Precio al cliente</div>
+        <div class="val">$${precioFinal.toLocaleString('es-MX',{minimumFractionDigits:2})}</div>
+        <div class="sub">
           ${costos.mo_total>0?'+ MO ':''}${d.instalacion?.activa?'+ instalación':''}${!costos.mo_total && !d.instalacion?.activa?'fabricación':''}
         </div>
       </div>
-      <div style="background:linear-gradient(135deg,#e8eaf6 0%,#c5cae9 100%);border:2px solid #3f51b5;border-radius:10px;padding:10px 12px;text-align:center">
-        <div style="font-size:10px;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">🔨 Costo construcción</div>
-        <div style="font-size:clamp(17px,1.8vw,24px);font-weight:800;color:#1a237e;margin-top:3px;line-height:1.1">
-          $${costoConstruccion.toLocaleString('es-MX',{minimumFractionDigits:2})}
-        </div>
-        <div style="font-size:10.5px;color:#1a237e;margin-top:3px">
-          materiales + IVA${costos.mo_total>0?' + MO':''}${d.instalacion?.activa?' + inst.':''}
-        </div>
+      <div class="hero-card hero-ci">
+        <div class="lbl">🔨 Costo construcción</div>
+        <div class="val">$${costoConstruccion.toLocaleString('es-MX',{minimumFractionDigits:2})}</div>
+        <div class="sub">materiales + IVA${costos.mo_total>0?' + MO':''}${d.instalacion?.activa?' + inst.':''}</div>
       </div>
-      <div style="background:linear-gradient(135deg,${margenPct>=50?'#e8f5e9':margenPct>=25?'#fff8e1':'#ffebee'} 0%,${margenPct>=50?'#c8e6c9':margenPct>=25?'#ffe0b2':'#ffcdd2'} 100%);border:2px solid ${margenColor};border-radius:10px;padding:10px 12px;text-align:center">
-        <div style="font-size:10px;color:${margenColor};text-transform:uppercase;letter-spacing:0.5px;font-weight:600">📈 Margen bruto</div>
-        <div style="font-size:clamp(17px,1.8vw,24px);font-weight:800;color:${margenColor};margin-top:3px;line-height:1.1">
-          ${margenPct.toFixed(1)}%
-        </div>
-        <div style="font-size:10.5px;color:${margenColor};margin-top:3px">
+      <div class="hero-card ${margenHero}">
+        <div class="lbl">📈 Margen bruto</div>
+        <div class="val">${margenPct.toFixed(1)}%</div>
+        <div class="sub">
           ${margenIcon} ${margenLabel} · $${(precioFinal - costoConstruccion).toLocaleString('es-MX',{minimumFractionDigits:0})} utilidad
         </div>
       </div>
@@ -3415,77 +3440,73 @@ function renderResult(d) {
     <!-- ─── ZONA 2: COMPARATIVA (cómo cobras vs en qué se va) ─── -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:10px;margin-bottom:16px">
       <!-- COLUMNA IZQUIERDA: cómo se cobra (fórmula) -->
-      <div style="background:#fffbf5;border:1px solid #ffd29a;border-radius:10px;padding:14px">
-        <h3 style="margin:0 0 10px;color:#e65100;font-size:13px;display:flex;align-items:center;gap:6px">
-          🧾 ¿Cómo se cobra?
-          <span style="font-weight:400;color:#999;font-size:11px;margin-left:auto">precio según fórmula</span>
+      <div class="rz-card">
+        <h3><span style="color:var(--am)">🧾 ¿Cómo se cobra?</span>
+          <span class="sub">precio según fórmula</span>
         </h3>
         ${(esLetras || esPlanas) ? `
-          <div style="font-size:12px;color:#555;margin-bottom:10px;font-family:'Courier New',monospace;background:#fff;padding:8px;border-radius:4px;border:1px solid #f0e0c0">
-            <div style="color:#888;font-size:10px;text-transform:uppercase">Fórmula:</div>
-            <div style="font-weight:700;color:#333">
-              altura × $${(catalog?.precios_base?.precio_cm || 10)}/cm × ×${costos.multiplicador_valor}
-            </div>
+          <div class="rz-formula">
+            <div class="t">Fórmula:</div>
+            <div class="f">altura × $${(catalog?.precios_base?.precio_cm || 10)}/cm × ×${costos.multiplicador_valor}</div>
           </div>
-          <div style="font-size:11px;color:#666;margin-bottom:6px">
-            <strong style="color:#e65100">Multiplicador:</strong>
+          <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
+            <strong style="color:var(--am)">Multiplicador:</strong>
             ${MULT_LABELS[costos.tipo_multiplicador] || costos.tipo_multiplicador}
           </div>
-          <div style="font-size:11px;color:#666;margin-bottom:10px">
-            <strong style="color:#e65100">Por pieza típica:</strong>
+          <div style="font-size:11px;color:var(--txt2);margin-bottom:10px">
+            <strong style="color:var(--am)">Por pieza típica:</strong>
             ${m.altura_letra_cm} × $${(catalog?.precios_base?.precio_cm || 10)} × ${costos.multiplicador_valor}
-            = <strong>$${(m.altura_letra_cm * (catalog?.precios_base?.precio_cm || 10) * costos.multiplicador_valor).toLocaleString('es-MX',{minimumFractionDigits:2})}</strong>
+            = <strong style="color:var(--txt)">$${(m.altura_letra_cm * (catalog?.precios_base?.precio_cm || 10) * costos.multiplicador_valor).toLocaleString('es-MX',{minimumFractionDigits:2})}</strong>
           </div>
         ` : `
-          <div style="font-size:12px;color:#555;margin-bottom:10px;font-family:'Courier New',monospace;background:#fff;padding:8px;border-radius:4px;border:1px solid #f0e0c0">
-            <div style="color:#888;font-size:10px;text-transform:uppercase">Fórmula:</div>
-            <div style="font-weight:700;color:#333">costo total / (1 − margen)</div>
-            <div style="color:#999;font-size:10px;margin-top:2px">precio = $${costos.total.toLocaleString('es-MX',{minimumFractionDigits:2})} / (1 − ${(((1 - costos.total/costos.precio_venta_sugerido)*100)).toFixed(0)}%)</div>
+          <div class="rz-formula">
+            <div class="t">Fórmula:</div>
+            <div class="f">costo total / (1 − margen)</div>
+            <div class="n">precio = $${costos.total.toLocaleString('es-MX',{minimumFractionDigits:2})} / (1 − ${(((1 - costos.total/costos.precio_venta_sugerido)*100)).toFixed(0)}%)</div>
           </div>
         `}
-        <table style="width:100%;font-size:12px;border-collapse:collapse">
+        <table class="rz-table">
           ${(esLetras || esPlanas) ? `
             <tr>
-              <td style="padding:4px 0;color:#666">Suma fórmula (${d.desglose_letras?.length||0} piezas)</td>
-              <td style="text-align:right;color:#333">$${(costos.precio_sin_ajuste||0).toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+              <td>Suma fórmula (${d.desglose_letras?.length||0} piezas)</td>
+              <td style="color:var(--txt)">$${(costos.precio_sin_ajuste||0).toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
             </tr>
             ${costos.ajuste_pct !== 0 ? `
             <tr>
-              <td style="padding:4px 0;color:${costos.ajuste_pct>0?'#2e7d32':'#c62828'}">${costos.ajuste_pct>0?'+':''}${costos.ajuste_pct}% ajuste</td>
-              <td style="text-align:right;color:${costos.ajuste_pct>0?'#2e7d32':'#c62828'}">${costos.ajuste_pct>0?'+':''}$${(costos.precio_venta_sugerido - costos.precio_sin_ajuste).toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+              <td style="color:${costos.ajuste_pct>0?'#4FDB95':'#F58B80'}">${costos.ajuste_pct>0?'+':''}${costos.ajuste_pct}% ajuste</td>
+              <td style="color:${costos.ajuste_pct>0?'#4FDB95':'#F58B80'}">${costos.ajuste_pct>0?'+':''}$${(costos.precio_venta_sugerido - costos.precio_sin_ajuste).toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
             </tr>` : ''}
-            <tr style="border-top:1px solid #f0d0a0">
-              <td style="padding:4px 0;color:#333;font-weight:700">Precio fabricación</td>
-              <td style="text-align:right;color:#333;font-weight:700">$${costos.precio_venta_sugerido.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+            <tr class="sep">
+              <td>Precio fabricación</td>
+              <td>$${costos.precio_venta_sugerido.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
             </tr>
           ` : `
-            <tr style="border-top:1px solid #f0d0a0">
-              <td style="padding:4px 0;color:#333;font-weight:700">Precio fabricación</td>
-              <td style="text-align:right;color:#333;font-weight:700">$${costos.precio_venta_sugerido.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+            <tr class="sep">
+              <td>Precio fabricación</td>
+              <td>$${costos.precio_venta_sugerido.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
             </tr>
           `}
           ${costos.mo_total > 0 ? `
           <tr>
-            <td style="padding:4px 0;color:#558b2f">+ Mano de obra</td>
-            <td style="text-align:right;color:#558b2f">+$${costos.mo_total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+            <td style="color:#4FDB95">+ Mano de obra</td>
+            <td style="color:#4FDB95">+$${costos.mo_total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
           </tr>` : ''}
           ${d.instalacion?.activa ? `
           <tr>
-            <td style="padding:4px 0;color:#e65100">+ Instalación</td>
-            <td style="text-align:right;color:#e65100">+$${d.instalacion.total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+            <td style="color:var(--mg)">+ Instalación</td>
+            <td style="color:var(--mg)">+$${d.instalacion.total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
           </tr>` : ''}
-          <tr style="border-top:2px solid #e65100">
-            <td style="padding:8px 0 0;color:#e65100;font-weight:800;font-size:13px">= TOTAL CLIENTE</td>
-            <td style="text-align:right;color:#e65100;font-weight:800;font-size:15px;padding:8px 0 0">$${precioFinal.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+          <tr class="gran">
+            <td style="color:var(--am)">= TOTAL CLIENTE</td>
+            <td style="color:var(--am);font-size:15px">$${precioFinal.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
           </tr>
         </table>
       </div>
 
       <!-- COLUMNA DERECHA: en qué se va el costo (componentes) -->
-      <div style="background:#f5f7fc;border:1px solid #c5cae9;border-radius:10px;padding:14px">
-        <h3 style="margin:0 0 10px;color:#1a237e;font-size:13px;display:flex;align-items:center;gap:6px">
-          🛠️ ¿En qué se va el costo?
-          <span style="font-weight:400;color:#999;font-size:11px;margin-left:auto">desglose real por componente</span>
+      <div class="rz-card">
+        <h3><span style="color:var(--c-soft)">🛠️ ¿En qué se va el costo?</span>
+          <span class="sub">desglose real por componente</span>
         </h3>
         ${(() => {
           const comp = d.desglose_costos_componentes || {};
@@ -3517,7 +3538,7 @@ function renderResult(d) {
             .filter(([k, v]) => k !== 'total_material' && (v || 0) > 0)
             .sort((a, b) => b[1] - a[1]);
           const total = comp.total_material || items.reduce((s, [, v]) => s + v, 0);
-          if (items.length === 0) return '<div style="color:#999;font-size:12px;text-align:center;padding:20px">Sin desglose por componente disponible</div>';
+          if (items.length === 0) return '<div style="color:var(--txt3);font-size:12px;text-align:center;padding:20px">Sin desglose por componente disponible</div>';
           return `
             <table style="width:100%;font-size:12px;border-collapse:collapse">
               ${items.map(([k, v]) => {
@@ -3525,40 +3546,40 @@ function renderResult(d) {
                 const barW = Math.max(3, pct);
                 const matName = matNames[k];
                 const labelHtml = matName
-                  ? `<div style="font-weight:600">${labels[k] || k}</div><div style="font-size:10px;color:#888;line-height:1.2">${matName}</div>`
-                  : `${labels[k] || k}`;
+                  ? `<div style="font-weight:600;color:var(--txt)">${labels[k] || k}</div><div style="font-size:10px;color:var(--txt3);line-height:1.2">${matName}</div>`
+                  : `<span style="color:var(--txt)">${labels[k] || k}</span>`;
                 return `<tr>
-                  <td style="padding:3px 0;width:30%;color:#333">${labelHtml}</td>
+                  <td style="padding:3px 0;width:30%">${labelHtml}</td>
                   <td style="padding:3px 6px;width:50%">
-                    <div style="background:#e3e7ee;height:8px;border-radius:4px;overflow:hidden">
-                      <div style="background:#3f51b5;height:100%;width:${barW}%;border-radius:4px"></div>
+                    <div style="background:#0F141B;height:7px;border-radius:99px;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.4)">
+                      <div style="background:linear-gradient(90deg,#1590B8,#2CC5EC);height:100%;width:${barW}%;border-radius:99px"></div>
                     </div>
                   </td>
-                  <td style="padding:3px 0;text-align:right;color:#666;font-size:11px;width:14%">${pct.toFixed(0)}%</td>
-                  <td style="padding:3px 0 3px 4px;text-align:right;color:#333;font-weight:600">$${v.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+                  <td style="padding:3px 0;text-align:right;color:var(--txt3);font-size:11px;width:14%;font-variant-numeric:tabular-nums">${pct.toFixed(0)}%</td>
+                  <td style="padding:3px 0 3px 4px;text-align:right;color:var(--txt);font-weight:600;font-family:var(--mono);font-variant-numeric:tabular-nums">$${v.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
                 </tr>`;
               }).join("")}
-              <tr style="border-top:1px solid #c5cae9">
-                <td colspan="3" style="padding:6px 0;color:#1a237e;font-weight:700">Subtotal materiales</td>
-                <td style="text-align:right;color:#1a237e;font-weight:700;padding:6px 0">$${total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+              <tr style="border-top:1px solid var(--k4)">
+                <td colspan="3" style="padding:6px 0;color:var(--c-soft);font-weight:700">Subtotal materiales</td>
+                <td style="text-align:right;color:var(--c-soft);font-weight:700;padding:6px 0;font-family:var(--mono)">$${total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
               </tr>
               <tr>
-                <td colspan="3" style="padding:3px 0;color:#666">+ IVA 16%</td>
-                <td style="text-align:right;color:#666;padding:3px 0">+$${costos.iva.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+                <td colspan="3" style="padding:3px 0;color:var(--txt2)">+ IVA 16%</td>
+                <td style="text-align:right;color:var(--txt2);padding:3px 0;font-family:var(--mono)">+$${costos.iva.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
               </tr>
               ${costos.mo_total > 0 ? `
               <tr>
-                <td colspan="3" style="padding:3px 0;color:#558b2f">+ Mano de obra</td>
-                <td style="text-align:right;color:#558b2f;padding:3px 0">+$${costos.mo_total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+                <td colspan="3" style="padding:3px 0;color:#4FDB95">+ Mano de obra</td>
+                <td style="text-align:right;color:#4FDB95;padding:3px 0;font-family:var(--mono)">+$${costos.mo_total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
               </tr>` : ''}
               ${d.instalacion?.activa ? `
               <tr>
-                <td colspan="3" style="padding:3px 0;color:#e65100">+ Instalación</td>
-                <td style="text-align:right;color:#e65100;padding:3px 0">+$${d.instalacion.total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+                <td colspan="3" style="padding:3px 0;color:var(--mg)">+ Instalación</td>
+                <td style="text-align:right;color:var(--mg);padding:3px 0;font-family:var(--mono)">+$${d.instalacion.total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
               </tr>` : ''}
-              <tr style="border-top:2px solid #1a237e">
-                <td colspan="3" style="padding:8px 0 0;color:#1a237e;font-weight:800;font-size:13px">= COSTO TOTAL</td>
-                <td style="text-align:right;color:#1a237e;font-weight:800;font-size:15px;padding:8px 0 0">$${costoConstruccion.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+              <tr style="border-top:2px solid var(--line2)">
+                <td colspan="3" style="padding:8px 0 0;color:var(--c-soft);font-weight:800;font-size:13px">= COSTO TOTAL</td>
+                <td style="text-align:right;color:var(--c-soft);font-weight:800;font-size:15px;padding:8px 0 0;font-family:var(--mono)">$${costoConstruccion.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
               </tr>
             </table>
           `;
@@ -3570,7 +3591,7 @@ function renderResult(d) {
     <!-- ── COTIZACIÓN POR PIEZA (fórmula Excel) ── -->
     <h3 style="color:var(--azul);margin:0 0 8px;font-size:14px">
       Cotización pieza por pieza
-      <span style="font-weight:400;color:#888;font-size:12px">— margen real por pieza vs costo de construcción</span>
+      <span style="font-weight:400;color:var(--txt3);font-size:12px">— margen real por pieza vs costo de construcción</span>
     </h3>
     <table class="desglose-table" style="margin-bottom:20px">
       <thead><tr>
@@ -3579,14 +3600,14 @@ function renderResult(d) {
         <th class="amount">Ancho</th>
         <th class="amount">Cara (A×A)</th>
         ${!esPlanas ? `<th class="amount">Cercha (P×P)</th>` : ''}
-        <th class="amount" style="color:#555">Costo real</th>
-        <th class="amount" style="color:#e87c2a">Precio venta</th>
-        <th class="amount" style="color:#666" title="Margen real = (precio − costo) / precio">Margen %</th>
+        <th class="amount">Costo real</th>
+        <th class="amount" style="color:var(--naranja)">Precio venta</th>
+        <th class="amount" title="Margen real = (precio − costo) / precio">Margen %</th>
       </tr></thead>
       <tbody>
         ${d.desglose_letras.map(l => {
           const mp = l.margen_real_pct;
-          const margenColor = mp >= 50 ? '#2e7d32' : mp >= 25 ? '#f57c00' : '#c62828';
+          const margenColor = mp >= 50 ? '#4FDB95' : mp >= 25 ? 'var(--am)' : '#F58B80';
           const margenIcon = mp >= 50 ? '✓' : mp >= 25 ? '⚠' : '✗';
           const costoReal = l.costo_total ?? l.costo_mat ?? 0;
           return `<tr>
@@ -3595,7 +3616,7 @@ function renderResult(d) {
           <td class="amount">${l.ancho_cm} cm</td>
           <td class="amount">${(l.area_bbox_cm2||0).toFixed(0)} cm²</td>
           ${!esPlanas ? `<td class="amount">${(l.cercha_area_cm2||0).toFixed(0)} cm²</td>` : ''}
-          <td class="amount" style="color:#555;font-size:12px">
+          <td class="amount" style="color:var(--txt2);font-size:12px">
             $${costoReal.toLocaleString('es-MX',{minimumFractionDigits:2})}
           </td>
           <td class="amount" style="font-weight:700;color:var(--naranja)">
@@ -3609,14 +3630,14 @@ function renderResult(d) {
           const totalCosto = d.desglose_letras.reduce((s,l)=>s+(l.costo_total??l.costo_mat??0),0);
           const totalPrecio = costos.precio_venta_sugerido;
           const margenTotal = totalPrecio > 0 ? ((totalPrecio - totalCosto)/totalPrecio*100) : 0;
-          const margenColor = margenTotal >= 50 ? '#2e7d32' : margenTotal >= 25 ? '#f57c00' : '#c62828';
-          return `<tr style="background:#fff8f0;font-weight:700;font-size:14px">
+          const margenColor = margenTotal >= 50 ? '#4FDB95' : margenTotal >= 25 ? 'var(--am)' : '#F58B80';
+          return `<tr style="background:var(--k3);font-weight:700;font-size:14px">
           <td>TOTAL (${d.desglose_letras.length} ${esPlanas?'piezas':'letras'})</td>
           <td class="amount">—</td>
           <td class="amount">—</td>
           <td class="amount">${d.desglose_letras.reduce((s,l)=>s+(l.area_bbox_cm2||0),0).toFixed(0)} cm²</td>
           ${!esPlanas ? `<td class="amount">${d.desglose_letras.reduce((s,l)=>s+(l.cercha_area_cm2||0),0).toFixed(0)} cm²</td>` : ''}
-          <td class="amount" style="color:#555">
+          <td class="amount" style="color:var(--txt2)">
             $${totalCosto.toLocaleString('es-MX',{minimumFractionDigits:2})}
           </td>
           <td class="amount" style="color:var(--naranja);font-size:16px">
@@ -3650,8 +3671,8 @@ function renderResult(d) {
     </div>
 
     <!-- ─── DETALLE TÉCNICO (collapsible, para taller / auditoría) ─── -->
-    <details style="margin-top:8px;background:#fafbfd;border:1px solid #e3e7ee;border-radius:8px;padding:10px 14px">
-      <summary style="cursor:pointer;font-weight:600;color:#555;font-size:12px;user-select:none">
+    <details style="margin-top:8px;background:var(--k2);border:1px solid var(--k4);border-radius:8px;padding:10px 14px">
+      <summary style="cursor:pointer;font-weight:600;color:var(--txt2);font-size:12px;user-select:none">
         📋 Detalle técnico de materiales (referencia para taller)
       </summary>
       <table class="desglose-table" style="margin-top:10px;font-size:12px">
@@ -3670,31 +3691,31 @@ function renderResult(d) {
             <td class="amount">$${costos.iva.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
           </tr>
           ${costos.mo_total > 0 ? `
-          <tr style="background:#e8f5e9"><td>🔧 Mano de obra</td>
+          <tr style="background:rgba(65,201,131,.08)"><td>🔧 Mano de obra</td>
             <td class="amount">$${costos.mo_total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>` : ''}
           ${d.instalacion?.activa ? `
-          <tr style="background:#fff3e0">
-            <td colspan="2" style="font-weight:700;font-size:11px;color:#e65100">📍 Instalación — ${d.instalacion.lugar || 'sin lugar'}</td>
+          <tr style="background:rgba(245,201,59,.07)">
+            <td colspan="2" style="font-weight:700;font-size:11px;color:var(--am)">📍 Instalación — ${d.instalacion.lugar || 'sin lugar'}</td>
           </tr>
-          ${d.instalacion.viaticos > 0 ? `<tr style="background:#fff3e0">
+          ${d.instalacion.viaticos > 0 ? `<tr style="background:rgba(245,201,59,.07)">
             <td style="padding-left:20px">Viáticos</td>
             <td class="amount">$${d.instalacion.viaticos.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>` : ''}
-          ${d.instalacion.costo_grua > 0 ? `<tr style="background:#fff3e0">
+          ${d.instalacion.costo_grua > 0 ? `<tr style="background:rgba(245,201,59,.07)">
             <td style="padding-left:20px">Equipo (${d.instalacion.grua})</td>
             <td class="amount">$${d.instalacion.costo_grua.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>` : ''}
-          ${d.instalacion.extras > 0 ? `<tr style="background:#fff3e0">
+          ${d.instalacion.extras > 0 ? `<tr style="background:rgba(245,201,59,.07)">
             <td style="padding-left:20px">Extras</td>
             <td class="amount">$${d.instalacion.extras.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>` : ''}
-          <tr style="background:#ffe0b2;font-weight:700">
+          <tr style="background:rgba(245,201,59,.16);font-weight:700">
             <td>Total instalación</td>
             <td class="amount">$${d.instalacion.total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>` : ''}
-          <tr style="background:#1a237e;color:#fff;font-size:13px;font-weight:700">
-            <td>💰 TOTAL AL CLIENTE</td>
-            <td class="amount">$${precioFinal.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+          <tr style="background:#153341;font-size:13px;font-weight:700">
+            <td style="color:var(--c-soft)">💰 TOTAL AL CLIENTE</td>
+            <td class="amount" style="color:var(--c-soft)">$${precioFinal.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
           </tr>
-          <tr style="background:#fff8f0">
-            <td style="color:#888;font-size:11px">Piso por costo (referencia)</td>
-            <td class="amount" style="color:#888;font-size:11px">$${costos.precio_venta_costo.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+          <tr>
+            <td style="color:var(--txt3);font-size:11px">Piso por costo (referencia)</td>
+            <td class="amount" style="color:var(--txt3);font-size:11px">$${costos.precio_venta_costo.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
           </tr>
         </tbody>
       </table>
@@ -3732,7 +3753,7 @@ async function renderRecomendaciones(d) {
     const aptoExt = parseInt(l.ip.replace(/\D/g,"")) >= 65;
     const alertaExt = uso === "exterior" && !aptoExt
       ? `<span style="color:#e74c3c;font-size:10px;font-weight:700"> ⚠ No apto exterior</span>` : "";
-    return `<tr style="${esSeleccionado ? 'background:#fff8f0' : ''}">
+    return `<tr style="${esSeleccionado ? 'background:rgba(245,201,59,.10)' : ''}">
       <td>${esSeleccionado ? "<strong>" : ""}${l.nombre}${esSeleccionado ? "</strong> ✓" : ""}${alertaExt}</td>
       <td>${l.ip}</td>
       <td style="text-align:right">${l.watts_modulo} W</td>
@@ -3763,7 +3784,7 @@ async function renderRecomendaciones(d) {
       <h4>💡 Todos los LEDs compatibles con cercha ${cercha_cm} cm</h4>
       <table style="width:100%;font-size:12px;border-collapse:collapse">
         <thead>
-          <tr style="background:#f5f7fa">
+          <tr style="background:#10151D;color:var(--txt2)">
             <th style="text-align:left;padding:5px 6px;font-size:11px">Modelo</th>
             <th style="padding:5px 6px;font-size:11px">IP</th>
             <th style="text-align:right;padding:5px 6px;font-size:11px">Watts</th>
@@ -3773,7 +3794,7 @@ async function renderRecomendaciones(d) {
         </thead>
         <tbody>${ledsTabla}</tbody>
       </table>
-      <p style="font-size:10.5px;color:#999;margin-top:6px">✓ = LED usado en esta cotización</p>
+      <p style="font-size:10.5px;color:var(--txt3);margin-top:6px">✓ = LED usado en esta cotización</p>
     </div>
 
     <div class="rec-card">
@@ -4587,12 +4608,12 @@ function actualizarAsesor(autoFillAltura = false) {
   ];
   const filasTabla = tablaSignalux.map(r => {
     const activa = r.cat === catActual;
-    const bg     = activa ? "background:#fff4e6;border-left:3px solid #e87c2a" : "";
-    const wt     = activa ? "font-weight:700;color:#1a2b4a" : "";
+    const bg     = activa ? "background:rgba(245,201,59,.10);border-left:3px solid var(--am)" : "";
+    const wt     = activa ? "font-weight:700;color:var(--txt)" : "color:var(--txt2)";
     const flecha = activa ? "▸ " : "&nbsp;&nbsp;&nbsp;";
     return `<tr style="${bg}">
       <td style="padding:4px 6px;font-size:11px;${wt}">${flecha}${r.nombre}</td>
-      <td style="padding:4px 6px;font-size:11px;color:#6b7d9c">${r.altura}</td>
+      <td style="padding:4px 6px;font-size:11px;color:var(--txt3)">${r.altura}</td>
       <td style="padding:4px 6px;font-size:11px;${wt};text-align:center">${r.min}–${r.max} cm</td>
       <td style="padding:4px 6px;font-size:11px;${wt};text-align:center">${r.rec} cm</td>
     </tr>`;
@@ -4630,9 +4651,9 @@ function actualizarAsesor(autoFillAltura = false) {
     <div style="margin-top:14px;font-size:10px;color:#6b7d9c;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">
       Recomendación Signalux — profundidad de cercha
     </div>
-    <table style="width:100%;border-collapse:collapse;background:#f7f9fc;border-radius:4px;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse;background:#10151D;border:1px solid var(--k4);border-radius:6px;overflow:hidden">
       <thead>
-        <tr style="background:#1a2b4a;color:#fff">
+        <tr style="background:var(--k3);color:var(--txt2)">
           <th style="padding:5px 6px;font-size:10px;text-align:left">Categoría</th>
           <th style="padding:5px 6px;font-size:10px;text-align:left">Altura letra</th>
           <th style="padding:5px 6px;font-size:10px;text-align:center">Rango</th>
