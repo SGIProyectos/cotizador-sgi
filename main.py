@@ -709,6 +709,7 @@ async def api_ot(quote_id: str, cliente: str = "", notas: str = ""):
                             exc_info=True)
                 svg_text = ""
 
+    _meta_con_cliente(meta)
     pdf_bytes = generar_pdf_ot(result, meta, svg_text=svg_text,
                                viewbox_w=vb_w, viewbox_h=vb_h,
                                paths_info=paths_info)
@@ -716,14 +717,37 @@ async def api_ot(quote_id: str, cliente: str = "", notas: str = ""):
     return FileResponse(path=_write_tmp(pdf_bytes, filename), filename=filename, media_type="application/pdf")
 
 
+def _meta_con_cliente(meta: dict) -> dict:
+    """Enlace catálogo de clientes → documentos: si el nombre capturado
+    coincide con un cliente registrado, jala RFC, teléfono y dirección."""
+    cli = db.get_client_by_name(meta.get("cliente", ""))
+    if cli:
+        meta.setdefault("cliente_rfc", cli.get("rfc") or "")
+        meta.setdefault("cliente_tel", cli.get("telefono") or "")
+        meta.setdefault("cliente_dir", cli.get("direccion") or "")
+        meta.setdefault("cliente_email", cli.get("email") or "")
+    return meta
+
+
 @app.get("/api/entrega/{quote_id}")
-async def api_entrega(quote_id: str, cliente: str = "", notas: str = ""):
+async def api_entrega(quote_id: str, cliente: str = "", notas: str = "",
+                      fecha_entrega: str = "", lugar: str = "",
+                      anticipo: float = -1.0):
+    """Acta de entrega. `fecha_entrega` (dd/mm/aaaa) es la fecha REAL de la
+    entrega — de ella corre la garantía; si no llega, se usa HOY (nunca la
+    fecha de la cotización). `anticipo` es el monto realmente pagado."""
     result = _ensure_quote_in_memory(quote_id)
     meta   = _get_meta(quote_id)
     if not result:
         raise HTTPException(404, "Cotización no encontrada")
     if cliente: meta["cliente"] = cliente
     if notas:   meta["notas"]   = notas
+    meta["fecha_entrega"] = fecha_entrega or datetime.now().strftime("%d/%m/%Y")
+    if lugar:
+        meta["lugar_entrega"] = lugar
+    if anticipo >= 0:
+        meta["anticipo"] = anticipo
+    _meta_con_cliente(meta)
     pdf_bytes = generar_pdf_entrega(result, meta)
     filename  = f"Entrega_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
     return FileResponse(path=_write_tmp(pdf_bytes, filename), filename=filename, media_type="application/pdf")
@@ -840,6 +864,7 @@ async def api_pdf(quote_id: str, cliente: str = "", notas: str = ""):
     if cliente: meta["cliente"] = cliente
     if notas:   meta["notas"]   = notas
 
+    _meta_con_cliente(meta)
     pdf_bytes = generar_pdf(result, meta)
     filename  = f"Cotizacion_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
 
@@ -998,6 +1023,7 @@ async def api_upsert_client(data: dict):
         rfc=data.get("rfc", "").strip(),
         email=data.get("email", "").strip(),
         telefono=data.get("telefono", "").strip(),
+        direccion=data.get("direccion", "").strip(),
         client_id=data.get("id"),
     )
     return {"ok": True, "id": client_id}
@@ -1021,6 +1047,7 @@ class CatalogPayload(BaseModel):
     erróneos; no prescribe el schema interno (que cambia con frecuencia)."""
     model_config = ConfigDict(extra="forbid")
 
+    empresa:            dict | None = None
     laminas:            dict | None = None
     leds_canal:         list | None = None
     leds_caja:          dict | None = None

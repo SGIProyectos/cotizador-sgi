@@ -181,6 +181,25 @@ def test_universo_caja_planos_y_acta(client, caja_svg):
         assert len(r.content) > 1024, url
 
 
+def test_acta_enlaza_cliente_del_catalogo(client, caja_svg):
+    """El acta jala RFC/teléfono/dirección del catálogo por nombre, y acepta
+    fecha de entrega real, lugar y anticipo."""
+    r = client.post("/api/clients", json={
+        "nombre": "Cliente Enlace SA", "rfc": "CEN010101XX1",
+        "telefono": "614 555 0000", "direccion": "Calle Uno 123",
+    })
+    assert r.status_code == 200
+    qid = _quote_caja(client, caja_svg, cliente="Cliente Enlace SA")
+    r = client.get(f"/api/entrega/{qid}", params={
+        "fecha_entrega": "15/08/2026", "lugar": "Taller SGI", "anticipo": 1000.0,
+    })
+    assert r.status_code == 200
+    assert r.content[:5] == b"%PDF-"
+    import db
+    cli = db.get_client_by_name("cliente enlace sa")   # sin distinguir mayúsculas
+    assert cli and cli["rfc"] == "CEN010101XX1" and cli["direccion"] == "Calle Uno 123"
+
+
 def test_acta_garantia_tres_meses(client, caja_svg):
     qid = _quote_caja(client, caja_svg)
     r = client.get(f"/api/entrega/{qid}")

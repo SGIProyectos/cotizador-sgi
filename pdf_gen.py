@@ -24,6 +24,8 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from catalog_data import EMPRESA
+
 log = logging.getLogger("cotizador.pdf")
 
 # Página carta: 21.59 cm ancho. Márgenes 2 cm c/lado → útil = 17.59 cm
@@ -841,12 +843,17 @@ def generar_pdf_entrega(result, meta: dict) -> bytes:
     st  = _estilos()
     elements = []
 
-    empresa     = meta.get("empresa", "SGI Impresión y Diseño")
+    empresa     = EMPRESA.get("razon_social") or meta.get("empresa", "SGI Impresión y Diseño")
     folio       = meta.get("folio", "---")
-    fecha       = meta.get("fecha", datetime.now().strftime("%d/%m/%Y"))
+    # La garantía corre desde la fecha REAL de entrega (la pasa el endpoint;
+    # default = hoy) — NUNCA desde la fecha de la cotización.
+    fecha       = meta.get("fecha_entrega") or datetime.now().strftime("%d/%m/%Y")
     cliente     = meta.get("cliente") or "—"
+    lugar       = meta.get("lugar_entrega") or "________________________"
     precio_final = result.precio_final or result.precio_venta_sugerido
-    anticipo     = round(precio_final * 0.50, 2)
+    anticipo_in  = meta.get("anticipo")
+    anticipo     = (round(float(anticipo_in), 2) if anticipo_in is not None
+                    else round(precio_final * 0.50, 2))
     saldo        = round(precio_final - anticipo, 2)
     tipo_label   = {"letras_3d": "Letras 3D (Canal)", "letras_planas": "Letras Planas",
                     "caja_luz":  "Caja de Luz"}.get(result.tipo, result.tipo)
@@ -857,10 +864,26 @@ def generar_pdf_entrega(result, meta: dict) -> bytes:
 
     elements.append(_info_grid([
         ["Acta Núm.:", f"ENT-{folio}", "Ref. OT:",   f"OT-{folio}"],
-        ["Fecha:",      fecha,          "Cliente:",    cliente],
-        ["Tipo:",        tipo_label,    "Lugar entrega:", "________________________"],
+        ["Fecha de entrega:", fecha,   "Lugar entrega:", lugar],
+        ["Tipo:",        tipo_label,   "Folio cotización:", folio],
     ], st))
-    elements.append(Spacer(1, 0.4*cm))
+    elements.append(Spacer(1, 0.3*cm))
+
+    # Identificación de las partes — un acta oficial identifica a ambas:
+    # campos vacíos salen como línea para llenar a mano
+    elements.append(Paragraph("Identificación de las Partes", st["h2"]))
+    _blank_l = "________________________"
+    elements.append(_tabla_kv([
+        ["EL PROVEEDOR", empresa],
+        ["RFC / Domicilio / Tel.",
+         f"{EMPRESA.get('rfc') or _blank_l}  ·  {EMPRESA.get('direccion') or _blank_l}"
+         f"  ·  Tel: {EMPRESA.get('telefono') or _blank_l}"],
+        ["EL CLIENTE", cliente],
+        ["RFC / Domicilio / Tel.",
+         f"{meta.get('cliente_rfc') or _blank_l}  ·  {meta.get('cliente_dir') or _blank_l}"
+         f"  ·  Tel: {meta.get('cliente_tel') or _blank_l}"],
+    ]))
+    elements.append(Spacer(1, 0.3*cm))
 
     # Descripción entregada — para caja de luz la semántica es distinta:
     # se entrega UNA caja con su gráfico, no piezas sueltas

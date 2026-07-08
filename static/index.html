@@ -3395,10 +3395,10 @@ function renderResult(d) {
           onclick="return actualizarDocUrl('ot','${d.quote_id}')"
           style="background:#2d5986"
           title="Orden de trabajo (para autorizar con anticipo)">📋 Orden Trabajo</a>
-        <a class="btn-pdf" id="btn-ent-link" href="/api/entrega/${d.quote_id}" target="_blank"
-          onclick="return actualizarDocUrl('entrega','${d.quote_id}')"
+        <a class="btn-pdf" id="btn-ent-link" href="#"
+          onclick="return abrirModalEntrega('${d.quote_id}', ${precioFinal})"
           style="background:#2e7d32"
-          title="Acta de entrega y garantía (al terminar el trabajo)">✅ Acta Entrega</a>
+          title="Acta de entrega y garantía — pide fecha de entrega, lugar y anticipo">✅ Acta Entrega</a>
         <a class="btn-pdf" id="btn-pln-link" href="/api/plano/${d.quote_id}" target="_blank"
           onclick="return actualizarDocUrl('plano','${d.quote_id}')"
           style="background:#6a4c93"
@@ -4745,6 +4745,51 @@ function actualizarDocUrl(tipo, quoteId) {
   return true;
 }
 
+// ─── DATOS DE ENTREGA (acta) ─────────────────────────────────────────────────
+// El acta es un documento oficial: la fecha REAL de entrega (de ella corre la
+// garantía de 3 meses), el lugar y el anticipo pagado se capturan aquí. El RFC,
+// teléfono y dirección del cliente los jala el servidor del catálogo.
+
+let _entregaCtx = { qid: "", precioFinal: 0 };
+
+function abrirModalEntrega(qid, precioFinal) {
+  _entregaCtx = { qid, precioFinal: precioFinal || 0 };
+  const hoy = new Date();
+  const off = hoy.getTimezoneOffset() * 60000;
+  document.getElementById("ent-fecha").value =
+    new Date(hoy - off).toISOString().slice(0, 10);
+  document.getElementById("ent-lugar").value = "";
+  document.getElementById("ent-anticipo").value =
+    (_entregaCtx.precioFinal * 0.5).toFixed(2);
+  _updSaldoEntrega();
+  document.getElementById("entrega-modal").style.display = "flex";
+  return false;   // evita que el <a> navegue
+}
+
+function cerrarModalEntrega() {
+  document.getElementById("entrega-modal").style.display = "none";
+}
+
+function _updSaldoEntrega() {
+  const ant   = parseFloat(document.getElementById("ent-anticipo").value) || 0;
+  const saldo = Math.max(0, _entregaCtx.precioFinal - ant);
+  document.getElementById("ent-saldo-tag").textContent =
+    `Saldo a liquidar en la entrega: $${saldo.toLocaleString('es-MX', {minimumFractionDigits: 2})}` +
+    ` (total $${_entregaCtx.precioFinal.toLocaleString('es-MX', {minimumFractionDigits: 2})})`;
+}
+
+function generarActa() {
+  const p = new URLSearchParams(_pdfParams());
+  const f = document.getElementById("ent-fecha").value;          // aaaa-mm-dd
+  if (f) p.set("fecha_entrega", f.split("-").reverse().join("/"));
+  const lugar = document.getElementById("ent-lugar").value.trim();
+  if (lugar) p.set("lugar", lugar);
+  const ant = parseFloat(document.getElementById("ent-anticipo").value);
+  if (!isNaN(ant) && ant >= 0) p.set("anticipo", ant);
+  window.open(`/api/entrega/${_entregaCtx.qid}?${p.toString()}`, "_blank");
+  cerrarModalEntrega();
+}
+
 // ─── MODAL CONFIGURADOR ───────────────────────────────────────────────────────
 
 async function openCfgModal() {
@@ -5237,6 +5282,11 @@ function aplicarConfiguracion() {
           <input id="cli-tel" type="text" placeholder="614 000 0000"
             style="width:100%;box-sizing:border-box;height:32px;padding:0 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;font-family:inherit">
         </div>
+        <div style="grid-column:1/-1">
+          <label style="font-size:11px;color:#555">Dirección / Domicilio</label>
+          <input id="cli-dir" type="text" placeholder="Calle, número, colonia, ciudad"
+            style="width:100%;box-sizing:border-box;height:32px;padding:0 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;font-family:inherit">
+        </div>
       </div>
       <div style="display:flex;gap:8px">
         <button onclick="guardarCliente()" style="height:32px;padding:0 16px;background:#13203a;color:#fff;
@@ -5248,6 +5298,36 @@ function aplicarConfiguracion() {
 
     <!-- Lista -->
     <div id="clientes-lista" style="padding:16px 24px;min-height:180px"></div>
+  </div>
+</div>
+
+<!-- ══════════════════ MODAL DATOS DE ENTREGA (acta) ══════════════════ -->
+<div id="entrega-modal" style="display:none;position:fixed;inset:0;background:rgba(4,7,12,.8);
+  z-index:2600;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--k2);border:1px solid var(--line2);border-radius:14px;
+              width:min(430px,96vw);padding:16px 18px;box-shadow:0 32px 80px rgba(0,0,0,.6)">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <h3 style="flex:1;font-size:14px;color:var(--txt)">Datos de entrega</h3>
+      <button class="btn-pill" onclick="cerrarModalEntrega()"
+              style="padding:2px 9px;font-size:13px;line-height:1">✕</button>
+    </div>
+    <p style="font-size:11px;color:var(--txt2);margin-bottom:10px;line-height:1.5">
+      La <b>garantía de 3 meses</b> corre desde esta fecha. RFC, teléfono y dirección
+      del cliente se toman solos del catálogo si el nombre coincide.
+    </p>
+    <label>Fecha de entrega</label>
+    <input type="date" id="ent-fecha">
+    <label>Lugar de entrega</label>
+    <input type="text" id="ent-lugar" placeholder="Ej. domicilio del cliente / taller SGI">
+    <label>Anticipo pagado ($)</label>
+    <input type="number" id="ent-anticipo" min="0" step="50" oninput="_updSaldoEntrega()">
+    <div class="info-tag" id="ent-saldo-tag" style="margin-top:8px;width:100%"></div>
+    <button onclick="generarActa()"
+      style="width:100%;margin-top:14px;padding:10px;border-radius:9px;cursor:pointer;
+             background:linear-gradient(180deg,#2e7d32,#1f5c24);color:#fff;
+             border:1px solid #3a9440;font-size:13px;font-weight:700;font-family:var(--sans)">
+      ✅ Generar acta de entrega
+    </button>
   </div>
 </div>
 
@@ -5559,10 +5639,10 @@ function renderClientes(lista) {
           ${c.nombre}
         </div>
         <div style="font-size:11px;color:#888;margin-top:2px">
-          ${[c.rfc, c.email, c.telefono].filter(Boolean).join(' · ') || '—'}
+          ${[c.rfc, c.email, c.telefono, c.direccion].filter(Boolean).join(' · ') || '—'}
         </div>
       </div>
-      <button onclick="editarCliente(${c.id},'${c.nombre.replace(/'/g,"\\'")}','${(c.rfc||'').replace(/'/g,"\\'")}','${(c.email||'').replace(/'/g,"\\'")}','${(c.telefono||'').replace(/'/g,"\\'")}')"
+      <button onclick="editarCliente(${c.id},'${c.nombre.replace(/'/g,"\\'")}','${(c.rfc||'').replace(/'/g,"\\'")}','${(c.email||'').replace(/'/g,"\\'")}','${(c.telefono||'').replace(/'/g,"\\'")}','${(c.direccion||'').replace(/'/g,"\\'")}')"
         style="height:28px;padding:0 10px;background:#e8f0fe;color:#1a56b0;border:none;border-radius:5px;font-size:12px;cursor:pointer">
         ✏ Editar
       </button>
@@ -5586,17 +5666,19 @@ function abrirFormCliente() {
   document.getElementById("cli-rfc").value = "";
   document.getElementById("cli-email").value = "";
   document.getElementById("cli-tel").value = "";
+  document.getElementById("cli-dir").value = "";
   document.getElementById("cli-form-box").style.display = "block";
   document.getElementById("cli-nombre").focus();
 }
 
-function editarCliente(id, nombre, rfc, email, tel) {
+function editarCliente(id, nombre, rfc, email, tel, direccion) {
   document.getElementById("cli-form-title").textContent = "Editar cliente";
   document.getElementById("cli-edit-id").value = id;
   document.getElementById("cli-nombre").value = nombre;
   document.getElementById("cli-rfc").value = rfc;
   document.getElementById("cli-email").value = email;
   document.getElementById("cli-tel").value = tel;
+  document.getElementById("cli-dir").value = direccion || "";
   document.getElementById("cli-form-box").style.display = "block";
   document.getElementById("cli-nombre").focus();
 }
@@ -5611,9 +5693,10 @@ async function guardarCliente() {
   const id = document.getElementById("cli-edit-id").value;
   const body = {
     nombre,
-    rfc:      document.getElementById("cli-rfc").value.trim(),
-    email:    document.getElementById("cli-email").value.trim(),
-    telefono: document.getElementById("cli-tel").value.trim(),
+    rfc:       document.getElementById("cli-rfc").value.trim(),
+    email:     document.getElementById("cli-email").value.trim(),
+    telefono:  document.getElementById("cli-tel").value.trim(),
+    direccion: document.getElementById("cli-dir").value.trim(),
   };
   if (id) body.id = parseInt(id);
   try {

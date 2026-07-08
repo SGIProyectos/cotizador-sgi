@@ -42,11 +42,12 @@ def init_db():
                 last_n INTEGER DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS clients (
-                id       INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre   TEXT NOT NULL,
-                rfc      TEXT DEFAULT '',
-                email    TEXT DEFAULT '',
-                telefono TEXT DEFAULT ''
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre    TEXT NOT NULL,
+                rfc       TEXT DEFAULT '',
+                email     TEXT DEFAULT '',
+                telefono  TEXT DEFAULT '',
+                direccion TEXT DEFAULT ''
             );
             -- Índices: aceleran filtros y orden del historial
             CREATE INDEX IF NOT EXISTS idx_quotes_fecha   ON quotes(fecha DESC);
@@ -59,6 +60,10 @@ def init_db():
         cols = {r[1] for r in c.execute("PRAGMA table_info(quotes)").fetchall()}
         if "svg_text" not in cols:
             c.execute("ALTER TABLE quotes ADD COLUMN svg_text TEXT DEFAULT ''")
+        # Migración defensiva: dirección del cliente (para acta de entrega)
+        ccols = {r[1] for r in c.execute("PRAGMA table_info(clients)").fetchall()}
+        if "direccion" not in ccols:
+            c.execute("ALTER TABLE clients ADD COLUMN direccion TEXT DEFAULT ''")
 
 
 def next_folio() -> str:
@@ -136,20 +141,35 @@ def list_clients(q: str = "") -> list[dict]:
 
 
 def save_client(nombre: str, rfc: str = "", email: str = "",
-                telefono: str = "", client_id: int | None = None) -> int:
+                telefono: str = "", direccion: str = "",
+                client_id: int | None = None) -> int:
     with _conn() as c:
         if client_id:
             c.execute(
-                "UPDATE clients SET nombre=?,rfc=?,email=?,telefono=? WHERE id=?",
-                (nombre, rfc, email, telefono, client_id)
+                "UPDATE clients SET nombre=?,rfc=?,email=?,telefono=?,direccion=? WHERE id=?",
+                (nombre, rfc, email, telefono, direccion, client_id)
             )
             return client_id
         else:
             cur = c.execute(
-                "INSERT INTO clients(nombre,rfc,email,telefono) VALUES(?,?,?,?)",
-                (nombre, rfc, email, telefono)
+                "INSERT INTO clients(nombre,rfc,email,telefono,direccion) VALUES(?,?,?,?,?)",
+                (nombre, rfc, email, telefono, direccion)
             )
             return cur.lastrowid
+
+
+def get_client_by_name(nombre: str) -> dict | None:
+    """Cliente cuyo nombre coincide (sin distinguir mayúsculas); None si no hay.
+    Es el enlace catálogo → documentos: el acta/OT jalan RFC, teléfono y
+    dirección registrados a partir del nombre capturado en la cotización."""
+    if not nombre or not nombre.strip():
+        return None
+    with _conn() as c:
+        row = c.execute(
+            "SELECT * FROM clients WHERE nombre = ? COLLATE NOCASE "
+            "ORDER BY id LIMIT 1", (nombre.strip(),)
+        ).fetchone()
+    return dict(row) if row else None
 
 
 def delete_client(client_id: int):

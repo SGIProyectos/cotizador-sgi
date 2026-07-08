@@ -918,10 +918,23 @@ def fuente_optima(watts_total: float, uso: str = "exterior") -> dict:
     return min(candidatas, key=lambda f: f["precio"])
 
 
+# ─── DATOS DE LA EMPRESA (impresos en documentos oficiales) ──────────────────
+# Editar aquí o en catalog.json (sección "empresa"). Los campos vacíos salen
+# como línea en blanco en los PDFs para llenarse a mano.
+EMPRESA = {
+    "razon_social": "SGI Impresión y Diseño",
+    "rfc": "",
+    "direccion": "",
+    "telefono": "",
+    "email": "",
+}
+
+
 # ─── PERSISTENCIA DEL CATÁLOGO ───────────────────────────────────────────────
 
 def catalog_to_dict() -> dict:
     return {
+        "empresa": dict(EMPRESA),
         "laminas": LAMINAS,
         "leds_canal": LEDS_CANAL,
         "leds_caja": {"interior": LEDS_CAJA["interior"], "exterior": LEDS_CAJA["exterior"]},
@@ -951,6 +964,8 @@ def catalog_save():
 
 def catalog_apply(raw: dict):
     """Actualiza los globals del catálogo en lugar (in-place) con los datos de raw."""
+    if "empresa" in raw:
+        EMPRESA.update({k: str(v) for k, v in raw["empresa"].items() if k in EMPRESA})
     if "laminas" in raw:
         LAMINAS.clear()
         LAMINAS.update(raw["laminas"])
@@ -999,6 +1014,8 @@ def catalog_apply(raw: dict):
 
 def _catalog_merge(raw: dict):
     """Fusiona raw con los globals sin borrar defaults de código."""
+    if "empresa" in raw:
+        EMPRESA.update({k: str(v) for k, v in raw["empresa"].items() if k in EMPRESA})
     if "laminas" in raw:
         LAMINAS.update(raw["laminas"])
     if "leds_canal" in raw:
