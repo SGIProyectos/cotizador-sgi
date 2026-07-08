@@ -35,7 +35,9 @@ python -m pytest tests/test_calculator.py::test_<name> -v
 pip-compile requirements.txt -o requirements.lock
 ```
 
-Lint config: `pyproject.toml` (ruff, line-length 100, py310 target, rule sets E/W/F/I/B/UP/SIM). Tests live in `tests/` (pytest, 82 tests as of last count). CI: `.github/workflows/test.yml` runs ruff + pytest with coverage gate of 70% on push/PR to `main`.
+Lint config: `pyproject.toml` (ruff, line-length 100, py310 target, rule sets E/W/F/I/B/UP/SIM). Tests live in `tests/` (pytest, 95 tests as of last count). CI: `.github/workflows/test.yml` runs ruff + pytest with coverage gate of 70% on push/PR to `main`.
+
+Useful pattern for visually verifying PDF output (planos, OT): generate the PDF, render pages to PNG with PyMuPDF (`fitz`, ~110 dpi), then inspect the PNG with the Read tool. See `tmp/test_plano.py` for a working harness (requires `PYTHONPATH=.`).
 
 ## Deployment
 
@@ -51,7 +53,7 @@ Deployed to Render.com via `render.yaml` (Python 3.11, `uvicorn main:app --host 
 4. **History** → `GET /api/quotes` (list with filters), `GET /api/quotes/{id}/open` (re-open: rebuilds session + QuoteResult from DB), `DELETE /api/quotes/{id}`
 5. **Clients** → `GET /api/clients?q=` (search), `POST /api/clients` (upsert), `DELETE /api/clients/{id}`
 6. **Catalog** → `GET /api/catalog` returns current in-memory catalog; `POST /api/catalog` calls `catalog_apply()` + `catalog_save()` to persist to `catalog.json`
-7. **Raster → SVG** → `POST /api/vectorize` (uploads JPG/PNG, runs `vectorizer.vectorize()` — flood-fill background removal + vtracer → produces a synthetic SVG that is then re-fed through `parse_svg`, populating `_svg_store` as if the user had uploaded it directly). Only the raster→SVG `vectorize()` survives — the abandoned `vectorize_with_ai` experiment was removed (see §7).
+7. **Raster → SVG** → `POST /api/vectorize` (uploads JPG/PNG, runs `vectorizer.vectorize()` — single-silhouette cutting pipeline: bilateral+median smoothing → K-means quantization in LAB → background = border-dominant clusters → foreground union cleaned (small components/holes dropped, letter counters preserved) → vtracer in binary mode → produces a synthetic SVG that is then re-fed through `parse_svg`, populating `_svg_store` as if the user had uploaded it directly). Only the raster→SVG `vectorize()` survives — the abandoned `vectorize_with_ai` experiment was removed (see §7).
 
 ### Module responsibilities
 
@@ -62,9 +64,9 @@ Deployed to Render.com via `render.yaml` (Python 3.11, `uvicorn main:app --host 
 | `db.py` | SQLite persistence: `init_db()`, `save_quote()`, `list_quotes()`, `get_quote()`, `next_folio()` (SGI-YYYY-NNNN), client CRUD |
 | `catalog_data.py` | All pricing data (LAMINAS, LEDS_CANAL, LEDS_CAJA, FUENTES, PEGAMENTOS, CABLES, SILVATRIM, PRECIOS_BASE, TIPOS_CONSTRUCCION, GRUAS), auto-selection functions, catalog persistence |
 | `pdf_gen.py` | ReportLab PDF generation for the three business documents; purely presentational |
-| `plano_gen.py` | Plano de medidas PDFs: `generar_plano_cliente()` (drawing + numbered badges + dimension table) and `generar_plano_taller()` (adds per-piece material column + technical notes). Drawing is scaled by the joint bbox of kept pieces, not the viewBox |
+| `plano_gen.py` | Plano de medidas PDFs: `generar_plano_cliente()` / `generar_plano_taller()` — see "Planos de medidas" section for the anti-overlap cota system |
 | `excel_gen.py` | openpyxl XLSX export of a `QuoteResult` (Resumen + Letras + Desglose sheets) |
-| `vectorizer.py` | Raster→SVG pipeline: OpenCV flood-fill background removal + vtracer Bézier tracing. Only `vectorize()` is real; do NOT add LLM-based variants (see §7). |
+| `vectorizer.py` | Raster→SVG silhouette pipeline for cutting: K-means (LAB) quantization + border-based background detection + vtracer binary tracing. Handles textured/photographic backgrounds; the tuning params (`bg_tol`, `filter_speckle`, `color_precision`, `layer_difference`) map to user-facing sliders. Only `vectorize()` is real; do NOT add LLM-based variants (see §7). |
 | `static/index.html` | Single-file SPA (vanilla JS + inline CSS); no build step |
 | `catalog.json` | Runtime price overrides; loaded at startup by `catalog_load()`, updated via `POST /api/catalog` |
 | `cotizador.db` | SQLite database file (quotes, folio_seq, clients tables); auto-created by `db.init_db()` on startup. `init_db()` also runs a defensive migration adding `quotes.svg_text` if missing |
@@ -98,7 +100,11 @@ c_cercha = area_cercha_total * precio_cm2(mat_cercha)
 
 ### LEDs (channel letters)
 
-LED modules are distributed over the face AREA (illumination from inside the channel), not along the perimeter. Coverage per module ≈ `cercha_cm × espaciado_led_cm × 2`; each piece gets `max(3, ceil(area_pieza / cobertura_modulo))` modules (minimum 3 for uniformity on small letters). `led_id` param: `"auto"` uses `led_recomendado(cercha_cm, uso)`, or a specific LEDS_CANAL id overrides. Note: the per-piece display breakdown in `desglose_letras` estimates modules as `ceil(perim / espaciado)` — the global count (area-based) is authoritative for cost.
+LED counting depends on `modo_iluminacion` in the TIPOS_CONSTRUCCION config (`"cara"` default, `"halo"` for `retro_halo`):
+- **`cara`** (light through the face): modules distributed over face AREA. Coverage per module ≈ `cercha_cm × espaciado_led_cm × 2`; each piece gets `max(3, ceil(area_pieza / cobertura_modulo))` modules.
+- **`halo`** (light against the wall): ONE perimeter run, `max(3, ceil(perimeter_cm / _ESPACIADO_HALO_CM))` per piece (`_ESPACIADO_HALO_CM = 15.0` in `calculator.py`). This was the key fix that made halo letter quotes competitive (area-based counting overcosted them ~4×).
+
+Minimum 3 modules per piece for uniformity. `led_id` param: `"auto"` uses `led_recomendado(cercha_cm, uso)`, or a specific LEDS_CANAL id overrides. The per-piece display count in `desglose_letras` uses the matching spacing (`_ESPACIADO_HALO_CM` for halo, `espaciado_led_cm` otherwise) — the global count is authoritative for cost.
 
 ### Fuente (power supply) cost
 
@@ -132,18 +138,18 @@ IVA is always 16% (`subtotal * 0.16`), hardcoded in `calculator.py`.
 
 ### Construction types (TIPOS_CONSTRUCCION)
 
-| ID | Cara | Fondo PVC | LEDs | Distanciadores | Multiplicador default |
-|----|------|-----------|------|----------------|-----------------------|
-| `cajon_luz` | acrilico | ✓ | ✓ | ✗ | `acrilico_con_luz_std` (4.5) |
-| `retro_halo` | aluminio | ✗ | ✓ | ✓ | `aluminio_con_luz` (2.5) |
-| `sin_luz` | aluminio | ✓ | ✗ | ✗ | `aluminio_sin_luz` (2.0) |
-| `abierta_luz` | ninguna | ✓ | ✓ | ✗ | `aluminio_con_luz` (2.5) |
+| ID | Cara | Fondo PVC | LEDs | Modo ilum. | Distanciadores | Multiplicador default |
+|----|------|-----------|------|-----------|----------------|-----------------------|
+| `cajon_luz` | acrilico | ✓ | ✓ | cara | ✗ | `acrilico_con_luz_std` (4.5) |
+| `retro_halo` | aluminio | ✗ | ✓ | halo | ✓ | `aluminio_con_luz` (2.5) |
+| `sin_luz` | aluminio | ✓ | ✗ | — | ✗ | `aluminio_sin_luz` (2.0) |
+| `abierta_luz` | ninguna | ✓ | ✓ | cara | ✗ | `aluminio_con_luz` (2.5) |
 
 When `tipo_construccion` changes in the UI, `onTipoConstruccionChange()` must sync the `tipo_multiplicador` select to `multiplicador_default`.
 
 `DISTANCIADORES` cost is added only when `config["distanciadores"]` is True (i.e., `retro_halo`): `n_letras × DISTANCIADORES["precio"]`.
 
-**Silvatrim** is now optional, controlled by `silvatrim_id` in `LetrasRequest`: `""` = none, `"auto"` (default) = `silvatrim_recomendado(cercha_cm)` auto-selects the profile, or a specific SILVATRIM id overrides. Cost = `(perimeter_total / 100) m × sv["precio_ml"]`. The `desglose_letras[*]["cercha_total_cm"]` = perimeter × 1.10 (10% waste for cuts/bends). PDFs only show the Silvatrim row when `metros_silvatrim > 0`.
+**Silvatrim** is now optional, controlled by `silvatrim_id` in `LetrasRequest`: `""` = none, `"auto"` (default) = `silvatrim_recomendado(cercha_cm)` auto-selects the profile, or a specific SILVATRIM id overrides. **`"auto"` resolves to none when `config["cara"] != "acrilico"`** — silvatrim is an acrylic-edge finish, so aluminum-faced constructions (retro_halo, sin_luz) don't get it unless an explicit id is passed. Cost = `(perimeter_total / 100) m × sv["precio_ml"]`. The `desglose_letras[*]["cercha_total_cm"]` = perimeter × 1.10 (10% waste for cuts/bends). PDFs only show the Silvatrim row when `metros_silvatrim > 0`.
 
 ### Light box (`cotizar_caja`) specifics
 
@@ -202,7 +208,16 @@ Generators in `pdf_gen.py`:
 - `generar_pdf_ot(result, meta)` — internal work order (Orden de Trabajo): portrait page with a technical warnings box (`_avisos_tecnicos_ot()` — fabrication rules in orange border) + a **landscape page** rendering the SVG design with numbered badges color-coded per material (when the persisted SVG is available)
 - `generar_pdf_entrega(result, meta)` — delivery receipt + warranty (Acta de Entrega)
 
-Plano generators live in `plano_gen.py` (`generar_plano_cliente` / `generar_plano_taller`): page 1 is the drawing with numbered badges (no per-piece dimension lines when >15 pieces — they become unreadable), page 2 is a tabular per-piece listing (# · type · dimensions · perimeter [· material]). Circle-shaped pieces (square bbox + perimeter ≈ π·d) display as "Ø D". Badge colors follow the same material palette as the OT (`_OT_MATERIAL_PALETTE`).
+### Planos de medidas (`plano_gen.py`)
+
+`generar_plano_cliente()` / `generar_plano_taller()` share `_construir_pdf()`. Page 1: landscape drawing + numbered badges + piece table (right column) + cajetín (title block with Cliente/Folio/Fecha/Medidas/Escala; cliente version adds a signature line). Page 2: taller always gets it (BOM via `_construir_bom`, "piezas a fabricar" table with per-piece material + LEDs, cercha side-profile schematic, notas); cliente only on table overflow.
+
+Anti-overlap system (the owner's hard requirement — cotas must NEVER be "enzimadas"):
+- **Scale contract**: `main.py` passes `altura_cm` = height of the joint bbox of ALL closed pieces in cm, so `cm_per_unit = altura_cm / bbox_h_svg` with that same bbox. If you change one side, change both (`tmp/test_plano.py` replicates the contract).
+- **Piece filtering**: pieces = closed AND not `es_hueco`. Holes are still drawn (visual fidelity) but not numbered/measured/tabled. The joint bbox for scale/global cotas still uses ALL closed pieces.
+- **Per-piece cotas** only when `n_piezas ≤ MAX_PIEZAS_COTAS` (20). Width cotas go below in ≤`MAX_FILAS_COTA` (3) staggered rows; height cotas on the left, one per DISTINCT height (`EPS_ALTURAS_CM` = 0.5), ≤`MAX_COLS_ALTO` (2) columns. `_pack_intervalos()` (greedy interval-graph coloring using real text widths from pdfmetrics) assigns rows; pieces that don't fit are **omitted** from cotas (never overlapped) — the table always has every measure. Width and height packings are independent.
+- **Badges**: `_dibujar_badges` nudges colliding badges vertically (±1..3 pill heights). Circle-shaped pieces (square bbox + perimeter ≈ π·d) display as "Ø D" in tables. Badge colors follow the same material palette as the OT.
+- **Escala** in the cajetín = real cm per paper cm (`cm_per_unit * cm / scale_draw`), rounded to a "plan-nice" value via `_escala_bonita` (1:2, 1:30, 1:50…).
 
 ### QuoteResult fields (key additions)
 
@@ -220,14 +235,17 @@ Beyond basic cost fields, `QuoteResult` includes:
 
 ### Catalog persistence
 
-- `catalog_load()` (called at module import) merges `catalog.json` into globals using `_catalog_merge()` — preserves Python defaults (e.g. `metros_por_envase`) not present in the JSON file
+- `catalog_load()` (called at module import) merges `catalog.json` into globals using `_catalog_merge()` — preserves Python defaults (e.g. `metros_por_envase`) not present in the JSON file. **Consequence**: after changing prices in `catalog_data.py` defaults, an existing `catalog.json` still wins — move it aside and regenerate via `catalog_save()`
+- LEDS_CANAL, FUENTES, SILVATRIM and PEGAMENTOS prices were recalibrated against the supplier catalog "Todo para el Anunciero" (feb-2026); validated against a real market quote (Asapp job: 3D halo letters now yield ~22% gross margin vs the market price — previously the engine overcosted them into impossibility)
 - `catalog_apply()` (called by `POST /api/catalog`) does a full replace (used by the catalog editor UI)
 - PEGAMENTOS keys are tuples `(cercha_tipo, cara_tipo)`; serialized to JSON as `"aluminio|acrilico"`
 - `NEON_FLEX` is defined in `catalog_data.py` (neon flex strips with prices and colors) but is **not yet used in any quoting logic** — it exists for future expansion
 
 ### SVG parsing and scale detection
 
-`parse_svg()` treats the SVG as a **universe of pieces**, not just letters: `<path>`, `<rect>`, `<circle>`, `<ellipse>`, `<polygon>`, `<polyline>`, `<line>` all become `PathInfo` entries. Each `PathInfo` carries `svg_id` (original `id` attribute — the stable key used by UI cards and planos). `SVGData` carries `svg_unit` (detected from width/height attributes: px/mm/cm/in/pt) and `artboard_w_cm` (> 0 when the SVG declares a physical unit that maps to cm). UI labels use the generic term "pieza" instead of "letra".
+`parse_svg()` treats the SVG as a **universe of pieces**, not just letters: `<path>`, `<rect>`, `<circle>`, `<ellipse>`, `<polygon>`, `<polyline>`, `<line>` all become `PathInfo` entries. Each `PathInfo` carries `svg_id` (original `id` attribute — the stable key used by UI cards and planos) and `fill` (resolved from the fill attribute, `style=`, or CSS class in `<style>` via `_collect_primitives`). `SVGData` carries `svg_unit` (detected from width/height attributes: px/mm/cm/in/pt) and `artboard_w_cm` (> 0 when the SVG declares a physical unit that maps to cm). UI labels use the generic term "pieza" instead of "letra".
+
+**Hole detection (`es_hueco`)**: sign-shop SVG exports paint letter counters and background plates with the background color (white). `_marcar_huecos()` (called inside `parse_svg`) sets `PathInfo.es_hueco = True` for a white-filled closed piece that is either (a) bbox-contained inside a non-white closed piece (letter counter) or (b) contains ≥60% of the other closed pieces (background plate). An isolated white piece (real white letter) is NOT marked. Geometric even-odd nesting does NOT work for this — knockout subpaths make every interior point "outside" everything — the fill color is the discriminating signal. Planos, OT badges, and their tables filter on `es_hueco`; **the quoting engine does NOT filter holes yet** (they still count as pieces and the tallest hole can capture `altura_letra_cm` scaling) — changing that alters prices and needs owner sign-off.
 
 Scale priority (`apply_scale()`):
 1. `altura_letra_cm > 0` → scale from tallest piece's bounding box height (user knows the real measurement)
@@ -240,7 +258,7 @@ Scale priority (`apply_scale()`):
 
 These are agreed improvements not yet implemented, ordered by priority.
 
-Already shipped: SQLite persistence, quote history/list, re-open quote, client catalog, sequential folio `SGI-YYYY-NNNN`, **Excel export** (`/api/excel/{quote_id}`), **automated catalog + DB backups** (startup + every 24h + on every `POST /api/catalog`, retention 30 days), SQLite indexes on `quotes(fecha, cliente, folio, tipo)` and `clients(nombre)`, **SVG preview in UI** (interactive: piece ↔ card highlighting, numbered badges), **planos de medidas** (`/api/plano`, `/api/plano-taller`), SVG persistence in DB (`quotes.svg_text`).
+Already shipped: SQLite persistence, quote history/list, re-open quote, client catalog, sequential folio `SGI-YYYY-NNNN`, **Excel export** (`/api/excel/{quote_id}`), **automated catalog + DB backups** (startup + every 24h + on every `POST /api/catalog`, retention 30 days), SQLite indexes on `quotes(fecha, cliente, folio, tipo)` and `clients(nombre)`, **SVG preview in UI** (interactive: piece ↔ card highlighting, numbered badges), **planos de medidas v2** (`/api/plano`, `/api/plano-taller` — per-piece cotas with anti-overlap partial packing, badge anti-collision, hueco filtering), SVG persistence in DB (`quotes.svg_text`), **hole detection** (`es_hueco` in planos/OT).
 
 ### Useful — productivity
 1. **Multi-SVG per quote** — support quoting multiple signs in one project (different SVGs, each with its own dimensions).
@@ -465,7 +483,11 @@ Análisis honesto del estado actual. Marcado por criticidad.
 
 Fase 1 de endurecimiento cerrada (commits `18155a3`, `7fd86c2`, `d9bf8a5`, `603f068`, `ed59cad`, `da8776e`, `e4cc9a1`, `e4e1d76`). Lo que sigue documentado como pendiente arriba ya **NO** está pendiente: Dockerfile, `requirements.lock`, CI, ruff, mypy, índices SQLite, backup automático, thread-safety, logging exhaustivo, Excel export, vectorización Claude removida — todo committed.
 
-**Trabajo de junio-julio 2026** (fases A-G de mejoras al motor de cotización, ver secciones de arquitectura arriba): refactor de `parse_svg` a "universo de piezas" con detección de unidad real del SVG, material de cara adaptativo por pieza individual, LEDs por área de cobertura (mín. 3/pieza), silvatrim opcional, pegamento recalibrado con datos de campo, detección de placas redondeadas en cajas, costos de maquila y cables en cajas, LED `modulo_panel`, planos de medidas cliente/taller (`plano_gen.py`), OT con página landscape del diseño + badges por material, SVG persistido en DB, desglose de costos por componente y por pieza con margen real, `warnings` de inconsistencias. 82 tests.
+**Trabajo de junio-julio 2026** (fases A-G de mejoras al motor de cotización, ver secciones de arquitectura arriba): refactor de `parse_svg` a "universo de piezas" con detección de unidad real del SVG, material de cara adaptativo por pieza individual, LEDs por `modo_iluminacion` (cara = área de cobertura, halo = perímetro/15 cm; mín. 3/pieza), silvatrim opcional (auto→ninguno si la cara no es acrílico), pegamento recalibrado con datos de campo, detección de placas redondeadas en cajas, costos de maquila y cables en cajas, LED `modulo_panel`, planos de medidas v2 cliente/taller (`plano_gen.py`: cotas por pieza con empaquetado parcial anti-solape, badges con anti-colisión), detección de huecos por fill blanco (`es_hueco` — planos/OT los excluyen; el motor de cotización NO todavía, ver abajo), OT con página landscape del diseño + badges por material, SVG persistido en DB, catálogo recalibrado con lista de proveedor feb-2026 ("Todo para el Anunciero"), desglose de costos por componente y por pieza con margen real, `warnings` de inconsistencias. 95 tests.
+
+**Trabajo SIN COMMITEAR** (el propietario aún no autoriza el commit): detección de huecos (`calculator.py`), plano v2 con fixes de CASSEL (`plano_gen.py`), exclusión de huecos en planos/OT (`main.py`, `pdf_gen.py`), tests de huecos, **vectorizador v2** (`vectorizer.py` reescrito: silueta única para corte con K-means LAB + fondo por borde — soporta fondos texturizados; 8 tests en `tests/test_vectorizer.py`, verificado con logos reales de EJEMPLOS), recalibración de catálogo (`catalog_data.py`, `catalog.json`), rediseño UI oscuro premium CMYK (`static/index.html`), actualizaciones de este CLAUDE.md. Todo en verde: ruff limpio, 95/95 tests.
+
+**Decisión abierta con el propietario:** ¿el motor de cotización también debe ignorar huecos (excluirlos del conteo/precio y escalar `altura_letra_cm` por la pieza REAL más alta, no por la placa de fondo)? Cambia precios — NO hacerlo sin su aprobación explícita.
 
 **Archivos siempre untracked (locales, NO commitear):**
 - `cotizador.db`, `server.log`, `server_err.log`, `tmp_check.py`
