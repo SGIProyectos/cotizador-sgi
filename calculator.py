@@ -608,7 +608,10 @@ def parse_svg(svg_bytes: bytes) -> SVGData:
     for i, p in enumerate(path_infos):
         p.id = f"Pieza {i + 1}"
 
-    max_h_px = max((p.bbox["h"] for p in path_infos), default=0.0)
+    # La pieza más alta para escalar excluye huecos: la placa de fondo blanca
+    # no debe capturar la altura que el usuario captura ("la letra mide X cm")
+    reales = [p for p in path_infos if p.is_closed and not p.es_hueco]
+    max_h_px = max((p.bbox["h"] for p in (reales or path_infos)), default=0.0)
 
     # 7. Calcular ancho real del artboard en cm (si la unidad lo permite)
     artboard_w_cm = vb_w * factor_to_cm if factor_to_cm > 0 else 0.0
@@ -698,14 +701,20 @@ def cotizar_letras(
         svg_data = apply_scale(svg_data, real_width_cm, altura_cm=altura_letra_cm)
     else:
         svg_data = apply_scale(svg_data, real_width_cm)
-        if svg_data.paths:
-            max_h_px = max(p.bbox["h"] for p in svg_data.paths)
+        reales = [p for p in svg_data.paths if not p.es_hueco] or svg_data.paths
+        if reales:
+            max_h_px = max(p.bbox["h"] for p in reales)
             altura_letra_cm = max_h_px * svg_data.scale_factor
         if altura_letra_cm <= 0:
             altura_letra_cm = 15.0
 
-    # Filtrar solo paths cerrados con área significativa
-    letras = [p for p in svg_data.paths if p.is_closed and p.area_cm2 > 1.0]
+    # Filtrar solo paths cerrados con área significativa; los huecos (contadores
+    # de letra / placas de fondo pintados de blanco) no se fabrican ni se cobran
+    letras = [
+        p for p in svg_data.paths
+        if p.is_closed and not p.es_hueco and p.area_cm2 > 1.0
+    ]
+    n_huecos = sum(1 for p in svg_data.paths if p.is_closed and p.es_hueco)
     if not letras:
         letras = svg_data.paths  # fallback: usar todos
 
@@ -1060,6 +1069,11 @@ def cotizar_letras(
         warnings.append("El tipo de construcción lleva LEDs pero el cálculo dio 0 módulos. Verifica el espaciado.")
     if cercha_cm <= 0:
         warnings.append("Profundidad de cercha es 0 cm — el costo de cercha se omite. Usa 'Perímetro total' en vez de 'Cercha total'.")
+    if n_huecos:
+        warnings.append(
+            f"{n_huecos} pieza(s) con relleno blanco detectadas como hueco/placa de fondo "
+            f"— excluidas del cobro (no se fabrican)."
+        )
 
     return QuoteResult(
         tipo="letras_3d",
@@ -1125,7 +1139,12 @@ def cotizar_planas(
 
     svg_data = apply_scale(svg_data, real_width_cm)
 
-    letras = [p for p in svg_data.paths if p.is_closed and p.area_cm2 > 0.5]
+    # Igual que letras 3D: los huecos (blancos) no se fabrican ni se cobran
+    letras = [
+        p for p in svg_data.paths
+        if p.is_closed and not p.es_hueco and p.area_cm2 > 0.5
+    ]
+    n_huecos = sum(1 for p in svg_data.paths if p.is_closed and p.es_hueco)
     if not letras:
         letras = svg_data.paths
 
@@ -1225,6 +1244,11 @@ def cotizar_planas(
         warnings.append(
             f"Multiplicador ×{multiplicador} es alto para letras planas (típico es 1.5-2.5). "
             f"Verifica que sea intencional."
+        )
+    if n_huecos:
+        warnings.append(
+            f"{n_huecos} pieza(s) con relleno blanco detectadas como hueco/placa de fondo "
+            f"— excluidas del cobro (no se fabrican)."
         )
 
     return QuoteResult(

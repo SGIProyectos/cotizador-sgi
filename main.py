@@ -277,6 +277,7 @@ async def api_parse_svg(file: UploadFile = File(...)):
             "perimeter_px": round(p.perimeter_px, 2),
             "area_px": round(p.area_px, 2),
             "is_closed": p.is_closed,
+            "es_hueco": p.es_hueco,
             "bbox": p.bbox,
         }
         for p in svg_data.paths

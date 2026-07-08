@@ -626,3 +626,62 @@ class TestDeteccionHuecos:
             pytest.skip("karate1.svg no disponible")
         data = parse_svg(svg.read_bytes())
         assert not any(p.es_hueco for p in data.paths)
+
+
+class TestHuecosExcluidosDelCobro:
+    """El motor de cotización no cobra piezas fantasma (es_hueco): ni el
+    contador de una letra ni la placa de fondo entran al conteo, materiales,
+    fórmula de precio ni al anclaje de escala por altura."""
+
+    # Placa blanca de fondo + 3 letras negras + contador blanco en la de en medio
+    SVG_CON_FANTASMAS = b"""<?xml version="1.0"?>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200">
+      <rect x="10" y="10" width="380" height="180" fill="white"/>
+      <rect x="50" y="50" width="60" height="80" fill="#000"/>
+      <rect x="150" y="50" width="60" height="80" fill="#000"/>
+      <rect x="250" y="50" width="60" height="80" fill="#000"/>
+      <rect x="170" y="70" width="20" height="30" fill="#FFFFFF"/>
+    </svg>"""
+
+    # Las mismas 3 letras, sin figuras blancas
+    SVG_LIMPIO = b"""<?xml version="1.0"?>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200">
+      <rect x="50" y="50" width="60" height="80" fill="#000"/>
+      <rect x="150" y="50" width="60" height="80" fill="#000"/>
+      <rect x="250" y="50" width="60" height="80" fill="#000"/>
+    </svg>"""
+
+    def _letras(self, svg_bytes):
+        return cotizar_letras(
+            svg_data=parse_svg(svg_bytes),
+            real_width_cm=200.0,
+            altura_letra_cm=50.0,
+            cercha_cm=10.0,
+        )
+
+    def test_escala_ancla_a_pieza_real_no_a_placa(self):
+        data = parse_svg(self.SVG_CON_FANTASMAS)
+        # La pieza más alta para escalar es la letra (80 px), no la placa (180 px)
+        assert data.max_pieza_height_px == pytest.approx(80)
+
+    def test_letras_excluye_fantasmas_del_conteo(self):
+        r = self._letras(self.SVG_CON_FANTASMAS)
+        assert r.paths_count == 3
+        assert len(r.desglose_letras) == 3
+        assert any("hueco" in w.lower() for w in r.warnings)
+
+    def test_letras_precio_igual_que_svg_limpio(self):
+        # Cotizar con fantasmas debe dar EXACTAMENTE lo mismo que sin ellos
+        con = self._letras(self.SVG_CON_FANTASMAS)
+        sin = self._letras(self.SVG_LIMPIO)
+        assert con.total == pytest.approx(sin.total, rel=1e-6)
+        assert con.precio_final == pytest.approx(sin.precio_final, rel=1e-6)
+        assert con.modulos_led == sin.modulos_led
+
+    def test_planas_excluye_fantasmas(self):
+        r = cotizar_planas(
+            svg_data=parse_svg(self.SVG_CON_FANTASMAS),
+            real_width_cm=200.0,
+        )
+        assert r.paths_count == 3
+        assert any("hueco" in w.lower() for w in r.warnings)

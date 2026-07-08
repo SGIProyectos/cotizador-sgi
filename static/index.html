@@ -2630,7 +2630,7 @@ function _addPieceBadges(svgEl, paths, colorByIndex, viewboxW) {
   // Evita que piezas grandes generen números enormes que tapen el diseño.
   let minPieceDim = Infinity;
   paths.forEach(p => {
-    if (!p.is_closed) return;
+    if (!p.is_closed || p.es_hueco) return;
     const m = Math.min(p.bbox?.w || 0, p.bbox?.h || 0);
     if (m > 0 && m < minPieceDim) minPieceDim = m;
   });
@@ -2647,7 +2647,7 @@ function _addPieceBadges(svgEl, paths, colorByIndex, viewboxW) {
   layer.classList.add("pieza-labels");
   let num = 0;
   paths.forEach((p, idx) => {
-    if (!p.is_closed) return;
+    if (!p.is_closed || p.es_hueco) return;
     num++;
     const color = colorByIndex(idx) || "#888";
     const cx = (p.bbox?.x || 0) + (p.bbox?.w || 0) / 2;
@@ -2803,7 +2803,13 @@ function colorizePaths(svgEl, paths) {
     paths.forEach((p, i) => {
       const el = getEl(p, i);
       if (!el) return;
-      if (p.is_closed) {
+      if (p.is_closed && p.es_hueco) {
+        // Hueco / placa de fondo — gris tenue, no se cotiza ni se numera
+        el.style.fill        = "rgba(140,140,140,0.10)";
+        el.style.stroke      = "#9aa2ab";
+        el.style.strokeWidth = "1";
+        el.style.strokeDasharray = "5 4";
+      } else if (p.is_closed) {
         const c = PATH_PALETTE[colorIdx % PATH_PALETTE.length];
         colorIdx++;
         el.style.fill        = c + "33";
@@ -2822,6 +2828,7 @@ function colorizePaths(svgEl, paths) {
     const colorByIdxLetras = (() => {
       let cIdx = 0;
       const map = paths.map(p => {
+        if (p.is_closed && p.es_hueco) return null;
         if (p.is_closed) { const c = PATH_PALETTE[cIdx % PATH_PALETTE.length]; cIdx++; return c; }
         return null;
       });
@@ -2830,14 +2837,21 @@ function colorizePaths(svgEl, paths) {
     _addPieceBadges(svgEl, paths, colorByIdxLetras, svgViewboxW || 1000);
     _attachPieceHandlers(svgEl, paths, colorByIdxLetras);
 
-    const closedCount = paths.filter(p => p.is_closed).length;
-    const openCount   = paths.length - closedCount;
+    const huecoCount  = paths.filter(p => p.is_closed && p.es_hueco).length;
+    const closedCount = paths.filter(p => p.is_closed).length - huecoCount;
+    const openCount   = paths.length - closedCount - huecoCount;
     const legendItems = [];
     if (closedCount > 0) {
       legendItems.push({
         color: PATH_PALETTE[0],
         fill:  PATH_PALETTE[0] + "33",
         label: `${closedCount} pieza${closedCount === 1 ? '' : 's'} detectada${closedCount === 1 ? '' : 's'} (1 color por pieza)`,
+      });
+    }
+    if (huecoCount > 0) {
+      legendItems.push({
+        color: "#9aa2ab", fill: "rgba(140,140,140,0.10)", dash: true,
+        label: `${huecoCount} hueco(s)/placa — no se cotizan`,
       });
     }
     if (openCount > 0) {
@@ -3038,6 +3052,7 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
   // Asignar colores igual que colorizePaths: cerrado→paleta en orden, abierto→gris
   let _colorIdx = 0;
   const pathColors = paths.map(p => {
+    if (p.is_closed && p.es_hueco) return "#9aa2ab";
     if (p.is_closed) {
       const c = PATH_PALETTE[_colorIdx % PATH_PALETTE.length];
       _colorIdx++;
@@ -3045,6 +3060,12 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
     }
     return "#aaa";
   });
+  // Numeración: solo piezas reales (cerradas y no hueco) — coincide con los
+  // badges del preview, los planos y la OT
+  let _numIdx = 0;
+  const pieceNums = paths.map(p =>
+    (p.is_closed && !p.es_hueco) ? ++_numIdx : null
+  );
 
   const header = hasCm
     ? `<div style="grid-column:1/-1;font-size:12px;color:#666;margin-bottom:4px">
@@ -3063,19 +3084,26 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
     const tira_neta = hasCercha ? (p.perimeter_px * scaleFactor).toFixed(3) : "—";
     const tira_mas  = hasCercha ? (p.perimeter_px * scaleFactor * 1.10).toFixed(3) : "—";
 
+    const esHueco = p.is_closed && p.es_hueco;
+    const numHtml = esHueco
+      ? ""
+      : `<span style="display:inline-flex;width:18px;height:18px;border-radius:50%;background:${c};color:#fff;font-size:11px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0">${pieceNums[idx]}</span>`;
+    const estadoBadge = esHueco
+      ? `<span class="badge open" style="border-style:dashed">Hueco — no se cotiza</span>`
+      : `<span class="badge ${p.is_closed ? 'closed' : 'open'}">
+          ${p.is_closed ? '✓ Cerrado' : '→ Abierto'}
+        </span>`;
     return `<div class="path-card" data-svg-id="${p.svg_id || ''}"
       onmouseenter="if(!_pinnedPieceId&&this.dataset.svgId)_highlightPiece(this.dataset.svgId)"
       onmouseleave="_clearHighlight()"
       onclick="if(this.dataset.svgId)_togglePiecePin(this.dataset.svgId)"
-      style="border:2px solid ${c};background:${c}22">
+      style="border:2px ${esHueco ? 'dashed' : 'solid'} ${c};background:${c}22${esHueco ? ';opacity:.65' : ''}">
       <div class="name" style="color:${c};display:flex;align-items:center;gap:6px">
-        <span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:${c};color:#fff;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${idx+1}</span>
+        ${numHtml}
         ${p.id}
       </div>
       <div style="margin-bottom:5px">
-        <span class="badge ${p.is_closed ? 'closed' : 'open'}">
-          ${p.is_closed ? '✓ Cerrado' : '→ Abierto'}
-        </span>
+        ${estadoBadge}
       </div>
       <div class="row"><span>Ancho</span><span>${ancho_cm} cm</span></div>
       <div class="row"><span>Alto</span><span>${alto_cm} cm</span></div>
