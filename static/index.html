@@ -3040,7 +3040,7 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
       // Metros lineales de rollo con el vinil seleccionado (misma regla que el backend)
       const vinilSel = (catalog?.vinilos || []).find(v => v.id === document.getElementById("vinil-caja")?.value)
                        || (catalog?.vinilos || [])[0];
-      const rolloCm  = (vinilSel?.ancho_rollo_m || 1.22) * 100;
+      const rolloCm  = (vinilSel?.ancho_rollo_m || 0.60) * 100;
       const ml = Math.min(
         Math.ceil(ch / rolloCm) * cw / 100,
         Math.ceil(cw / rolloCm) * ch / 100
@@ -3881,7 +3881,7 @@ function renderVinilos() {
       <td>${i+1}</td>
       <td><strong>${v.nombre}</strong></td>
       <td class="price-cell">$${(v.precio_ml||0).toFixed(2)}</td>
-      <td>${v.ancho_rollo_m||1.22} m</td>
+      <td>${v.ancho_rollo_m||0.60} m</td>
       <td class="price-cell">$${pm2}</td>
       <td>${v.acabado||"—"}</td>
       <td style="font-size:10px;max-width:180px;color:#8a94a6">${coloresList}</td>
@@ -4192,7 +4192,7 @@ function openAddModal(type) {
     fuente: {nombre:"", watts:60, precio:0, ip:"IP68", uso:"exterior", voltaje:12},
     pegamento: {nombre:"", precio_aprox:90},
     silvatrim: {id:"", nombre:"", ancho_pulg:0.75, ancho_mm:19, precio_rollo:1900, metros_rollo:45.7, precio_ml:41.58},
-    vinil: {id:"", nombre:"", precio_ml:58, ancho_rollo_m:1.22, acabado:"opaco", colores:[]},
+    vinil: {id:"", nombre:"", precio_ml:58, ancho_rollo_m:0.60, acabado:"opaco", colores:[]},
   };
   const baseType = type.replace("_int","").replace("_ext","");
   const item = defs[baseType] || {};
@@ -4304,7 +4304,7 @@ function vinilFields(m) {
     ${fld("id","ID único", m.id||"")}
     ${fld("nombre","Nombre del grupo", m.nombre||"")}
     ${fld("precio_ml","Precio por metro lineal ($)", m.precio_ml||58,"number","0.01")}
-    ${fld("ancho_rollo_m","Ancho del rollo (m)", m.ancho_rollo_m||1.22,"number","0.01")}
+    ${fld("ancho_rollo_m","Ancho del rollo (m)", m.ancho_rollo_m||0.60,"number","0.01")}
     ${fld("acabado","Acabado", m.acabado||"opaco","text","1",[["opaco","Opaco"],["metalico","Metálico"],["espejo","Espejo"]])}
   </div>
   <div style="margin-top:12px">
@@ -4372,7 +4372,7 @@ function saveModal() {
     const coloresRaw = document.getElementById("f-colores")?.value || "";
     vals.colores = coloresRaw.split(",").map(s => s.trim()).filter(Boolean);
     vals.precio_ml = parseFloat(vals.precio_ml) || 0;
-    vals.ancho_rollo_m = parseFloat(vals.ancho_rollo_m) || 1.22;
+    vals.ancho_rollo_m = parseFloat(vals.ancho_rollo_m) || 0.60;
     if (!catalog.vinilos) catalog.vinilos = [];
     if (isNew) catalog.vinilos.push(vals);
     else catalog.vinilos[key] = {...catalog.vinilos[key], ...vals};

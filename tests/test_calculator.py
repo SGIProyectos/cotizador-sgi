@@ -589,8 +589,8 @@ class TestCajaCaraGrafico:
         cuadro = r.material_cara["cuadro_corte"]
         assert cuadro["ancho_cm"] == pytest.approx(150.0, abs=0.2)
         assert cuadro["alto_cm"]  == pytest.approx(20.0, abs=0.2)
-        # Rollo de 1.22 m: conviene cortar en 2 bandas de 20 cm → 0.40 m de rollo
-        assert cuadro["ml_rollo"] == pytest.approx(0.40, abs=0.02)
+        # Rollo de 0.60 m: conviene cortar en 3 bandas de 20 cm → 0.60 m de rollo
+        assert cuadro["ml_rollo"] == pytest.approx(0.60, abs=0.02)
         # Vinil estándar $58/ml
         vinil_linea = [d for d in r.desglose if "Vinil de corte" in d["concepto"]]
         assert len(vinil_linea) == 1

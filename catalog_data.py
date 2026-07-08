@@ -621,14 +621,14 @@ PRECIOS_CAJA_M2 = {
 }
 
 # ─── VINILOS ADHESIVOS ────────────────────────────────────────────────────────
-# precio_ml: precio por metro lineal de rollo (ancho estándar 1.22 m)
+# precio_ml: precio por metro lineal de rollo (ancho estándar 0.60 m — dato del propietario)
 # precio_m2 = precio_ml / ancho_rollo_m
 VINILOS = [
     {
         "id": "vinil_std",
         "nombre": "Vinil Estándar",
         "precio_ml": 58.0,
-        "ancho_rollo_m": 1.22,
+        "ancho_rollo_m": 0.60,
         "acabado": "opaco",
         "colores": ["Brimstone Yellow", "Yellow", "Golden Yellow", "Orange", "Crimson",
                     "Red", "Cherry Red", "Pink", "Light Blue", "Middle Blue", "King Blue",
@@ -640,7 +640,7 @@ VINILOS = [
         "id": "vinil_std_plus",
         "nombre": "Vinil Estándar Plus",
         "precio_ml": 87.0,
-        "ancho_rollo_m": 1.22,
+        "ancho_rollo_m": 0.60,
         "acabado": "opaco",
         "colores": ["Ivory", "Grey Blue"],
     },
@@ -648,7 +648,7 @@ VINILOS = [
         "id": "vinil_premium",
         "nombre": "Vinil Premium",
         "precio_ml": 120.0,
-        "ancho_rollo_m": 1.22,
+        "ancho_rollo_m": 0.60,
         "acabado": "opaco",
         "colores": ["Zinc Yellow", "Yellow Orange", "Dark Red", "Heather Red", "Violet",
                     "Intensive Blue", "Grass Green", "Gentian Blue", "Black", "White"],
@@ -657,7 +657,7 @@ VINILOS = [
         "id": "vinil_premium_alto",
         "nombre": "Vinil Premium Especial",
         "precio_ml": 180.0,
-        "ancho_rollo_m": 1.22,
+        "ancho_rollo_m": 0.60,
         "acabado": "metalico",
         "colores": ["Light Red", "Emerald", "Coral Red", "Gold"],
     },

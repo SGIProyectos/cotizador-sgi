@@ -813,7 +813,7 @@
       "id": "vinil_std",
       "nombre": "Vinil Estándar",
       "precio_ml": 58.0,
-      "ancho_rollo_m": 1.22,
+      "ancho_rollo_m": 0.6,
       "acabado": "opaco",
       "colores": [
         "Brimstone Yellow",
@@ -845,7 +845,7 @@
       "id": "vinil_std_plus",
       "nombre": "Vinil Estándar Plus",
       "precio_ml": 87.0,
-      "ancho_rollo_m": 1.22,
+      "ancho_rollo_m": 0.6,
       "acabado": "opaco",
       "colores": [
         "Ivory",
@@ -856,7 +856,7 @@
       "id": "vinil_premium",
       "nombre": "Vinil Premium",
       "precio_ml": 120.0,
-      "ancho_rollo_m": 1.22,
+      "ancho_rollo_m": 0.6,
       "acabado": "opaco",
       "colores": [
         "Zinc Yellow",
@@ -875,7 +875,7 @@
       "id": "vinil_premium_alto",
       "nombre": "Vinil Premium Especial",
       "precio_ml": 180.0,
-      "ancho_rollo_m": 1.22,
+      "ancho_rollo_m": 0.6,
       "acabado": "metalico",
       "colores": [
         "Light Red",

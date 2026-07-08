@@ -1464,7 +1464,7 @@ def cotizar_caja(
             ch = max(0.0, (cl_max_y - cl_min_y) * sf)
         else:
             cw, ch = caja_w_cm, caja_h_cm
-        ancho_rollo_cm = vinil.get("ancho_rollo_m", 1.22) * 100
+        ancho_rollo_cm = vinil.get("ancho_rollo_m", 0.60) * 100
 
         # Metros lineales de rollo: el cuadro se acomoda en bandas del ancho
         # del rollo; se toma la orientación que consuma menos rollo.
