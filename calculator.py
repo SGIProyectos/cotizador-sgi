@@ -23,8 +23,10 @@ from catalog_data import (
     led_recomendado,
     material_cara,
     material_cercha,
+    material_sercha_caja,
     recomendar_led_caja,
     silvatrim_recomendado,
+    vinil_por_id,
 )
 
 log = logging.getLogger("cotizador.calculator")
@@ -1355,32 +1357,14 @@ def _find_caja_outline(paths: list, ratio_max: float = 4.5,
     return None
 
 
-def _group_design_paths_by_row(paths: list) -> list:
-    """
-    Agrupa paths en filas horizontales fusionando intervalos Y solapados.
-    Devuelve lista de listas (una sublista por fila).
-    """
-    if not paths:
-        return []
-    ordered = sorted(paths, key=lambda p: p.bbox["y"])
-    rows = [[ordered[0]]]
-    cur_bottom = ordered[0].bbox["y"] + ordered[0].bbox["h"]
-    for p in ordered[1:]:
-        if p.bbox["y"] <= cur_bottom:          # solapado → misma fila
-            rows[-1].append(p)
-            cur_bottom = max(cur_bottom, p.bbox["y"] + p.bbox["h"])
-        else:                                   # gap → nueva fila
-            rows.append([p])
-            cur_bottom = p.bbox["y"] + p.bbox["h"]
-    return rows
-
-
 def cotizar_caja(
     svg_data: SVGData,
     real_width_cm: float,
     profundidad_cm: float,
-    tipo_cara: str = "lona",       # "lona" | "acrilico" | "acrilico_2vistas" | "vinil_corte"
-    base_cara_vinil: str = "lona", # base cuando tipo_cara == "vinil_corte": "lona" | "acrilico"
+    tipo_cara: str = "lona",       # material base de la cara: "lona" | "acrilico"
+    base_cara_vinil: str = "lona", # legacy: base cuando tipo_cara == "vinil_corte"
+    grafico: str = "impreso",      # "ninguno" | "impreso" | "vinil_corte"
+    vinil_id: str = "vinil_std",   # vinil del catálogo VINILOS para grafico="vinil_corte"
     led_id: str = "auto",
     uso: str = "exterior",
     vistas: int = 1,
@@ -1436,56 +1420,81 @@ def cotizar_caja(
     perimetro     = 2 * (caja_w_cm + caja_h_cm)
 
     # ── CARA ─────────────────────────────────────────────────────────────────
-    vinil_filas: list[dict] = []
-
+    # Modelo de negocio: la cara se decide en DOS pasos —
+    #   1. material base: lona translúcida o acrílico (× vistas)
+    #   2. gráfico: "impreso" cubre la cara completa; "vinil_corte" cobra el
+    #      CUADRO DE CORTE (un solo rectángulo que envuelve el diseño, costeado
+    #      por metros lineales de rollo del catálogo VINILOS); "ninguno" = lisa.
+    # Compat con peticiones/quotes viejas: tipo_cara == "vinil_corte" era
+    # "base + vinil de corte"; "acrilico_2vistas" era acrílico con vistas=2.
     if tipo_cara == "vinil_corte":
-        precio_base_m2 = PRECIOS_CAJA_M2.get(base_cara_vinil, PRECIOS_CAJA_M2["lona"])
-        c_cara_base = round(area_m2 * precio_base_m2, 2)
+        grafico, tipo_cara = "vinil_corte", base_cara_vinil
+    if tipo_cara == "acrilico_2vistas":
+        tipo_cara, vistas = "acrilico", 2
+    cara_base = "acrilico" if tipo_cara == "acrilico" else "lona_translucida"
+    caras = 2 if vistas == 2 else 1
 
-        # Solo paths cerrados con área real (excluye trazos/contornos abiertos como el cajón)
+    if cara_base == "acrilico":
+        precio_base_m2 = (PRECIOS_CAJA_M2["acrilico_2vistas"] if caras == 2
+                          else PRECIOS_CAJA_M2["acrilico"])
+        c_cara_base = round(area_m2 * precio_base_m2, 2)
+    else:
+        c_cara_base = round(area_m2 * PRECIOS_CAJA_M2["lona_translucida"] * caras, 2)
+
+    cuadro_corte: dict | None = None
+    vinil: dict | None = None
+    c_grafico = 0.0
+    if grafico == "vinil_corte":
+        vinil = vinil_por_id(vinil_id)
+        # UN SOLO rectángulo que envuelve todo el diseño (así se corta y así se
+        # cobra el material, aunque el diseño tenga varios renglones)
         vinil_design = [p for p in design_paths_all if p.is_closed and p.area_px > 0.0]
         if not vinil_design:
             vinil_design = [p for p in design_paths_all if p.is_closed]
-
         if vinil_design:
-            filas_paths = _group_design_paths_by_row(vinil_design)
-            total_area_cm2 = 0.0
-            for fila_paths in filas_paths:
-                raw_min_x = min(p.bbox["x"] for p in fila_paths)
-                raw_min_y = min(p.bbox["y"] for p in fila_paths)
-                raw_max_x = max(p.bbox["x"] + p.bbox["w"] for p in fila_paths)
-                raw_max_y = max(p.bbox["y"] + p.bbox["h"] for p in fila_paths)
-                cl_min_x  = max(raw_min_x, clamp_x)
-                cl_min_y  = max(raw_min_y, clamp_y)
-                cl_max_x  = min(raw_max_x, clamp_x + clamp_w)
-                cl_max_y  = min(raw_max_y, clamp_y + clamp_h)
-                fw = round(max(0.0, (cl_max_x - cl_min_x) * sf), 1)
-                fh = round(max(0.0, (cl_max_y - cl_min_y) * sf), 1)
-                fa = round(fw * fh / 10000, 4)
-                total_area_cm2 += fw * fh
-                vinil_filas.append({"ancho_cm": fw, "alto_cm": fh, "area_m2": fa})
-            vinil_total_area_m2 = round(total_area_cm2 / 10000, 4)
+            raw_min_x = min(p.bbox["x"] for p in vinil_design)
+            raw_min_y = min(p.bbox["y"] for p in vinil_design)
+            raw_max_x = max(p.bbox["x"] + p.bbox["w"] for p in vinil_design)
+            raw_max_y = max(p.bbox["y"] + p.bbox["h"] for p in vinil_design)
+            cl_min_x  = max(raw_min_x, clamp_x)
+            cl_min_y  = max(raw_min_y, clamp_y)
+            cl_max_x  = min(raw_max_x, clamp_x + clamp_w)
+            cl_max_y  = min(raw_max_y, clamp_y + clamp_h)
+            cw = max(0.0, (cl_max_x - cl_min_x) * sf)
+            ch = max(0.0, (cl_max_y - cl_min_y) * sf)
         else:
-            vinil_filas         = [{"ancho_cm": caja_w_cm, "alto_cm": caja_h_cm,
-                                    "area_m2": round(caja_area_cm2 / 10000, 4)}]
-            vinil_total_area_m2 = area_m2
+            cw, ch = caja_w_cm, caja_h_cm
+        ancho_rollo_cm = vinil.get("ancho_rollo_m", 1.22) * 100
 
-        c_vinil = round(vinil_total_area_m2 * PRECIOS_CAJA_M2["vinil_corte"], 2)
-        c_cara  = round(c_cara_base + c_vinil, 2)
-    else:
-        precio_m2 = PRECIOS_CAJA_M2.get(
-            "acrilico_2vistas" if vistas == 2 else tipo_cara,
-            PRECIOS_CAJA_M2["lona"]
-        )
-        c_cara              = round(area_m2 * precio_m2, 2)
-        c_cara_base         = c_cara
-        vinil_total_area_m2 = 0.0
+        # Metros lineales de rollo: el cuadro se acomoda en bandas del ancho
+        # del rollo; se toma la orientación que consuma menos rollo.
+        def _ml_rollo(largo_cm: float, transversal_cm: float) -> float:
+            return math.ceil(transversal_cm / ancho_rollo_cm) * largo_cm / 100
 
-    # Sercha (aluminio cal 18 para el cajón, mismo concepto que cercha en
-    # letras 3D) — costo proporcional al área usada, NO whole-sheet: la sobra
-    # de cada caja queda para la siguiente, así que cobrar lámina entera infla
-    # el precio injustamente.
-    mat_sercha  = LAMINAS["aluminio_cal18"]
+        ml_rollo  = round(min(_ml_rollo(cw, ch), _ml_rollo(ch, cw)), 2)
+        c_grafico = round(ml_rollo * vinil["precio_ml"] * caras, 2)
+        cuadro_corte = {
+            "ancho_cm":     round(cw, 1),
+            "alto_cm":      round(ch, 1),
+            "area_m2":      round(cw * ch / 10000, 4),
+            "ml_rollo":     ml_rollo,
+            "vinil_id":     vinil["id"],
+            "vinil_nombre": vinil["nombre"],
+        }
+    elif grafico == "impreso" and cara_base == "acrilico":
+        # Vinil impreso laminado sobre el acrílico — cubre la cara completa
+        c_grafico = round(area_m2 * PRECIOS_CAJA_M2["vinil_impresion"] * caras, 2)
+    # "impreso" sobre lona: la lona translúcida ya sale impresa (la impresión
+    # es del taller); no hay material adicional al de la lona.
+
+    c_cara = round(c_cara_base + c_grafico, 2)
+    vinil_total_area_m2 = cuadro_corte["area_m2"] if cuadro_corte else 0.0
+
+    # Sercha del cajón — calibre según tamaño y uso (cal 20 para caja chica de
+    # interior, cal 18 para exterior o caja grande) — costo proporcional al
+    # área usada, NO whole-sheet: la sobra de cada caja queda para la
+    # siguiente, así que cobrar lámina entera infla el precio injustamente.
+    mat_sercha  = LAMINAS[material_sercha_caja(caja_w_cm, caja_h_cm, uso)]
     area_sercha = perimetro * profundidad_cm
     lam_sercha  = laminas_necesarias(area_sercha, "aluminio_cal18")  # informativo
     c_sercha    = round(area_sercha * precio_cm2(mat_sercha), 2)
@@ -1585,22 +1594,28 @@ def cotizar_caja(
     total    = round(costo_con_iva, 2)
     venta    = round(costo_con_iva / (1 - margen_ganancia), 2)
 
-    if tipo_cara == "vinil_corte":
-        if len(vinil_filas) == 1:
-            fila_desc = f"{vinil_filas[0]['ancho_cm']:.0f}×{vinil_filas[0]['alto_cm']:.0f} cm"
-        else:
-            fila_desc = " + ".join(
-                f"F{i+1}:{f['ancho_cm']:.0f}×{f['alto_cm']:.0f}"
-                for i, f in enumerate(vinil_filas)
-            )
-        desglose = [
-            {"concepto": f"Base cara ({base_cara_vinil}) {area_m2:.2f} m²", "costo": c_cara_base},
-            {"concepto": f"Vinil de corte {fila_desc} ({vinil_total_area_m2:.3f} m²)", "costo": c_vinil},
-        ]
-    else:
-        desglose = [
-            {"concepto": f"Cara ({tipo_cara}) {area_m2:.2f} m²", "costo": c_cara},
-        ]
+    cara_nombre = ("Acrílico blanco 3mm" if cara_base == "acrilico"
+                   else "Lona translúcida")
+    if grafico == "impreso" and cara_base != "acrilico":
+        cara_nombre += " impresa"
+    sufijo_vistas = " × 2 vistas" if caras == 2 else ""
+
+    desglose = [
+        {"concepto": f"Cara {cara_nombre} {area_m2:.2f} m²{sufijo_vistas}",
+         "costo": c_cara_base},
+    ]
+    if cuadro_corte is not None:
+        desglose.append({
+            "concepto": (f"Vinil de corte ({cuadro_corte['vinil_nombre']}) — cuadro "
+                         f"{cuadro_corte['ancho_cm']:.0f}×{cuadro_corte['alto_cm']:.0f} cm "
+                         f"· {cuadro_corte['ml_rollo']:.2f} m de rollo{sufijo_vistas}"),
+            "costo": c_grafico,
+        })
+    elif grafico == "impreso" and cara_base == "acrilico":
+        desglose.append({
+            "concepto": f"Vinil impreso {area_m2:.2f} m²{sufijo_vistas}",
+            "costo": c_grafico,
+        })
 
     desglose += [
         {"concepto": f"Sercha cajón ({mat_sercha['nombre']}) × {lam_sercha} lám.", "costo": c_sercha},
@@ -1629,10 +1644,18 @@ def cotizar_caja(
     if flete_maquila > 0:
         desglose.append({"concepto": "Flete maquila",           "costo": round(flete_maquila, 2)})
 
-    mat_cara_info: dict = {"nombre": tipo_cara, "precio": c_cara}
-    if tipo_cara == "vinil_corte":
-        mat_cara_info["base"]          = base_cara_vinil
-        mat_cara_info["vinil_filas"]   = vinil_filas
+    grafico_label = {"impreso": "impreso", "vinil_corte": "vinil de corte",
+                     "ninguno": "lisa"}.get(grafico, grafico)
+    mat_cara_info: dict = {
+        "nombre":  f"{cara_nombre} · {grafico_label}",
+        "precio":  c_cara,
+        "base":    cara_base,
+        "grafico": grafico,
+    }
+    if cuadro_corte is not None:
+        mat_cara_info["cuadro_corte"]  = cuadro_corte
+        # legacy: clientes viejos leen vinil_filas / vinil_area_m2
+        mat_cara_info["vinil_filas"]   = [cuadro_corte]
         mat_cara_info["vinil_area_m2"] = vinil_total_area_m2
 
     # Fase G: desglose por componente para caja (cara, estructura, fondo, leds,
@@ -1659,8 +1682,11 @@ def cotizar_caja(
     warnings: list[str] = []
     if profundidad_cm <= 0:
         warnings.append("Profundidad de caja es 0 cm — una caja sin profundidad no es una caja. Verifica el valor.")
-    if vistas == 2 and tipo_cara not in ("acrilico_2vistas", "lona"):
-        warnings.append(f"Caja a 2 vistas con cara '{tipo_cara}' — para 2 vistas usa acrílico 2 vistas o lona translúcida.")
+    if cuadro_corte is not None and not design_paths_all:
+        warnings.append(
+            "Vinil de corte sin diseño detectado en el SVG — el cuadro de corte "
+            "se asumió del tamaño completo de la caja. Verifica el archivo."
+        )
 
     return QuoteResult(
         tipo="caja_luz",

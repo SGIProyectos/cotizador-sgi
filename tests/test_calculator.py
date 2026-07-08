@@ -9,7 +9,6 @@ from calculator import (
     PathInfo,
     QuoteResult,
     _find_caja_outline,
-    _group_design_paths_by_row,
     _parse_viewbox,
     _path_area_shoelace,
     apply_scale,
@@ -278,27 +277,6 @@ class TestFindCajaOutline:
         assert _find_caja_outline([]) is None
 
 
-class TestGroupDesignPathsByRow:
-    def _make(self, x, y, w=10, h=10):
-        return PathInfo("", 0, 0, {"x": x, "y": y, "w": w, "h": h}, True)
-
-    def test_groups_overlapping_y(self):
-        a = self._make(0, 0)
-        b = self._make(20, 5)   # solapa
-        rows = _group_design_paths_by_row([a, b])
-        assert len(rows) == 1
-        assert len(rows[0]) == 2
-
-    def test_separates_distant_rows(self):
-        a = self._make(0, 0, h=10)
-        b = self._make(0, 100, h=10)
-        rows = _group_design_paths_by_row([a, b])
-        assert len(rows) == 2
-
-    def test_empty(self):
-        assert _group_design_paths_by_row([]) == []
-
-
 # ─── COTIZAR LETRAS 3D ───────────────────────────────────────────────────────
 
 class TestCotizarLetras:
@@ -546,13 +524,15 @@ class TestCotizarCaja:
 
     def test_precio_venta_es_total_dividido_por_1_menos_margen(self, caja_svg):
         r = self._quote(caja_svg, margen_ganancia=0.4)
-        assert r.precio_venta_sugerido == pytest.approx(r.total / 0.6, rel=1e-6)
+        # abs=0.02 tolera redondeo a centavos entre total y venta
+        assert r.precio_venta_sugerido == pytest.approx(r.total / 0.6, abs=0.02)
 
-    def test_vinil_corte_separa_base_y_vinil(self, caja_svg):
+    def test_vinil_corte_legacy_mapea_a_grafico(self, caja_svg):
+        # API vieja: tipo_cara="vinil_corte" + base → base lona + grafico vinil_corte
         r = self._quote(caja_svg, tipo_cara="vinil_corte", base_cara_vinil="lona")
-        # debe registrar vinil_filas
-        assert "vinil_filas" in r.material_cara
-        assert r.material_cara["base"] == "lona"
+        assert r.material_cara["base"] == "lona_translucida"
+        assert r.material_cara["grafico"] == "vinil_corte"
+        assert "cuadro_corte" in r.material_cara
         assert r.material_cara["vinil_area_m2"] > 0
 
     def test_dos_vistas_cambia_fondo(self, caja_svg):
@@ -570,6 +550,60 @@ class TestCotizarCaja:
         r = self._quote(svg, real_width_cm=300.0)
         # Sin outline detectado → usa viewbox completo, alto proporcional
         assert r.area_cara_cm2 > 0
+
+
+class TestCajaCaraGrafico:
+    """Modelo de cara en dos pasos (regla del propietario, jul-2026):
+    material base (lona translúcida / acrílico) + gráfico (impreso cubre la
+    cara completa; vinil de corte cobra UN solo cuadro por metros de rollo)."""
+
+    def _quote(self, caja_svg, **overrides):
+        defaults = dict(
+            real_width_cm=200.0,
+            profundidad_cm=15.0,
+            uso="exterior",
+        )
+        defaults.update(overrides)
+        return cotizar_caja(svg_data=parse_svg(caja_svg), **defaults)
+
+    def test_lona_translucida_precio_m2(self, caja_svg):
+        r = self._quote(caja_svg, tipo_cara="lona", grafico="ninguno")
+        area_m2 = r.area_cara_cm2 / 10000
+        assert r.costo_material_cara == pytest.approx(area_m2 * 50, rel=1e-3)
+
+    def test_lona_impresa_mismo_material_que_lisa(self, caja_svg):
+        # La lona translúcida sale impresa del taller: mismo costo de material
+        lisa    = self._quote(caja_svg, tipo_cara="lona", grafico="ninguno")
+        impresa = self._quote(caja_svg, tipo_cara="lona", grafico="impreso")
+        assert impresa.costo_material_cara == pytest.approx(lisa.costo_material_cara)
+
+    def test_acrilico_vinil_impreso_cobra_cara_completa(self, caja_svg):
+        r = self._quote(caja_svg, tipo_cara="acrilico", grafico="impreso")
+        area_m2 = r.area_cara_cm2 / 10000
+        assert r.costo_material_cara == pytest.approx(area_m2 * (380 + 60), rel=1e-3)
+
+    def test_cuadro_de_corte_unico_envuelve_todo_el_diseno(self, caja_svg):
+        # CAJA_SVG: diseño = dos rects de 100×40 px separados, bbox conjunto
+        # 300×40 px. Escala por viewBox: sf = 200/400 = 0.5 → cuadro 150×20 cm.
+        r = self._quote(caja_svg, tipo_cara="lona", grafico="vinil_corte")
+        cuadro = r.material_cara["cuadro_corte"]
+        assert cuadro["ancho_cm"] == pytest.approx(150.0, abs=0.2)
+        assert cuadro["alto_cm"]  == pytest.approx(20.0, abs=0.2)
+        # Rollo de 1.22 m: conviene cortar en 2 bandas de 20 cm → 0.40 m de rollo
+        assert cuadro["ml_rollo"] == pytest.approx(0.40, abs=0.02)
+        # Vinil estándar $58/ml
+        vinil_linea = [d for d in r.desglose if "Vinil de corte" in d["concepto"]]
+        assert len(vinil_linea) == 1
+        assert vinil_linea[0]["costo"] == pytest.approx(cuadro["ml_rollo"] * 58, abs=0.05)
+
+    def test_sercha_calibre_por_tamano_y_uso(self, caja_svg):
+        # Caja chica (100 cm de lado mayor) interior → cal 20; exterior → cal 18
+        chica_int = self._quote(caja_svg, real_width_cm=100.0, uso="interior")
+        exterior  = self._quote(caja_svg, real_width_cm=100.0, uso="exterior")
+        grande    = self._quote(caja_svg, real_width_cm=300.0, uso="interior")
+        assert "20" in chica_int.material_cercha["nombre"]
+        assert "18" in exterior.material_cercha["nombre"]
+        assert "18" in grande.material_cercha["nombre"]
 
 
 class TestDeteccionHuecos:

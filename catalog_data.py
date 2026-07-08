@@ -608,12 +608,16 @@ PRECIOS_BASE = {
 }
 
 PRECIOS_CAJA_M2 = {
-    # Costo real del material por m² (con IVA, base Excel +20% de margen proveedor).
-    # NO son precios de venta — el margen al cliente se aplica en cotizar_caja.
-    "lona":             250,   # lona translúcida (PLACEHOLDER — pendiente confirmar precio real)
-    "vinil_corte":      100,   # solo el vinil de diseño, se suma a la base
+    # Costo real del material por m² (con IVA). NO son precios de venta — el
+    # margen al cliente se aplica en cotizar_caja. La paquetería del proveedor
+    # se captura por trabajo en el campo "flete_maquila".
+    "lona_translucida": 50,    # lona translúcida (impresa o lisa) — dato del propietario jul-2026
+    "vinil_impresion":  60,    # vinil de impresión (gráfico impreso sobre acrílico)
     "acrilico":         380,   # acrílico blanco 3mm — $1127.52/lám ÷ 2.9768 m²
     "acrilico_2vistas": 760,   # 2 caras de acrílico
+    # legacy (cotizaciones viejas re-abiertas): "lona" y "vinil_corte" ya no se
+    # usan — la lona es lona_translucida y el vinil de corte se costea por
+    # metro lineal de rollo del catálogo VINILOS.
 }
 
 # ─── VINILOS ADHESIVOS ────────────────────────────────────────────────────────
@@ -873,6 +877,26 @@ def material_cercha(altura_letra_cm: float) -> str:
         return "aluminio_cal20"
     else:
         return "aluminio_cal18"
+
+# ─── MATERIAL DE SERCHA DE CAJA SEGÚN TAMAÑO Y USO ──────────────────────────
+def material_sercha_caja(caja_w_cm: float, caja_h_cm: float, uso: str) -> str:
+    """Calibre del aluminio para el cajón (sercha de caja de luz).
+    Estándar de la industria: lámina de ~1.0 mm (cal 18) es el caballo de
+    batalla para gabinetes; 0.9 mm (cal 20) alcanza en cajas chicas de
+    interior (menos viento y menos claro que cubrir), y ahorra costo/peso."""
+    lado_mayor = max(caja_w_cm, caja_h_cm)
+    if uso == "interior" and lado_mayor <= 122:
+        return "aluminio_cal20"
+    return "aluminio_cal18"
+
+
+def vinil_por_id(vinil_id: str) -> dict:
+    """Vinil del catálogo VINILOS por id; fallback al primero (estándar)."""
+    for v in VINILOS:
+        if v["id"] == vinil_id:
+            return v
+    return VINILOS[0]
+
 
 # ─── MATERIAL DE CARA SEGÚN ALTURA ───────────────────────────────────────────
 def material_cara(altura_letra_cm: float) -> str:

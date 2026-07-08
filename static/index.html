@@ -883,7 +883,7 @@ svg g.pieza-labels                 { pointer-events: none; }
       <label>Ancho del diseño (cm)</label>
       <input type="number" id="ancho-real" placeholder="ej. 60" min="1" step="0.001">
       <label>Uso</label>
-      <select id="uso" onchange="populateLedsCaja()">
+      <select id="uso" onchange="populateLedsCaja();onTipoCaraCajaChange()">
         <option value="exterior">Exterior</option>
         <option value="interior">Interior</option>
       </select>
@@ -983,7 +983,7 @@ svg g.pieza-labels                 { pointer-events: none; }
     <div class="panel field-group" id="params-caja">
       <h3>Parámetros — Caja de Luz</h3>
       <label>Profundidad del cajón (cm)</label>
-      <input type="number" id="profundidad" value="15" min="5" step="1" oninput="sugerirLedCaja()">
+      <input type="number" id="profundidad" value="15" min="5" step="1" oninput="sugerirLedCaja();onTipoCaraCajaChange()">
       <label>Material cara</label>
       <select id="base-cara-caja" onchange="onBaseCaraCajaChange(this.value)">
         <option value="lona">Lona</option>
@@ -993,7 +993,12 @@ svg g.pieza-labels                 { pointer-events: none; }
       <select id="acabado-cara-caja" onchange="onTipoCaraCajaChange()">
         <option value="impresa">Impresión digital</option>
         <option value="vinil_corte">Vinil de corte</option>
+        <option value="ninguno">Ninguno (lona lisa)</option>
       </select>
+      <div id="vinil-caja-wrap" style="display:none">
+        <label>Vinil de corte</label>
+        <select id="vinil-caja" onchange="onTipoCaraCajaChange()"></select>
+      </div>
       <label>Número de vistas</label>
       <select id="vistas" onchange="sugerirLedCaja()">
         <option value="1">1 vista</option>
@@ -1762,24 +1767,54 @@ function onBaseCaraCajaChange(base) {
   const prev = sel.value;
   sel.innerHTML = base === "lona"
     ? `<option value="impresa">Impresión digital</option>
-       <option value="vinil_corte">Vinil de corte</option>`
+       <option value="vinil_corte">Vinil de corte</option>
+       <option value="ninguno">Ninguno (lona lisa)</option>`
     : `<option value="vinil_corte">Vinil de corte</option>
-       <option value="vinil_impresion">Vinil de impresión</option>`;
+       <option value="vinil_impresion">Vinil de impresión</option>
+       <option value="ninguno">Ninguno (cara lisa)</option>`;
   if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
   onTipoCaraCajaChange();
 }
 
 function onTipoCaraCajaChange() {
-  // nada que mostrar/ocultar extra — la lógica se resuelve en getCaraCajaParams()
+  // El selector de vinil solo aplica cuando el gráfico es vinil de corte
+  const acabado = document.getElementById("acabado-cara-caja").value;
+  const wrap    = document.getElementById("vinil-caja-wrap");
+  if (wrap) wrap.style.display = acabado === "vinil_corte" ? "" : "none";
+  if (svgPathsRaw.length) {
+    renderPathCards(svgPathsRaw, lastScaleFactor, lastCerchaAltura);
+    const svgEl = document.getElementById("svg-preview-box")?.querySelector("svg");
+    if (svgEl) colorizePaths(svgEl, svgPathsRaw);
+  }
 }
 
-// Devuelve {tipo_cara, base_cara_vinil} para enviar al backend
+function populateVinilesCaja() {
+  const sel = document.getElementById("vinil-caja");
+  if (!sel || !catalog?.vinilos) return;
+  const prev = sel.value;
+  sel.innerHTML = "";
+  catalog.vinilos.forEach(v => {
+    const opt = document.createElement("option");
+    opt.value = v.id;
+    opt.textContent = `${v.nombre} · $${v.precio_ml}/m rollo`;
+    sel.appendChild(opt);
+  });
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+
+// Devuelve {tipo_cara, grafico, vinil_id} para enviar al backend.
+// tipo_cara = material base (lona translúcida / acrílico); el gráfico va aparte.
 function getCaraCajaParams() {
   const base    = document.getElementById("base-cara-caja").value;
   const acabado = document.getElementById("acabado-cara-caja").value;
-  if (acabado === "vinil_corte") return { tipo_cara: "vinil_corte", base_cara_vinil: base };
-  if (base === "acrilico")       return { tipo_cara: "acrilico",    base_cara_vinil: "acrilico" };
-  return { tipo_cara: "lona", base_cara_vinil: "lona" };
+  const grafico = acabado === "vinil_corte" ? "vinil_corte"
+                : acabado === "ninguno"     ? "ninguno"
+                : "impreso";   // "impresa" (lona) y "vinil_impresion" (acrílico)
+  return {
+    tipo_cara: base,
+    grafico,
+    vinil_id: document.getElementById("vinil-caja")?.value || "vinil_std",
+  };
 }
 
 // ─── SELECTOR DE LED CAJA ────────────────────────────────────────────────────
@@ -2731,6 +2766,9 @@ function colorizePaths(svgEl, paths) {
     if (!el.id) el.id = `path_${idx}`;
   });
 
+  // Capas de anotación de renders previos (badges numerados, cuadro de corte)
+  svgEl.querySelectorAll("g.pieza-labels, g.cuadro-corte").forEach(g => g.remove());
+
   // Reset all shapes to neutral
   domPaths.forEach(el => {
     el.style.fill        = "none";
@@ -2779,22 +2817,43 @@ function colorizePaths(svgEl, paths) {
       }
     });
 
-    _showSvgLegend([
+    // Caja: NO se numeran piezas (la caja se cotiza como una sola pieza).
+    // Si el acabado es vinil de corte, se dibuja el CUADRO DE CORTE: un solo
+    // rectángulo punteado que envuelve todo el diseño.
+    const acabadoSel = document.getElementById("acabado-cara-caja")?.value || "impresa";
+    const legendCaja = [
       { color:"#888",    fill:"rgba(120,120,120,0.08)", label:"Contorno de caja" },
-      { color:"#3498db", fill:"rgba(52,152,219,0.22)",  label:"Vinil / diseño interno" },
-      { color:"#e74c3c", fill:"none", dash:true,         label:"⚠ Trazo abierto (no se cortará)" },
-    ]);
-
-    // Badges numerados + interactividad (caja): el contorno usa gris, el diseño azul
-    const colorForCajaIdx = (idx) => {
-      const p = paths[idx];
-      if (!p) return null;
-      if (p === cajaPath || p?.svg_id === cajaId) return "#888";
-      if (p.is_closed && p.area_px > 0) return "#3498db";
-      return null;
-    };
-    _addPieceBadges(svgEl, paths, colorForCajaIdx, svgViewboxW || 1000);
-    _attachPieceHandlers(svgEl, paths, colorForCajaIdx);
+      { color:"#3498db", fill:"rgba(52,152,219,0.22)",  label:"Diseño / gráfico" },
+    ];
+    if (paths.some(p => !p.is_closed)) {
+      legendCaja.push({ color:"#e74c3c", fill:"none", dash:true,
+                        label:"⚠ Trazo abierto (no se cortará)" });
+    }
+    if (acabadoSel === "vinil_corte") {
+      const design = paths.filter(p =>
+        p !== cajaPath && p.svg_id !== cajaId && p.is_closed && (p.area_px || 0) > 0);
+      if (design.length) {
+        const dMinX = Math.min(...design.map(p => p.bbox?.x ?? 0));
+        const dMinY = Math.min(...design.map(p => p.bbox?.y ?? 0));
+        const dMaxX = Math.max(...design.map(p => (p.bbox?.x ?? 0) + (p.bbox?.w ?? 0)));
+        const dMaxY = Math.max(...design.map(p => (p.bbox?.y ?? 0) + (p.bbox?.h ?? 0)));
+        const layer = document.createElementNS(SVG_NS, "g");
+        layer.classList.add("cuadro-corte");
+        const rect = document.createElementNS(SVG_NS, "rect");
+        rect.setAttribute("x", dMinX); rect.setAttribute("y", dMinY);
+        rect.setAttribute("width", dMaxX - dMinX);
+        rect.setAttribute("height", dMaxY - dMinY);
+        rect.setAttribute("fill", "none");
+        rect.setAttribute("stroke", "#e87c2a");
+        rect.setAttribute("stroke-width", Math.max(1, (svgViewboxW || 1000) * 0.003));
+        rect.setAttribute("stroke-dasharray", "8 5");
+        layer.appendChild(rect);
+        svgEl.appendChild(layer);
+        legendCaja.push({ color:"#e87c2a", fill:"none", dash:true,
+                          label:"Cuadro de corte (vinil)" });
+      }
+    }
+    _showSvgLegend(legendCaja);
 
   } else {
     // Letras 3D / planas: paleta naranja-cálida (cara material) por letra
@@ -2885,26 +2944,6 @@ function _showSvgLegend(items) {
   `).join("");
 }
 
-// Agrupa paths en filas horizontales fusionando intervalos Y solapados.
-function _groupPathsByRow(paths) {
-  if (!paths.length) return [];
-  const ordered = [...paths].sort((a, b) => (a.bbox?.y ?? 0) - (b.bbox?.y ?? 0));
-  const rows = [[ordered[0]]];
-  let curBottom = (ordered[0].bbox?.y ?? 0) + (ordered[0].bbox?.h ?? 0);
-  for (let i = 1; i < ordered.length; i++) {
-    const p = ordered[i];
-    const pTop = p.bbox?.y ?? 0;
-    if (pTop <= curBottom) {
-      rows[rows.length - 1].push(p);
-      curBottom = Math.max(curBottom, pTop + (p.bbox?.h ?? 0));
-    } else {
-      rows.push([p]);
-      curBottom = pTop + (p.bbox?.h ?? 0);
-    }
-  }
-  return rows;
-}
-
 // Identifica el contorno exterior del anuncio. Igual semántica que
 // _find_caja_outline en calculator.py:
 //   1. Forma cuasi-rectangular: ratio perim/2*(w+h) <= 4.5 (cubre placas
@@ -2983,64 +3022,69 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
     const perimCaja  = (2 * (parseFloat(anchoTotal) + parseFloat(altoTotal))).toFixed(1);
     const caraArea   = (parseFloat(areaTotal) / 10000).toFixed(3);
 
-    // Dimensiones del DISEÑO / VINIL DE CORTE por filas
-    // Solo paths cerrados con área (excluye trazos/contornos abiertos)
+    // CUADRO DE CORTE — UN solo rectángulo que envuelve todo el diseño (así se
+    // corta y cobra el vinil, aunque tenga varios renglones). Solo se muestra
+    // cuando el acabado seleccionado es vinil de corte.
     let vinilHtml = "";
+    const acabadoCaja = document.getElementById("acabado-cara-caja")?.value || "impresa";
     const filledDesign = designPaths.filter(p => p.is_closed && (p.area_px || 0) > 0);
-    const srcPaths = filledDesign.length > 0 ? filledDesign : designPaths;
-    if (srcPaths.length > 0) {
+    const srcPaths = filledDesign.length > 0 ? filledDesign : designPaths.filter(p => p.is_closed);
+    if (acabadoCaja === "vinil_corte" && srcPaths.length > 0) {
       const scalePx = parseFloat(anchoTotal) / _bw;
-      const rows = _groupPathsByRow(srcPaths);
-      const rowDims = rows.map(rPaths => {
-        const rMinX = Math.max(Math.min(...rPaths.map(p => p.bbox?.x ?? 0)), _bx);
-        const rMinY = Math.max(Math.min(...rPaths.map(p => p.bbox?.y ?? 0)), _by);
-        const rMaxX = Math.min(Math.max(...rPaths.map(p => (p.bbox?.x ?? 0) + (p.bbox?.w ?? 0))), _bx + _bw);
-        const rMaxY = Math.min(Math.max(...rPaths.map(p => (p.bbox?.y ?? 0) + (p.bbox?.h ?? 0))), _by + _bh);
-        return {
-          w: Math.max(0, (rMaxX - rMinX) * scalePx),
-          h: Math.max(0, (rMaxY - rMinY) * scalePx),
-        };
-      });
-      const overallW = Math.max(...rowDims.map(r => r.w));
-      const overallH = Math.max(...rowDims.map(r => r.h));
-      // Mostrar sección de vinil si hay >1 fila o si el diseño difiere del tamaño total de cara
-      if (rowDims.length > 1 || Math.abs(overallW - parseFloat(anchoTotal)) > 0.5 || Math.abs(overallH - parseFloat(altoTotal)) > 0.5) {
-        const rowsHtml = rowDims.map((r, i) => {
-          const label = rowDims.length > 1 ? `Vinil fila ${i + 1}` : "Diseño / Vinil de corte";
-          return `<div class="row" style="color:#2d5986;font-weight:700">
-              <span>${label}</span><span>${r.w.toFixed(1)} × ${r.h.toFixed(1)} cm</span>
-            </div>`;
-        }).join("");
-        const totalAreaM2 = (rowDims.reduce((s, r) => s + r.w * r.h, 0) / 10000).toFixed(3);
-        vinilHtml = `
-          <div style="margin-top:5px;padding-top:5px;border-top:1px solid #eee">
-            ${rowsHtml}
-            <div class="row" style="color:#2d5986">
-              <span>Área vinil total</span>
-              <span>${totalAreaM2} m²</span>
-            </div>
-          </div>`;
-      }
+      const cMinX = Math.max(Math.min(...srcPaths.map(p => p.bbox?.x ?? 0)), _bx);
+      const cMinY = Math.max(Math.min(...srcPaths.map(p => p.bbox?.y ?? 0)), _by);
+      const cMaxX = Math.min(Math.max(...srcPaths.map(p => (p.bbox?.x ?? 0) + (p.bbox?.w ?? 0))), _bx + _bw);
+      const cMaxY = Math.min(Math.max(...srcPaths.map(p => (p.bbox?.y ?? 0) + (p.bbox?.h ?? 0))), _by + _bh);
+      const cw = Math.max(0, (cMaxX - cMinX) * scalePx);
+      const ch = Math.max(0, (cMaxY - cMinY) * scalePx);
+      // Metros lineales de rollo con el vinil seleccionado (misma regla que el backend)
+      const vinilSel = (catalog?.vinilos || []).find(v => v.id === document.getElementById("vinil-caja")?.value)
+                       || (catalog?.vinilos || [])[0];
+      const rolloCm  = (vinilSel?.ancho_rollo_m || 1.22) * 100;
+      const ml = Math.min(
+        Math.ceil(ch / rolloCm) * cw / 100,
+        Math.ceil(cw / rolloCm) * ch / 100
+      );
+      vinilHtml = `
+        <div style="margin-top:5px;padding-top:5px;border-top:1px solid #eee">
+          <div class="row" style="color:#2d5986;font-weight:700">
+            <span>Cuadro de corte</span><span>${cw.toFixed(1)} × ${ch.toFixed(1)} cm</span>
+          </div>
+          <div class="row" style="color:#2d5986">
+            <span>Área del cuadro</span><span>${(cw * ch / 10000).toFixed(3)} m²</span>
+          </div>
+          <div class="row" style="color:#2d5986">
+            <span>Rollo${vinilSel ? ` (${vinilSel.nombre})` : ""}</span>
+            <span>${ml.toFixed(2)} m lineales</span>
+          </div>
+        </div>`;
     }
+
+    // Sercha del cajón: perímetro × profundidad; calibre según tamaño y uso
+    const profCaja = parseFloat(document.getElementById("profundidad")?.value) || 15;
+    const usoCaja  = document.getElementById("uso")?.value || "exterior";
+    const ladoMayor = Math.max(parseFloat(anchoTotal), parseFloat(altoTotal));
+    const calSercha = (usoCaja === "interior" && ladoMayor <= 122) ? "cal 20" : "cal 18";
+    const areaSercha = (parseFloat(perimCaja) * profCaja / 10000).toFixed(3);
 
     grid.innerHTML = `
       <div style="grid-column:1/-1;font-size:12px;color:#666;margin-bottom:4px">
-        Caja de luz — diseño completo (${paths.length} elementos)
+        Caja de luz — se cotiza como UNA pieza (caja + gráfico)
       </div>
       <div class="path-card" style="grid-column:1/-1;max-width:340px;border:2px solid #888;background:rgba(136,136,136,0.09)">
-        <div class="name" style="color:#444">Diseño completo</div>
+        <div class="name" style="color:#444">Caja de luz</div>
         <div class="row"><span>Ancho</span><span>${anchoTotal} cm</span></div>
         <div class="row"><span>Alto</span><span>${altoTotal} cm</span></div>
-        <div class="row"><span>Área cara</span><span>${areaTotal} cm²</span></div>
+        <div class="row"><span>Área cara</span><span>${caraArea} m²</span></div>
         <div class="row"><span>Perímetro caja</span><span>${perimCaja} cm</span></div>
         <div style="margin-top:5px;padding-top:5px;border-top:1px solid #eee">
           <div class="row" style="color:#e87c2a;font-weight:700">
-            <span>Cara (Lona / Acrílico)</span>
+            <span>Cara completa</span>
             <span>${anchoTotal} × ${altoTotal} cm</span>
           </div>
           <div class="row" style="color:#e87c2a">
-            <span>Área material cara</span>
-            <span>${caraArea} m²</span>
+            <span>Sercha (aluminio ${calSercha})</span>
+            <span>${perimCaja} × ${profCaja} cm = ${areaSercha} m²</span>
           </div>
         </div>
         ${vinilHtml}
@@ -3568,19 +3612,12 @@ function renderResult(d) {
           : stat("Perímetro total", (m.perimetro_total_cm/100).toFixed(2)+" m", "sin cercha")}
       ${stat("Módulos LED", il.modulos+" uds", il.led)}
       ${stat("Watts", il.watts_total+" W", il.fuente)}
-      ${stat("Material cara", mats.cara.nombre+(mats.cara.base ? " / "+mats.cara.base : ""), mats.cara.laminas+" lám.")}
+      ${stat("Material cara", mats.cara.nombre, mats.cara.laminas+" lám.")}
       ${stat("Material cercha", mats.cercha.nombre, mats.cercha.laminas+" lám.")}
-      ${(mats.cara.vinil_filas||[]).map((f, i, arr) =>
-          stat(
-            arr.length > 1 ? `Vinil corte fila ${i+1}` : "Vinil de corte",
-            `${f.ancho_cm} × ${f.alto_cm} cm`,
-            `${f.area_m2.toFixed(3)} m²`
-          )
-        ).join("")}
-      ${(mats.cara.vinil_filas||[]).length > 1 ? stat(
-          "Área vinil total",
-          `${(mats.cara.vinil_area_m2||0).toFixed(3)} m²`,
-          `${(mats.cara.vinil_filas||[]).length} filas`
+      ${mats.cara.cuadro_corte ? stat(
+          "Cuadro de corte",
+          `${mats.cara.cuadro_corte.ancho_cm} × ${mats.cara.cuadro_corte.alto_cm} cm`,
+          `${mats.cara.cuadro_corte.ml_rollo.toFixed(2)} m rollo · ${mats.cara.cuadro_corte.vinil_nombre}`
         ) : ""}
     </div>
 
@@ -3775,6 +3812,7 @@ async function loadCatalog(force=false) {
     populateGruas();
     populateLedsCaja();
     populateVinilCercha();
+    populateVinilesCaja();
   } catch(e) {
     showToast("Error cargando catálogo", "err");
   }
@@ -5361,9 +5399,25 @@ async function reabrirCotizacion(qid) {
       const el = document.getElementById("silvatrim-id");
       if (el) el.value = p.silvatrim_id;
     }
-    if (p.base_cara_vinil) {
-      const el = document.getElementById("base-cara-caja");
-      if (el) { el.value = p.base_cara_vinil; onBaseCaraCajaChange(p.base_cara_vinil); }
+    if (p.tipo_cara || p.base_cara_vinil) {
+      // Compat: quotes viejas usan tipo_cara="vinil_corte"+base_cara_vinil
+      const esLegacyVinil = p.tipo_cara === "vinil_corte";
+      const base = esLegacyVinil
+        ? (p.base_cara_vinil || "lona")
+        : (p.tipo_cara === "acrilico" || p.tipo_cara === "acrilico_2vistas" ? "acrilico" : "lona");
+      const selBase = document.getElementById("base-cara-caja");
+      if (selBase) { selBase.value = base; onBaseCaraCajaChange(base); }
+      const grafico = esLegacyVinil ? "vinil_corte" : (p.grafico || "impreso");
+      const acabado = grafico === "vinil_corte" ? "vinil_corte"
+                    : grafico === "ninguno"     ? "ninguno"
+                    : (base === "acrilico" ? "vinil_impresion" : "impresa");
+      const selAcab = document.getElementById("acabado-cara-caja");
+      if (selAcab && [...selAcab.options].some(o => o.value === acabado)) {
+        selAcab.value = acabado;
+      }
+      const selVinil = document.getElementById("vinil-caja");
+      if (selVinil && p.vinil_id) selVinil.value = p.vinil_id;
+      onTipoCaraCajaChange();
     }
 
     // ── Mostrar resultado y cerrar modal ──────────────────────────────────

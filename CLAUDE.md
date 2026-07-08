@@ -35,7 +35,7 @@ python -m pytest tests/test_calculator.py::test_<name> -v
 pip-compile requirements.txt -o requirements.lock
 ```
 
-Lint config: `pyproject.toml` (ruff, line-length 100, py310 target, rule sets E/W/F/I/B/UP/SIM). Tests live in `tests/` (pytest, 99 tests as of last count). CI: `.github/workflows/test.yml` runs ruff + pytest with coverage gate of 70% on push/PR to `main`.
+Lint config: `pyproject.toml` (ruff, line-length 100, py310 target, rule sets E/W/F/I/B/UP/SIM). Tests live in `tests/` (pytest, 101 tests as of last count). CI: `.github/workflows/test.yml` runs ruff + pytest with coverage gate of 70% on push/PR to `main`.
 
 Useful pattern for visually verifying PDF output (planos, OT): generate the PDF, render pages to PNG with PyMuPDF (`fitz`, ~110 dpi), then inspect the PNG with the Read tool. See `tmp/test_plano.py` for a working harness (requires `PYTHONPATH=.`).
 
@@ -159,12 +159,16 @@ When `tipo_construccion` changes in the UI, `onTipoConstruccionChange()` must sy
 
 **Caja dimensions**: `caja_w_cm = real_width_cm` is always the authoritative width. `caja_h_cm` is derived proportionally from the caja outline path's bbox aspect ratio (`real_width_cm × bbox_h / bbox_w`). When no outline is detected, `viewbox_h × scale_factor` is used.
 
-**`design_paths`** = all paths except the identified caja outline. Used to compute vinil dimensions.
+**`design_paths`** = all paths except the identified caja outline. Used to compute the vinyl cut rectangle.
 
-**Face types** (`tipo_cara`) and their pricing source (`PRECIOS_CAJA_M2`):
-- `lona`, `acrilico` — flat $/m² × caja area
-- `acrilico_2vistas` — separate $/m² entry for double-face boxes
-- `vinil_corte` — base material (lona/acrilico, set by `base_cara_vinil`) for full area + vinil $/m² for design paths only (NOT the full caja area). Design paths are grouped into rows by `_group_design_paths_by_row()`, each row gets independent ancho_cm × alto_cm from its combined bbox, clamped to the caja outline bounds.
+**Face model — two decisions, not one** (owner's business rule, jul-2026). A caja is quoted as ONE piece: no per-letter enumeration anywhere (no numbered badges in the UI preview, none in the OT design page — `api_ot` passes empty `paths_info` for `caja_luz`):
+- **`tipo_cara`** = base material: `"lona"` (lona translúcida — always translucent so light passes) or `"acrilico"`. Legacy values `"vinil_corte"` and `"acrilico_2vistas"` are mapped for backward compat (old stored quotes / API clients).
+- **`grafico`** = graphic on top: `"impreso"` | `"vinil_corte"` | `"ninguno"`.
+  - `impreso` covers the FULL face: on lona there is no extra material cost (the lona itself is printed in-house); on acrílico it adds `vinil_impresion` $/m² × full caja area. ×2 when `vistas=2`.
+  - `vinil_corte` charges the **cuadro de corte**: ONE single rectangle enclosing ALL design paths (including air between text rows — that's how the owner cuts and charges), clamped to the caja bounds. Cost = lineal meters of roll × `precio_ml` of the selected `vinil_id` from VINILOS (roll width 1.22 m; both orientations tried, cheapest wins). Result carries `material_cara["cuadro_corte"]` = `{ancho_cm, alto_cm, area_m2, ml_rollo, vinil_id, vinil_nombre}`. The UI draws the cuadro as a dashed orange rectangle on the preview.
+  - `ninguno` — plain face.
+
+**Sercha (box perimeter band)**: `material_sercha_caja(w, h, uso)` auto-selects aluminum gauge — cal 20 (0.9 mm) for interior boxes with longest side ≤ 122 cm, cal 18 (1.0 mm) for exterior or larger (sign-industry standard: ~0.040" is the workhorse for cabinet skins; thinner is fine on small interior boxes). Cost stays proportional: `perimetro × profundidad × precio_cm2`.
 
 **`vistas` effect on fondo**: `vistas=1` → `alucobon_3mm` (rigid); `vistas=2` → `pvc_6mm` (exterior) / `pvc_3mm` (interior).
 
@@ -184,7 +188,7 @@ When `tipo_construccion` changes in the UI, `onTipoConstruccionChange()` must sy
 
 **MO in cajas**: labor is injected inside `cotizar_caja` (enters cost, margin applies once). `_apply_instalacion()` deliberately skips setting `result.mo_total` when `tipo == "caja_luz"` to avoid double-charging in the PDF.
 
-**PRECIOS_CAJA_M2** entries are material cost only (no markup): lona 250, vinil_corte 100, acrilico 380, acrilico_2vistas 760 $/m².
+**PRECIOS_CAJA_M2** entries are material cost only (no markup, freight goes in `flete_maquila` per job): lona_translucida 50, vinil_impresion 60 (owner's supplier prices, jul-2026 — quoted "per meter", assumed $/m²), acrilico 380, acrilico_2vistas 760 $/m². Cut vinyl is NOT here — it's costed from the VINILOS roll catalog ($/m lineal).
 
 ### Installation and labor (`_InstMixin`)
 
@@ -483,7 +487,7 @@ Análisis honesto del estado actual. Marcado por criticidad.
 
 Fase 1 de endurecimiento cerrada (commits `18155a3`, `7fd86c2`, `d9bf8a5`, `603f068`, `ed59cad`, `da8776e`, `e4cc9a1`, `e4e1d76`). Lo que sigue documentado como pendiente arriba ya **NO** está pendiente: Dockerfile, `requirements.lock`, CI, ruff, mypy, índices SQLite, backup automático, thread-safety, logging exhaustivo, Excel export, vectorización Claude removida — todo committed.
 
-**Trabajo de junio-julio 2026** (fases A-G de mejoras al motor de cotización, ver secciones de arquitectura arriba): refactor de `parse_svg` a "universo de piezas" con detección de unidad real del SVG, material de cara adaptativo por pieza individual, LEDs por `modo_iluminacion` (cara = área de cobertura, halo = perímetro/15 cm; mín. 3/pieza), silvatrim opcional (auto→ninguno si la cara no es acrílico), pegamento recalibrado con datos de campo, detección de placas redondeadas en cajas, costos de maquila y cables en cajas, LED `modulo_panel`, planos de medidas v2 cliente/taller (`plano_gen.py`: cotas por pieza con empaquetado parcial anti-solape, badges con anti-colisión), detección de huecos por fill blanco (`es_hueco` — planos/OT los excluyen; el motor de cotización NO todavía, ver abajo), OT con página landscape del diseño + badges por material, SVG persistido en DB, catálogo recalibrado con lista de proveedor feb-2026 ("Todo para el Anunciero"), desglose de costos por componente y por pieza con margen real, `warnings` de inconsistencias. 99 tests.
+**Trabajo de junio-julio 2026** (fases A-G de mejoras al motor de cotización, ver secciones de arquitectura arriba): refactor de `parse_svg` a "universo de piezas" con detección de unidad real del SVG, material de cara adaptativo por pieza individual, LEDs por `modo_iluminacion` (cara = área de cobertura, halo = perímetro/15 cm; mín. 3/pieza), silvatrim opcional (auto→ninguno si la cara no es acrílico), pegamento recalibrado con datos de campo, detección de placas redondeadas en cajas, costos de maquila y cables en cajas, LED `modulo_panel`, planos de medidas v2 cliente/taller (`plano_gen.py`: cotas por pieza con empaquetado parcial anti-solape, badges con anti-colisión), detección de huecos por fill blanco (`es_hueco` — planos/OT los excluyen; el motor de cotización NO todavía, ver abajo), OT con página landscape del diseño + badges por material, SVG persistido en DB, catálogo recalibrado con lista de proveedor feb-2026 ("Todo para el Anunciero"), desglose de costos por componente y por pieza con margen real, `warnings` de inconsistencias. 101 tests.
 
 **Trabajo commiteado el 2026-07-08** (autorizado por el propietario): detección de huecos, plano v2 anti-solape, exclusión de huecos en planos/OT, vectorizador v2 (silueta única para corte), recalibración de catálogo feb-2026, rediseño UI oscuro premium CMYK, y **exclusión de huecos en el motor de cotización** (decisión del propietario: "piezas fantasma no" — `cotizar_letras`/`cotizar_planas` ya no cobran huecos y la escala ancla a la pieza real más alta; `cotizar_caja` intacta). 99 tests en verde.
 

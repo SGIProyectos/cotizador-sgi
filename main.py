@@ -332,8 +332,10 @@ class CajaRequest(_InstMixin):
     session_id: str
     real_width_cm: float
     profundidad_cm: float
-    tipo_cara: str = "lona"
-    base_cara_vinil: str = "lona"
+    tipo_cara: str = "lona"          # material base: "lona" | "acrilico" (legacy: "vinil_corte", "acrilico_2vistas")
+    base_cara_vinil: str = "lona"    # legacy, solo con tipo_cara="vinil_corte"
+    grafico: str = "impreso"         # "ninguno" | "impreso" | "vinil_corte"
+    vinil_id: str = "vinil_std"      # vinil del catálogo para grafico="vinil_corte"
     led_id: str = "auto"
     uso: str = "exterior"
     vistas: int = 1
@@ -506,6 +508,8 @@ async def api_cotizar_caja(req: CajaRequest):
             profundidad_cm=req.profundidad_cm,
             tipo_cara=req.tipo_cara,
             base_cara_vinil=req.base_cara_vinil,
+            grafico=req.grafico,
+            vinil_id=req.vinil_id,
             led_id=req.led_id,
             uso=req.uso,
             vistas=req.vistas,
@@ -692,11 +696,14 @@ async def api_ot(quote_id: str, cliente: str = "", notas: str = ""):
                 svg_data = parse_svg(svg_text.encode("utf-8"))
                 vb_w = svg_data.viewbox_w
                 vb_h = svg_data.viewbox_h
-                paths_info = [
-                    {"svg_id": p.svg_id, "id": p.id, "bbox": p.bbox,
-                     "is_closed": p.is_closed, "es_hueco": p.es_hueco}
-                    for p in svg_data.paths
-                ]
+                # Caja de luz: se fabrica como UNA pieza — sin badges numerados
+                # por letra en la página de diseño (el diseño se ve tal cual).
+                if result.tipo != "caja_luz":
+                    paths_info = [
+                        {"svg_id": p.svg_id, "id": p.id, "bbox": p.bbox,
+                         "is_closed": p.is_closed, "es_hueco": p.es_hueco}
+                        for p in svg_data.paths
+                    ]
             except Exception:
                 log.warning("OT %s: no se pudo parsear SVG persistido", quote_id,
                             exc_info=True)
@@ -907,6 +914,8 @@ def _result_to_dict(r: QuoteResult, qid: str) -> dict:
             "cara": {
                 "nombre": r.material_cara.get("nombre"),
                 "base": r.material_cara.get("base"),
+                "grafico": r.material_cara.get("grafico"),
+                "cuadro_corte": r.material_cara.get("cuadro_corte"),
                 "vinil_filas":   r.material_cara.get("vinil_filas"),
                 "vinil_area_m2": r.material_cara.get("vinil_area_m2"),
                 "laminas": r.laminas_cara,

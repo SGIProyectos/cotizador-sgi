@@ -718,8 +718,8 @@
     }
   },
   "precios_caja_m2": {
-    "lona": 250.0,
-    "vinil_corte": 100.0,
+    "lona_translucida": 50.0,
+    "vinil_impresion": 60.0,
     "acrilico": 380.0,
     "acrilico_2vistas": 760.0
   },
