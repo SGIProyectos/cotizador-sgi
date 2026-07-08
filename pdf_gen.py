@@ -1,3 +1,4 @@
+import calendar
 import io
 import logging
 from datetime import datetime
@@ -861,28 +862,50 @@ def generar_pdf_entrega(result, meta: dict) -> bytes:
     ], st))
     elements.append(Spacer(1, 0.4*cm))
 
-    # Descripción entregada
+    # Descripción entregada — para caja de luz la semántica es distinta:
+    # se entrega UNA caja con su gráfico, no piezas sueltas
     elements.append(Paragraph("Descripción del Trabajo Entregado", st["h2"]))
-    desc_rows = [
-        ["Producto",         tipo_label],
-        ["Altura máx pieza", f"{result.altura_letra_cm:.1f} cm"],
-        ["Material cara",    result.material_cara.get("nombre", "—")],
-        ["Material cercha",  result.material_cercha.get("nombre", "—")],
-        ["Iluminación",      result.led.get("nombre", "Sin iluminación")],
-        ["Construcción",     result.tipo_construccion.replace("_", " ").title()],
-    ]
+    if result.tipo == "caja_luz":
+        caja_w, caja_h = _dims_caja(result)
+        cuadro = (result.material_cara or {}).get("cuadro_corte")
+        desc_rows = [
+            ["Producto",   tipo_label],
+            ["Medidas",    f"{caja_w:.0f} × {caja_h:.0f} cm · profundidad {result.cercha_altura_cm:.0f} cm"],
+            ["Cara",       result.material_cara.get("nombre", "—")],
+            ["Sercha",     result.material_cercha.get("nombre", "—")],
+            ["Fondo",      result.material_fondo.get("nombre", "—")],
+        ]
+        if cuadro:
+            desc_rows.append(["Gráfico", f"Vinil de corte {cuadro['ancho_cm']:.0f} × {cuadro['alto_cm']:.0f} cm ({cuadro.get('vinil_nombre','')})"])
+        desc_rows.append(["Iluminación", result.led.get("nombre", "Sin iluminación")])
+    else:
+        desc_rows = [
+            ["Producto",         tipo_label],
+            ["Piezas",           f"{result.paths_count}"],
+            ["Altura máx pieza", f"{result.altura_letra_cm:.1f} cm"],
+            ["Material cara",    result.material_cara.get("nombre", "—")],
+            ["Material cercha",  result.material_cercha.get("nombre", "—")],
+            ["Iluminación",      result.led.get("nombre", "Sin iluminación")],
+            ["Construcción",     result.tipo_construccion.replace("_", " ").title()],
+        ]
     elements.append(_tabla_kv(desc_rows))
     elements.append(Spacer(1, 0.3*cm))
 
     # Declaración de recepción
     elements.append(Paragraph("Declaración de Recepción y Conformidad", st["h2"]))
     elements.append(Paragraph(
-        "El Cliente declara que:<br/><br/>"
-        "1. Ha recibido a su entera satisfacción el trabajo descrito en este documento.<br/>"
-        "2. Verificó físicamente que el anuncio corresponde a las especificaciones acordadas.<br/>"
-        "3. El trabajo fue revisado en presencia del Proveedor y no presenta defectos visibles "
-        "al momento de la entrega.<br/>"
-        "4. Ha realizado el pago total del servicio conforme a lo pactado.",
+        'El cliente (en adelante "EL CLIENTE") declara ante el proveedor '
+        f'(en adelante "EL PROVEEDOR", {empresa}) que:<br/><br/>'
+        "1. Recibe en este acto, a su entera satisfacción, el trabajo descrito en este documento, "
+        "en la fecha y lugar arriba señalados.<br/>"
+        "2. Verificó físicamente el anuncio en presencia de EL PROVEEDOR: medidas, materiales, "
+        "acabados, colores y funcionamiento de la iluminación (cuando aplique) corresponden a lo acordado.<br/>"
+        "3. Al momento de la entrega el trabajo NO presenta defectos visibles, daños, rayones ni "
+        "faltantes. La firma de esta acta extingue cualquier reclamación posterior por defectos "
+        "que fueran apreciables a simple vista en este acto.<br/>"
+        "4. Los defectos ocultos o de fabricación que se manifiesten después de la entrega quedan "
+        "cubiertos exclusivamente por la garantía descrita más adelante.<br/>"
+        "5. Ha realizado el pago conforme a la liquidación siguiente.",
         st["body"]
     ))
     elements.append(Spacer(1, 0.3*cm))
@@ -908,10 +931,31 @@ def generar_pdf_entrega(result, meta: dict) -> bytes:
     elements.append(liq_tbl)
     elements.append(Spacer(1, 0.3*cm))
 
-    # Garantía
+    # Garantía — 3 meses (90 días), consistente con el mínimo del art. 77 de la
+    # Ley Federal de Protección al Consumidor
     elements.append(KeepTogether([
-        Paragraph("Garantía — 1 (un) año a partir de esta fecha", st["h2"]),
+        Paragraph("Garantía — 3 (tres) meses a partir de la fecha de entrega", st["h2"]),
+        Paragraph(
+            "EL PROVEEDOR garantiza este anuncio contra defectos de fabricación y de materiales "
+            f"por un plazo de <b>3 (tres) meses naturales</b> contados a partir de la fecha de esta acta "
+            f"(vence el <b>{_vence_garantia(fecha)}</b>), plazo igual o mayor al mínimo previsto por el "
+            "artículo 77 de la Ley Federal de Protección al Consumidor.",
+            st["body"]
+        ),
+        Spacer(1, 0.15*cm),
         _garantia_tbl(st),
+        Spacer(1, 0.2*cm),
+        Paragraph(
+            "<b>Cómo hacer válida la garantía:</b> EL CLIENTE deberá dar aviso a EL PROVEEDOR dentro "
+            "de la vigencia, por escrito o por mensaje, describiendo la falla y acompañando fotografía. "
+            "EL PROVEEDOR revisará el anuncio en un plazo máximo de 10 (diez) días hábiles y, de "
+            "confirmarse el defecto de fabricación, reparará o repondrá la parte afectada <b>sin costo</b> "
+            "para EL CLIENTE, a elección de EL PROVEEDOR según la naturaleza de la falla. La garantía "
+            "cubre la pieza o componente defectuoso; no obliga a la reposición total del anuncio cuando "
+            "el defecto sea parcial y reparable. Las reparaciones efectuadas en garantía no amplían el "
+            "plazo original.",
+            st["body"]
+        ),
         Spacer(1, 0.3*cm),
     ]))
 
@@ -919,14 +963,19 @@ def generar_pdf_entrega(result, meta: dict) -> bytes:
     elements.append(KeepTogether([
         Paragraph("Deslinde de Responsabilidad", st["h2"]),
         Paragraph(
-            "El Cliente reconoce que: (1) El Proveedor no se responsabiliza de daños causados por "
-            "instalación incorrecta realizada sin su participación. (2) Si el Cliente o un tercero "
-            "realizó la instalación, la responsabilidad sobre la sujeción y seguridad del anuncio "
-            "recae íntegramente en quien la ejecutó. (3) El Proveedor no responde por pérdidas "
-            "económicas ni perjuicios indirectos fuera del alcance de esta garantía. "
-            "(4) El Cliente ha sido informado de las recomendaciones de mantenimiento básico: "
-            "limpieza periódica, revisión de conexiones eléctricas y verificación de anclajes "
-            "al menos una vez al año.",
+            "EL CLIENTE reconoce y acepta que: (1) EL PROVEEDOR no se responsabiliza de daños causados "
+            "por instalación incorrecta realizada sin su participación; si EL CLIENTE o un tercero "
+            "realizó la instalación, la responsabilidad sobre la sujeción, fijación y seguridad del "
+            "anuncio recae íntegramente en quien la ejecutó. (2) Es responsabilidad de EL CLIENTE "
+            "contar con los permisos, licencias de anuncio y autorizaciones municipales que la "
+            "normativa local exija para la colocación y operación del anuncio. (3) EL PROVEEDOR no "
+            "responde por pérdidas económicas, lucro cesante ni perjuicios indirectos fuera del "
+            "alcance de esta garantía. (4) EL CLIENTE ha sido informado de las recomendaciones de "
+            "mantenimiento básico: limpieza periódica sin solventes, revisión de conexiones "
+            "eléctricas y verificación de anclajes cuando menos una vez al año; la falta de este "
+            "mantenimiento libera a EL PROVEEDOR de responsabilidad por los daños derivados. "
+            "(5) Para todo lo no previsto en esta acta, las partes se sujetan a la legislación "
+            "aplicable en los Estados Unidos Mexicanos.",
             st["body"]
         ),
         Spacer(1, 0.5*cm),
@@ -943,7 +992,7 @@ def generar_pdf_entrega(result, meta: dict) -> bytes:
         Paragraph("Testigo (si aplica): ____________________________  Firma: ____________________", st["small"]),
         Spacer(1, 0.3*cm),
         HRFlowable(width="100%", color=colors.lightgrey, thickness=0.5),
-        Paragraph(f"{empresa}  ·  Acta de Entrega ENT-{folio}  ·  Garantía válida hasta {_un_ano(fecha)}", st["pie"]),
+        Paragraph(f"{empresa}  ·  Acta de Entrega ENT-{folio}  ·  Garantía válida hasta {_vence_garantia(fecha)}", st["pie"]),
     ]))
 
     doc.build(elements)
@@ -988,11 +1037,31 @@ def _garantia_tbl(st: dict):
     return tbl
 
 
-def _un_ano(fecha_str: str) -> str:
+def _vence_garantia(fecha_str: str, meses: int = 3) -> str:
+    """Fecha de vencimiento de la garantía: N meses naturales desde la entrega.
+    Si el mes destino es más corto, se recorta al último día (31 ene → 30 abr)."""
     try:
         d = datetime.strptime(fecha_str, "%d/%m/%Y")
-        return d.replace(year=d.year + 1).strftime("%d/%m/%Y")
+        mes_total = d.month - 1 + meses
+        anio, mes = d.year + mes_total // 12, mes_total % 12 + 1
+        ultimo = calendar.monthrange(anio, mes)[1]
+        return d.replace(year=anio, month=mes, day=min(d.day, ultimo)).strftime("%d/%m/%Y")
     except (ValueError, TypeError):
         return "—"
+
+
+def _dims_caja(result) -> tuple[float, float]:
+    """Ancho y alto de la caja en cm, despejados de perímetro y área
+    (P = 2(w+h), A = w·h). Devuelve (mayor, menor) → (ancho, alto) usual."""
+    try:
+        s = (result.perimetro_total_cm or 0) / 2
+        a = result.area_cara_cm2 or 0
+        disc = s * s - 4 * a
+        if s <= 0 or a <= 0 or disc < 0:
+            return 0.0, 0.0
+        r = disc ** 0.5
+        return (s + r) / 2, (s - r) / 2
+    except Exception:
+        return 0.0, 0.0
 
 

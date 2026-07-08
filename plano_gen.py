@@ -482,14 +482,31 @@ def _construir_bom(result) -> list[tuple[str, str, str]]:
     if result.laminas_cara:
         bom.append(("", "Láminas de cara estimadas (122×244)", f"{result.laminas_cara} lám."))
 
-    # Cercha
+    # Cercha (letras) / Sercha (caja)
+    es_caja = getattr(result, "tipo", "") == "caja_luz"
     if result.cercha_area_cm2 > 0 and (result.material_cercha or {}).get("nombre"):
-        ml = result.perimetro_total_cm / 100 * 1.10
-        bom.append(("Cercha", f"{result.material_cercha['nombre']} · "
-                              f"prof. {result.cercha_altura_cm:.0f} cm",
-                    f"{ml:.1f} m (+10% merma)"))
+        ml = result.perimetro_total_cm / 100 * (1.0 if es_caja else 1.10)
+        bom.append(("Sercha" if es_caja else "Cercha",
+                    f"{result.material_cercha['nombre']} · "
+                    f"prof. {result.cercha_altura_cm:.0f} cm",
+                    f"{ml:.1f} m" + ("" if es_caja else " (+10% merma)")))
         if result.laminas_cercha:
-            bom.append(("", "Láminas de cercha estimadas", f"{result.laminas_cercha} lám."))
+            bom.append(("", "Láminas estimadas", f"{result.laminas_cercha} lám."))
+
+    # Gráfico de caja: vinil de corte (cuadro) — el diseño NO se lista letra
+    # por letra, se corta como un solo rectángulo de rollo
+    cuadro = (result.material_cara or {}).get("cuadro_corte") if es_caja else None
+    if cuadro:
+        bom.append(("Gráfico",
+                    f"Vinil de corte {cuadro.get('vinil_nombre', '')} — cuadro "
+                    f"{cuadro['ancho_cm']:.0f} × {cuadro['alto_cm']:.0f} cm",
+                    f"{cuadro.get('ml_rollo', 0):.2f} m de rollo"))
+
+    # Cableado (caja): misma fórmula que cotizar_caja
+    if es_caja:
+        metros_led = max(5.0, round(result.perimetro_total_cm / 100 * 1.2, 1))
+        bom.append(("Cableado", "Cable LED Radox cal 22 + POT cal 18",
+                    f"{metros_led:.1f} m + 5 m"))
 
     # Fondo
     if result.costo_material_fondo > 0 and (result.material_fondo or {}).get("nombre"):
@@ -968,6 +985,274 @@ def _dibujar_tabla_tecnica(c, x: float, y_top: float, w: float,
     c.rect(x, y + rh, w, y_top - (y + rh), fill=0, stroke=1)
 
 
+# ─── Plano de CAJA DE LUZ ────────────────────────────────────────────────────
+# La caja se planifica como UNA pieza (regla del propietario): sin numerar el
+# diseño letra por letra. Cotas: ancho y alto de la caja; si el gráfico es
+# vinil de corte, el CUADRO DE CORTE punteado con sus medidas y su posición
+# desde los bordes (para que el instalador centre el vinil).
+
+def _dims_caja_cm(result) -> tuple[float, float]:
+    """Ancho y alto reales de la caja despejados de P = 2(w+h) y A = w·h."""
+    try:
+        s = (result.perimetro_total_cm or 0) / 2
+        a = result.area_cara_cm2 or 0
+        disc = s * s - 4 * a
+        if s <= 0 or a <= 0 or disc < 0:
+            return 0.0, 0.0
+        r = disc ** 0.5
+        return (s + r) / 2, (s - r) / 2
+    except Exception:
+        return 0.0, 0.0
+
+
+def _outline_y_diseno(paths_info: list):
+    """(bbox_caja, bbox_diseño) en coords SVG, como dicts {x,y,w,h}.
+    Caja = pieza cerrada cuyo bbox cubre ≥80% del bbox conjunto (la placa
+    exterior); diseño = las demás cerradas no-hueco."""
+    cerradas = [p for p in paths_info if p.get("is_closed")]
+    if not cerradas:
+        return None, None
+    minX, minY, maxX, maxY = _bbox_conjunto(cerradas)
+    area_total = (maxX - minX) * (maxY - minY)
+    outline, best = None, 0.0
+    for p in cerradas:
+        bb = p["bbox"]
+        a = bb["w"] * bb["h"]
+        if area_total > 0 and a / area_total >= 0.8 and a > best:
+            outline, best = p, a
+    if outline is not None:
+        caja = dict(outline["bbox"])
+        diseno_p = [p for p in cerradas
+                    if p is not outline and not p.get("es_hueco")]
+    else:
+        caja = {"x": minX, "y": minY, "w": maxX - minX, "h": maxY - minY}
+        diseno_p = [p for p in cerradas if not p.get("es_hueco")]
+    if diseno_p:
+        dx0 = min(p["bbox"]["x"] for p in diseno_p)
+        dy0 = min(p["bbox"]["y"] for p in diseno_p)
+        dx1 = max(p["bbox"]["x"] + p["bbox"]["w"] for p in diseno_p)
+        dy1 = max(p["bbox"]["y"] + p["bbox"]["h"] for p in diseno_p)
+        diseno = {"x": dx0, "y": dy0, "w": dx1 - dx0, "h": dy1 - dy0}
+    else:
+        diseno = None
+    return caja, diseno
+
+
+def _ficha_caja(result, caja_w: float, caja_h: float,
+                pos_x_cm: float, pos_y_cm: float) -> list[tuple[str, str]]:
+    """Filas (etiqueta, valor) de la ficha de la caja para tabla lateral."""
+    prof = result.cercha_altura_cm or 0
+    cuadro = (result.material_cara or {}).get("cuadro_corte")
+    filas = [
+        ("Caja",        f"{caja_w:.1f} × {caja_h:.1f} cm"),
+        ("Profundidad", f"{prof:.0f} cm"),
+        ("Cara",        (result.material_cara or {}).get("nombre", "—")),
+        ("Sercha",      (result.material_cercha or {}).get("nombre", "—")),
+        ("Fondo",       (result.material_fondo or {}).get("nombre", "—")),
+    ]
+    if cuadro:
+        filas.append(("Cuadro corte",
+                      f"{cuadro['ancho_cm']:.1f} × {cuadro['alto_cm']:.1f} cm"))
+        filas.append(("Vinil",
+                      f"{cuadro.get('vinil_nombre', '—')} · "
+                      f"{cuadro.get('ml_rollo', 0):.2f} m rollo"))
+        if pos_x_cm >= 0 and pos_y_cm >= 0:
+            filas.append(("Posición",
+                          f"{pos_x_cm:.1f} cm izq · {pos_y_cm:.1f} cm arriba"))
+    if result.modulos_led > 0:
+        filas.append(("Iluminación",
+                      f"{result.modulos_led} × {(result.led or {}).get('nombre', 'LED')}"))
+    return filas
+
+
+def _dibujar_ficha_caja(c, x: float, y_top: float, w: float,
+                        filas: list[tuple[str, str]]) -> None:
+    th, rh = 15, 15
+    c.setFillColor(AZUL_DARK)
+    c.rect(x, y_top - th, w, th, fill=1, stroke=0)
+    c.setFillColor(colors.white); c.setFont(FONT_BOLD, 8)
+    c.drawString(x + 4, y_top - th + 4, "CAJA DE LUZ — 1 PIEZA")
+    y = y_top - th - rh
+    for i, (lbl, val) in enumerate(filas):
+        if i % 2 == 0:
+            c.setFillColor(GRIS_ZEBRA)
+            c.rect(x, y, w, rh, fill=1, stroke=0)
+        c.setFillColor(GRIS_TXT); c.setFont(FONT_BOLD, 6.5)
+        c.drawString(x + 4, y + rh - 7, lbl.upper())
+        c.setFillColor(colors.black); c.setFont(FONT_NAME, 7.5)
+        val_s = str(val)
+        while _text_width(val_s, FONT_NAME, 7.5) > w - 8 and len(val_s) > 4:
+            val_s = val_s[:-2]
+        c.drawString(x + 4, y + 2.5, val_s)
+        y -= rh
+    c.setStrokeColor(GRIS_BORDE); c.setLineWidth(0.5)
+    c.rect(x, y + rh, w, y_top - (y + rh), fill=0, stroke=1)
+
+
+def _construir_pdf_caja(meta: dict, svg_text: str, paths_info: list,
+                        titulo: str, modo_taller: bool,
+                        result, notas: str = "") -> bytes:
+    PW, PH = landscape(letter)
+    buf = io.BytesIO()
+    c = _canvas.Canvas(buf, pagesize=landscape(letter))
+
+    caja_bb, dis_bb = _outline_y_diseno(paths_info)
+    if caja_bb is None or caja_bb["w"] <= 0 or caja_bb["h"] <= 0:
+        _dibujar_header(c, titulo, PW, PH)
+        c.setFillColor(colors.HexColor("#b00020")); c.setFont(FONT_BOLD, 12)
+        c.drawCentredString(PW / 2, PH / 2, "No se detectaron piezas cerradas en el SVG.")
+        c.save()
+        return buf.getvalue()
+
+    caja_w_cm, caja_h_cm = _dims_caja_cm(result)
+    cm_per_unit = caja_w_cm / caja_bb["w"] if caja_w_cm > 0 else 1.0
+    if caja_h_cm <= 0:
+        caja_h_cm = caja_bb["h"] * cm_per_unit
+    prof   = result.cercha_altura_cm or 0
+    cuadro = (result.material_cara or {}).get("cuadro_corte")
+    con_cuadro = bool(cuadro and dis_bb)
+
+    # encuadre sobre el bbox conjunto de TODAS las cerradas (fidelidad visual)
+    cerradas = [p for p in paths_info if p.get("is_closed")]
+    minX, minY, maxX, maxY = _bbox_conjunto(cerradas)
+    bbox_w_svg, bbox_h_svg = maxX - minX, maxY - minY
+
+    # bandas: arriba = ancho caja · izquierda = [pos Y | alto caja] ·
+    # abajo = [ancho cuadro / pos X] · derecha (antes de la tabla) = alto cuadro
+    banda_izq = GAP_DIBUJO_COTA + (2 if con_cuadro else 1) * COL_ALTO_PT + 4
+    banda_bot = (GAP_DIBUJO_COTA + 2 * FILA_COTA_PT + 4) if con_cuadro else 10
+    banda_der = (COL_ALTO_PT if con_cuadro else 0)
+
+    area_x0 = MARGEN + banda_izq
+    area_y0 = MARGEN + PIE_H + banda_bot
+    area_x1 = PW - MARGEN - COL_TABLA_W - GAP_COL - banda_der
+    area_y1 = PH - HEADER_H - MARGEN - BANDA_TOP
+    area_w, area_h = area_x1 - area_x0, area_y1 - area_y0
+
+    scale_draw = min(area_w / bbox_w_svg, area_h / bbox_h_svg)
+    dibujo_w, dibujo_h = bbox_w_svg * scale_draw, bbox_h_svg * scale_draw
+    ox = area_x0 + (area_w - dibujo_w) / 2
+    oy = area_y0 + (area_h - dibujo_h) / 2
+
+    _dibujar_header(c, titulo, PW, PH, subtitulo="Caja de luz — 1 pieza")
+    _render_svg(c, svg_text, ox, oy, scale_draw, minX, minY, bbox_h_svg)
+
+    # esquinas de la caja y del cuadro en coords de canvas
+    cj_xl, cj_yt = _svg_to_canvas_xy(caja_bb["x"], caja_bb["y"],
+                                     ox, oy, scale_draw, minX, minY, bbox_h_svg)
+    cj_xr, cj_yb = _svg_to_canvas_xy(caja_bb["x"] + caja_bb["w"],
+                                     caja_bb["y"] + caja_bb["h"],
+                                     ox, oy, scale_draw, minX, minY, bbox_h_svg)
+
+    # cota ancho de caja (arriba) y alto de caja (columna externa izquierda)
+    y_gw = cj_yt + BANDA_TOP * 0.55
+    _ext_v(c, cj_xl, cj_yt + 2, y_gw)
+    _ext_v(c, cj_xr, cj_yt + 2, y_gw)
+    _cota_h(c, cj_xl, cj_xr, y_gw, caja_w_cm, bold=True)
+
+    x_gh = area_x0 - banda_izq + COL_ALTO_PT * 0.5
+    _ext_h(c, x_gh, cj_xl - 2, cj_yb)
+    _ext_h(c, x_gh, cj_xl - 2, cj_yt)
+    _cota_v(c, x_gh, cj_yb, cj_yt, caja_h_cm, bold=True)
+
+    pos_x_cm = pos_y_cm = -1.0
+    if con_cuadro:
+        ds_xl, ds_yt = _svg_to_canvas_xy(dis_bb["x"], dis_bb["y"],
+                                         ox, oy, scale_draw, minX, minY, bbox_h_svg)
+        ds_xr, ds_yb = _svg_to_canvas_xy(dis_bb["x"] + dis_bb["w"],
+                                         dis_bb["y"] + dis_bb["h"],
+                                         ox, oy, scale_draw, minX, minY, bbox_h_svg)
+        pos_x_cm = max(0.0, (dis_bb["x"] - caja_bb["x"]) * cm_per_unit)
+        pos_y_cm = max(0.0, (dis_bb["y"] - caja_bb["y"]) * cm_per_unit)
+
+        # cuadro de corte punteado
+        c.saveState()
+        c.setStrokeColor(colors.HexColor("#C05621")); c.setLineWidth(1.0)
+        c.setDash(4, 3)
+        c.rect(ds_xl, ds_yb, ds_xr - ds_xl, ds_yt - ds_yb, fill=0, stroke=1)
+        c.restoreState()
+
+        # abajo fila 0: ancho del cuadro · fila 1: posición desde el borde izq
+        y_c0 = cj_yb - GAP_DIBUJO_COTA - 6
+        _ext_v(c, ds_xl, ds_yb - 2, y_c0)
+        _ext_v(c, ds_xr, ds_yb - 2, y_c0)
+        _cota_h(c, ds_xl, ds_xr, y_c0, cuadro["ancho_cm"])
+        if pos_x_cm > 0.05:
+            y_c1 = y_c0 - FILA_COTA_PT
+            _ext_v(c, cj_xl, cj_yb - 2, y_c1)
+            _ext_v(c, ds_xl, ds_yb - 2, y_c1)
+            _cota_h(c, cj_xl, ds_xl, y_c1, pos_x_cm)
+
+        # derecha: alto del cuadro · izquierda col interna: posición desde arriba
+        x_ch = area_x1 + banda_der * 0.5
+        _ext_h(c, x_ch, ds_xr + 2, ds_yb)
+        _ext_h(c, x_ch, ds_xr + 2, ds_yt)
+        _cota_v(c, x_ch, ds_yb, ds_yt, cuadro["alto_cm"])
+        if pos_y_cm > 0.05:
+            x_py = area_x0 - GAP_DIBUJO_COTA - COL_ALTO_PT * 0.5
+            _ext_h(c, x_py, cj_xl - 2, cj_yt)
+            _ext_h(c, x_py, ds_xl - 2, ds_yt)
+            _cota_v(c, x_py, ds_yt, cj_yt, pos_y_cm)
+
+    # columna derecha: ficha + cajetín
+    col_x = PW - MARGEN - COL_TABLA_W
+    tabla_top = PH - HEADER_H - MARGEN
+    filas = _ficha_caja(result, caja_w_cm, caja_h_cm, pos_x_cm, pos_y_cm)
+    _dibujar_ficha_caja(c, col_x, tabla_top, COL_TABLA_W, filas)
+
+    ratio = (cm_per_unit * cm / scale_draw) if scale_draw > 0 else 0
+    escala_txt  = _escala_bonita(ratio)
+    totales_txt = f"{caja_w_cm:.1f} × {caja_h_cm:.1f} × {prof:.0f} cm"
+    _dibujar_cajetin(c, col_x, MARGEN + PIE_H, COL_TABLA_W, CAJETIN_H,
+                     meta, escala_txt, totales_txt, con_firma=not modo_taller)
+
+    _dibujar_pie(c, PW,
+                 texto_izq=f"Página 1 de {2 if modo_taller else 1}",
+                 texto_der=f"Escala {escala_txt} · Cotas en cm · "
+                           f"{'Cuadro punteado = vinil de corte' if con_cuadro else 'Caja de luz'}")
+
+    if modo_taller:
+        c.showPage()
+        _pagina_taller_caja(c, PW, PH, meta, result, filas, notas)
+        _dibujar_pie(c, PW, texto_izq="Página 2 de 2")
+
+    c.save()
+    return buf.getvalue()
+
+
+def _pagina_taller_caja(c, PW: float, PH: float, meta: dict, result,
+                        ficha: list[tuple[str, str]], notas: str) -> None:
+    """Página 2 de caja: BOM + ficha de fabricación + perfil del cajón."""
+    _dibujar_header(c, "TALLER — MATERIALES Y FABRICACIÓN", PW, PH,
+                    subtitulo=f"Folio: {meta.get('folio') or '—'}")
+    top = PH - HEADER_H - MARGEN
+    mitad_w = (PW - 2 * MARGEN - GAP_COL) / 2
+
+    c.setFillColor(AZUL_DARK); c.setFont(FONT_BOLD, 10)
+    c.drawString(MARGEN, top - 9, "LISTA DE MATERIALES")
+    bom = _construir_bom(result)
+    y_bom_final = top - 16
+    if bom:
+        y_bom_final = _dibujar_bom(c, MARGEN, top - 16, mitad_w, bom)
+
+    # perfil lateral del cajón (mismo esquema que cercha: cara/canal/fondo/muro)
+    perfil_h = 100
+    y_perfil = y_bom_final - perfil_h - 14
+    if y_perfil > MARGEN + PIE_H + 20:
+        _dibujar_perfil_cercha(c, MARGEN, y_perfil, mitad_w * 0.75, perfil_h, result)
+
+    x_der = MARGEN + mitad_w + GAP_COL
+    c.setFillColor(AZUL_DARK); c.setFont(FONT_BOLD, 10)
+    c.drawString(x_der, top - 9, "FICHA DE FABRICACIÓN")
+    _dibujar_ficha_caja(c, x_der, top - 16, mitad_w, ficha)
+
+    if notas:
+        c.setFillColor(GRIS_TXT); c.setFont(FONT_BOLD, 8)
+        c.drawString(MARGEN, MARGEN + PIE_H + 8, "NOTAS:")
+        c.setFillColor(colors.black); c.setFont(FONT_NAME, 8)
+        c.drawString(MARGEN + 38, MARGEN + PIE_H + 8, notas[:200])
+
+
 # ─── API pública ─────────────────────────────────────────────────────────────
 
 def generar_plano_cliente(meta: dict, svg_text: str, paths_info: list,
@@ -976,7 +1261,12 @@ def generar_plano_cliente(meta: dict, svg_text: str, paths_info: list,
                           result=None,
                           artboard_w_cm_hint: float = 0.0) -> bytes:
     """Plano de medidas para CLIENTE: dibujo con cotas técnicas, tabla de
-    piezas, cajetín con firma de aprobación."""
+    piezas, cajetín con firma de aprobación. Las cajas de luz usan su propio
+    plano de UNA pieza (caja + cuadro de corte), sin numerar letras."""
+    if result is not None and getattr(result, "tipo", "") == "caja_luz":
+        return _construir_pdf_caja(meta, svg_text, paths_info,
+                                   titulo="PLANO DE MEDIDAS",
+                                   modo_taller=False, result=result)
     return _construir_pdf(meta, svg_text, paths_info, viewbox_w, viewbox_h,
                           real_width_cm, altura_cm,
                           titulo="PLANO DE MEDIDAS",
@@ -990,7 +1280,12 @@ def generar_plano_taller(meta: dict, svg_text: str, paths_info: list,
                          result=None, notas: str = "",
                          artboard_w_cm_hint: float = 0.0) -> bytes:
     """Plano para TALLER: dibujo con cotas + página 2 con lista de materiales
-    (BOM), tabla técnica por pieza, perfil de cercha y notas."""
+    (BOM), tabla técnica por pieza, perfil de cercha y notas. Las cajas de luz
+    usan su propio plano de UNA pieza con ficha de fabricación."""
+    if result is not None and getattr(result, "tipo", "") == "caja_luz":
+        return _construir_pdf_caja(meta, svg_text, paths_info,
+                                   titulo="PLANO TÉCNICO DE FABRICACIÓN",
+                                   modo_taller=True, result=result, notas=notas)
     return _construir_pdf(meta, svg_text, paths_info, viewbox_w, viewbox_h,
                           real_width_cm, altura_cm,
                           titulo="PLANO TÉCNICO DE FABRICACIÓN",

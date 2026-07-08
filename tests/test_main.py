@@ -157,6 +157,41 @@ def test_cotizar_caja_flujo(client, caja_svg):
     assert r.json()["tipo"] == "caja_luz"
 
 
+def _quote_caja(client, caja_svg, **extra):
+    sid = _new_session(client, caja_svg)
+    body = {
+        "session_id": sid, "real_width_cm": 250.0, "profundidad_cm": 18.0,
+        "tipo_cara": "lona", "grafico": "vinil_corte", "vinil_id": "vinil_std",
+        "uso": "exterior",
+    }
+    body.update(extra)
+    r = client.post("/api/cotizar/caja", json=body)
+    assert r.status_code == 200
+    return r.json()["quote_id"]
+
+
+def test_universo_caja_planos_y_acta(client, caja_svg):
+    """El universo completo de la caja genera PDFs válidos: plano cliente,
+    plano taller (2 páginas) y acta de entrega — sin enumerar letras."""
+    qid = _quote_caja(client, caja_svg)
+    for url in (f"/api/plano/{qid}", f"/api/plano-taller/{qid}",
+                f"/api/entrega/{qid}", f"/api/ot/{qid}", f"/api/excel/{qid}"):
+        r = client.get(url)
+        assert r.status_code == 200, url
+        assert len(r.content) > 1024, url
+
+
+def test_acta_garantia_tres_meses(client, caja_svg):
+    qid = _quote_caja(client, caja_svg)
+    r = client.get(f"/api/entrega/{qid}")
+    assert r.status_code == 200
+    # el PDF comprime el texto; validamos la regla de negocio en el generador
+    from pdf_gen import _vence_garantia
+    assert _vence_garantia("08/07/2026") == "08/10/2026"
+    assert _vence_garantia("30/11/2026") == "28/02/2027"   # feb corto
+    assert _vence_garantia("31/03/2026") == "30/06/2026"   # jun de 30 días
+
+
 def test_cotizar_session_invalida(client):
     r = client.post("/api/cotizar/letras", json={
         "session_id": "no_existe",

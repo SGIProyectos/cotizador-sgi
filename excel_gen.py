@@ -63,13 +63,32 @@ def generar_xlsx(result: QuoteResult, meta: dict) -> bytes:
 
     base_row = 3 + len(info) + 1
     ws.cell(row=base_row, column=1, value="MEDIDAS").font = Font(bold=True, color="1F3A5F")
-    medidas = [
-        ("Paths detectados",     result.paths_count),
-        ("Altura máx pieza (cm)", round(result.altura_letra_cm, 1)),
-        ("Área cara (cm²)",      round(result.area_cara_cm2, 2)),
-        ("Perímetro total (cm)", round(result.perimetro_total_cm, 2)),
-        ("Cercha altura (cm)",   round(result.cercha_altura_cm, 1)),
-    ]
+    if result.tipo == "caja_luz":
+        # La caja es UNA pieza: medidas de caja, no de letras
+        s = (result.perimetro_total_cm or 0) / 2
+        disc = s * s - 4 * (result.area_cara_cm2 or 0)
+        caja_w = (s + disc ** 0.5) / 2 if disc >= 0 and s > 0 else 0
+        caja_h = (s - disc ** 0.5) / 2 if disc >= 0 and s > 0 else 0
+        medidas = [
+            ("Ancho de caja (cm)",   round(caja_w, 1)),
+            ("Alto de caja (cm)",    round(caja_h, 1)),
+            ("Profundidad (cm)",     round(result.cercha_altura_cm, 1)),
+            ("Área cara (m²)",       round(result.area_cara_cm2 / 10000, 3)),
+            ("Perímetro (cm)",       round(result.perimetro_total_cm, 2)),
+        ]
+        cuadro = (result.material_cara or {}).get("cuadro_corte")
+        if cuadro:
+            medidas.append(("Cuadro de corte (cm)",
+                            f"{cuadro['ancho_cm']:.1f} × {cuadro['alto_cm']:.1f}"))
+            medidas.append(("Vinil (m de rollo)", round(cuadro.get("ml_rollo", 0), 2)))
+    else:
+        medidas = [
+            ("Paths detectados",     result.paths_count),
+            ("Altura máx pieza (cm)", round(result.altura_letra_cm, 1)),
+            ("Área cara (cm²)",      round(result.area_cara_cm2, 2)),
+            ("Perímetro total (cm)", round(result.perimetro_total_cm, 2)),
+            ("Cercha altura (cm)",   round(result.cercha_altura_cm, 1)),
+        ]
     for i, (k, v) in enumerate(medidas, start=base_row + 1):
         ws.cell(row=i, column=1, value=k)
         ws.cell(row=i, column=2, value=v).alignment = _RIGHT
