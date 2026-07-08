@@ -1006,12 +1006,12 @@ def _dims_caja_cm(result) -> tuple[float, float]:
 
 
 def _outline_y_diseno(paths_info: list):
-    """(bbox_caja, bbox_diseño) en coords SVG, como dicts {x,y,w,h}.
+    """(bbox_caja, bbox_diseño, piezas_diseño) en coords SVG.
     Caja = pieza cerrada cuyo bbox cubre ≥80% del bbox conjunto (la placa
     exterior); diseño = las demás cerradas no-hueco."""
     cerradas = [p for p in paths_info if p.get("is_closed")]
     if not cerradas:
-        return None, None
+        return None, None, []
     minX, minY, maxX, maxY = _bbox_conjunto(cerradas)
     area_total = (maxX - minX) * (maxY - minY)
     outline, best = None, 0.0
@@ -1035,11 +1035,39 @@ def _outline_y_diseno(paths_info: list):
         diseno = {"x": dx0, "y": dy0, "w": dx1 - dx0, "h": dy1 - dy0}
     else:
         diseno = None
-    return caja, diseno
+    return caja, diseno, diseno_p
+
+
+def _filas_diseno(diseno: list) -> list[dict]:
+    """Agrupa el diseño en RENGLONES (franjas horizontales que se solapan en Y)
+    y devuelve el bbox de cada renglón, de arriba hacia abajo. El taller
+    necesita cota por renglón ("CFE" arriba, "COMISIÓN FEDERAL" abajo…),
+    no solo el cuadro global."""
+    if not diseno:
+        return []
+    orden = sorted(diseno, key=lambda p: p["bbox"]["y"])
+    filas: list[list[dict]] = [[orden[0]]]
+    fondo = orden[0]["bbox"]["y"] + orden[0]["bbox"]["h"]
+    for p in orden[1:]:
+        if p["bbox"]["y"] <= fondo:          # solapa en Y → mismo renglón
+            filas[-1].append(p)
+            fondo = max(fondo, p["bbox"]["y"] + p["bbox"]["h"])
+        else:
+            filas.append([p])
+            fondo = p["bbox"]["y"] + p["bbox"]["h"]
+    out = []
+    for grupo in filas:
+        x0 = min(p["bbox"]["x"] for p in grupo)
+        y0 = min(p["bbox"]["y"] for p in grupo)
+        x1 = max(p["bbox"]["x"] + p["bbox"]["w"] for p in grupo)
+        y1 = max(p["bbox"]["y"] + p["bbox"]["h"] for p in grupo)
+        out.append({"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0})
+    return out
 
 
 def _ficha_caja(result, caja_w: float, caja_h: float,
-                pos_x_cm: float, pos_y_cm: float) -> list[tuple[str, str]]:
+                pos_x_cm: float, pos_y_cm: float,
+                filas_cm: list[tuple[float, float]] | None = None) -> list[tuple[str, str]]:
     """Filas (etiqueta, valor) de la ficha de la caja para tabla lateral."""
     prof = result.cercha_altura_cm or 0
     cuadro = (result.material_cara or {}).get("cuadro_corte")
@@ -1059,6 +1087,11 @@ def _ficha_caja(result, caja_w: float, caja_h: float,
         if pos_x_cm >= 0 and pos_y_cm >= 0:
             filas.append(("Posición",
                           f"{pos_x_cm:.1f} cm izq · {pos_y_cm:.1f} cm arriba"))
+    # medidas por renglón del diseño (ancho × alto) — máx. 5 en la ficha
+    for i, (w_cm, h_cm) in enumerate((filas_cm or [])[:5], start=1):
+        filas.append((f"Renglón {i}", f"{w_cm:.1f} × {h_cm:.1f} cm"))
+    if filas_cm and len(filas_cm) > 5:
+        filas.append(("", f"… y {len(filas_cm) - 5} renglón(es) más"))
     if result.modulos_led > 0:
         filas.append(("Iluminación",
                       f"{result.modulos_led} × {(result.led or {}).get('nombre', 'LED')}"))
@@ -1096,7 +1129,7 @@ def _construir_pdf_caja(meta: dict, svg_text: str, paths_info: list,
     buf = io.BytesIO()
     c = _canvas.Canvas(buf, pagesize=landscape(letter))
 
-    caja_bb, dis_bb = _outline_y_diseno(paths_info)
+    caja_bb, dis_bb, diseno_p = _outline_y_diseno(paths_info)
     if caja_bb is None or caja_bb["w"] <= 0 or caja_bb["h"] <= 0:
         _dibujar_header(c, titulo, PW, PH)
         c.setFillColor(colors.HexColor("#b00020")); c.setFont(FONT_BOLD, 12)
@@ -1111,6 +1144,9 @@ def _construir_pdf_caja(meta: dict, svg_text: str, paths_info: list,
     prof   = result.cercha_altura_cm or 0
     cuadro = (result.material_cara or {}).get("cuadro_corte")
     con_cuadro = bool(cuadro and dis_bb)
+    # renglones del diseño ("CFE" arriba, "COMISIÓN FEDERAL" abajo…): cada uno
+    # lleva su propia cota de ancho y de alto — un solo cuadro confunde al taller
+    filas_dis = _filas_diseno(diseno_p) if dis_bb else []
 
     # encuadre sobre el bbox conjunto de TODAS las cerradas (fidelidad visual)
     cerradas = [p for p in paths_info if p.get("is_closed")]
@@ -1118,10 +1154,12 @@ def _construir_pdf_caja(meta: dict, svg_text: str, paths_info: list,
     bbox_w_svg, bbox_h_svg = maxX - minX, maxY - minY
 
     # bandas: arriba = ancho caja · izquierda = [pos Y | alto caja] ·
-    # abajo = [ancho cuadro / pos X] · derecha (antes de la tabla) = alto cuadro
+    # abajo = anchos por renglón (escalonados) + posición X ·
+    # derecha (antes de la tabla) = altos por renglón
+    n_filas_bot = min(len(filas_dis), MAX_FILAS_COTA) + (1 if con_cuadro else 0)
     banda_izq = GAP_DIBUJO_COTA + (2 if con_cuadro else 1) * COL_ALTO_PT + 4
-    banda_bot = (GAP_DIBUJO_COTA + 2 * FILA_COTA_PT + 4) if con_cuadro else 10
-    banda_der = (COL_ALTO_PT if con_cuadro else 0)
+    banda_bot = (GAP_DIBUJO_COTA + n_filas_bot * FILA_COTA_PT + 4) if n_filas_bot else 10
+    banda_der = (COL_ALTO_PT if filas_dis else 0)
 
     area_x0 = MARGEN + banda_izq
     area_y0 = MARGEN + PIE_H + banda_bot
@@ -1165,39 +1203,52 @@ def _construir_pdf_caja(meta: dict, svg_text: str, paths_info: list,
         pos_x_cm = max(0.0, (dis_bb["x"] - caja_bb["x"]) * cm_per_unit)
         pos_y_cm = max(0.0, (dis_bb["y"] - caja_bb["y"]) * cm_per_unit)
 
-        # cuadro de corte punteado
+        # cuadro de corte punteado (material a comprar; sus medidas van en la
+        # ficha y el BOM — las cotas del dibujo son por renglón)
         c.saveState()
         c.setStrokeColor(colors.HexColor("#C05621")); c.setLineWidth(1.0)
         c.setDash(4, 3)
         c.rect(ds_xl, ds_yb, ds_xr - ds_xl, ds_yt - ds_yb, fill=0, stroke=1)
         c.restoreState()
 
-        # abajo fila 0: ancho del cuadro · fila 1: posición desde el borde izq
-        y_c0 = cj_yb - GAP_DIBUJO_COTA - 6
-        _ext_v(c, ds_xl, ds_yb - 2, y_c0)
-        _ext_v(c, ds_xr, ds_yb - 2, y_c0)
-        _cota_h(c, ds_xl, ds_xr, y_c0, cuadro["ancho_cm"])
+        # posición del gráfico: desde el borde izq (última fila de abajo) y
+        # desde arriba (columna interna izquierda)
         if pos_x_cm > 0.05:
-            y_c1 = y_c0 - FILA_COTA_PT
-            _ext_v(c, cj_xl, cj_yb - 2, y_c1)
-            _ext_v(c, ds_xl, ds_yb - 2, y_c1)
-            _cota_h(c, cj_xl, ds_xl, y_c1, pos_x_cm)
-
-        # derecha: alto del cuadro · izquierda col interna: posición desde arriba
-        x_ch = area_x1 + banda_der * 0.5
-        _ext_h(c, x_ch, ds_xr + 2, ds_yb)
-        _ext_h(c, x_ch, ds_xr + 2, ds_yt)
-        _cota_v(c, x_ch, ds_yb, ds_yt, cuadro["alto_cm"])
+            y_pos = cj_yb - GAP_DIBUJO_COTA - (n_filas_bot - 1) * FILA_COTA_PT - 6
+            _ext_v(c, cj_xl, cj_yb - 2, y_pos)
+            _ext_v(c, ds_xl, ds_yb - 2, y_pos)
+            _cota_h(c, cj_xl, ds_xl, y_pos, pos_x_cm)
         if pos_y_cm > 0.05:
             x_py = area_x0 - GAP_DIBUJO_COTA - COL_ALTO_PT * 0.5
             _ext_h(c, x_py, cj_xl - 2, cj_yt)
             _ext_h(c, x_py, ds_xl - 2, ds_yt)
             _cota_v(c, x_py, ds_yt, cj_yt, pos_y_cm)
 
+    # cotas POR RENGLÓN: ancho abajo (escalonado) y alto a la derecha — cada
+    # renglón no se solapa en Y con los demás, así que una columna basta
+    filas_cm: list[tuple[float, float]] = []
+    for i, fb in enumerate(filas_dis):
+        f_xl, f_yt = _svg_to_canvas_xy(fb["x"], fb["y"],
+                                       ox, oy, scale_draw, minX, minY, bbox_h_svg)
+        f_xr, f_yb = _svg_to_canvas_xy(fb["x"] + fb["w"], fb["y"] + fb["h"],
+                                       ox, oy, scale_draw, minX, minY, bbox_h_svg)
+        w_cm = fb["w"] * cm_per_unit
+        h_cm = fb["h"] * cm_per_unit
+        filas_cm.append((w_cm, h_cm))
+        if i < MAX_FILAS_COTA:
+            y_c = cj_yb - GAP_DIBUJO_COTA - i * FILA_COTA_PT - 6
+            _ext_v(c, f_xl, f_yb - 2, y_c)
+            _ext_v(c, f_xr, f_yb - 2, y_c)
+            _cota_h(c, f_xl, f_xr, y_c, w_cm)
+        x_ch = area_x1 + banda_der * 0.5
+        _ext_h(c, x_ch, f_xr + 2, f_yb)
+        _ext_h(c, x_ch, f_xr + 2, f_yt)
+        _cota_v(c, x_ch, f_yb, f_yt, h_cm)
+
     # columna derecha: ficha + cajetín
     col_x = PW - MARGEN - COL_TABLA_W
     tabla_top = PH - HEADER_H - MARGEN
-    filas = _ficha_caja(result, caja_w_cm, caja_h_cm, pos_x_cm, pos_y_cm)
+    filas = _ficha_caja(result, caja_w_cm, caja_h_cm, pos_x_cm, pos_y_cm, filas_cm)
     _dibujar_ficha_caja(c, col_x, tabla_top, COL_TABLA_W, filas)
 
     ratio = (cm_per_unit * cm / scale_draw) if scale_draw > 0 else 0
