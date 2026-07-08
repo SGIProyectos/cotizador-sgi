@@ -45,7 +45,7 @@
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { height: 100%; }
-body { font-family: var(--sans); background: var(--k1); color: var(--txt); font-size: 14px;
+body { font-family: var(--sans); background: var(--k1); color: var(--txt); font-size: 13.5px;
        -webkit-font-smoothing: antialiased; height: 100%; }
 ::selection { background: var(--c); color: #06222E; }
 * { scrollbar-width: thin; scrollbar-color: #2A3646 transparent; }
@@ -62,7 +62,7 @@ body { font-family: var(--sans); background: var(--k1); color: var(--txt); font-
 
 /* ── SIDEBAR (panel de pasos) ── */
 .sidebar {
-  width: 330px; min-width: 330px;
+  width: 304px; min-width: 304px;
   background: var(--k0);
   color: var(--txt);
   display: flex; flex-direction: column; overflow-y: auto;
@@ -85,16 +85,16 @@ body { font-family: var(--sans); background: var(--k1); color: var(--txt); font-
 
 /* panel tipo "ventana de herramienta" */
 .panel {
-  margin: 10px 12px 0; background: var(--k2);
-  border: 1px solid var(--k4); border-radius: 11px;
-  padding: 12px 13px 13px; box-shadow: 0 2px 8px rgba(0,0,0,.22);
+  margin: 8px 10px 0; background: var(--k2);
+  border: 1px solid var(--k4); border-radius: 10px;
+  padding: 10px 11px 11px; box-shadow: 0 2px 8px rgba(0,0,0,.22);
 }
 .sidebar > .panel:last-of-type { margin-bottom: 10px; }
 .panel h3 {
   font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em;
   color: var(--txt2); font-weight: 700;
   display: flex; align-items: center; gap: 8px;
-  margin: -12px -13px 11px; padding: 9px 13px 8px;
+  margin: -10px -11px 9px; padding: 8px 11px 7px;
   background: linear-gradient(180deg,#1A202B,#161C25);
   border-bottom: 1px solid var(--k4); border-radius: 10px 10px 0 0;
 }
@@ -124,7 +124,7 @@ body { font-family: var(--sans); background: var(--k1); color: var(--txt); font-
 }
 .btn-pill:hover { border-color: #3A4656; color: var(--txt); }
 
-label { font-size: 10.5px; color: var(--txt2); display: block; margin-bottom: 4px; margin-top: 11px; font-weight: 600; letter-spacing: .03em; }
+label { font-size: 10.5px; color: var(--txt2); display: block; margin-bottom: 3px; margin-top: 8px; font-weight: 600; letter-spacing: .03em; }
 label:first-of-type { margin-top: 0; }
 
 select {
@@ -139,9 +139,9 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
 .sidebar input, .sidebar select, .sidebar textarea,
 .inspector input, .inspector select, .inspector textarea,
 .main input, .main select, .main textarea {
-  width: 100%; height: 36px; padding: 0 11px;
+  width: 100%; height: 32px; padding: 0 10px;
   background-color: #0F141B; border: 1px solid var(--line2);
-  border-radius: 8px; color: var(--txt); font-size: 13px; font-family: var(--sans);
+  border-radius: 8px; color: var(--txt); font-size: 12.5px; font-family: var(--sans);
   transition: border .14s, box-shadow .14s;
   box-shadow: inset 0 2px 4px rgba(0,0,0,.32);
 }
@@ -155,12 +155,15 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
 }
 select option { background: var(--k2); color: var(--txt); }
 
-/* ── AJUSTES DE PRECIO (barra integrada en la pestaña Cotización) ── */
+/* ── AJUSTES DE PRECIO (columna derecha, ancho FIJO — sin ancho definido se
+      inflaba a ~470px robando espacio al contenido central) ── */
 .inspector {
-  background: var(--k2); border: 1px solid var(--k4); border-radius: 12px;
-  padding: 12px 15px 13px; margin-bottom: 12px;
+  flex: none; width: 288px; min-width: 288px;
+  background: var(--k0); border-left: 1px solid #1E2530;
+  padding: 12px 12px 14px; overflow-y: auto;
 }
 .inspector.collapsed { display: none; }
+.inspector .panel { margin: 0 0 10px; }
 .inspector-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .inspector-header h2 {
   font-size: 10.5px; text-transform: uppercase; letter-spacing: .11em;
@@ -172,11 +175,12 @@ select option { background: var(--k2); color: var(--txt); }
 .aj-field label { margin-top: 0; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
 .aj-field input, .aj-field select { height: 32px; font-size: 12.5px; }
 .inspector-toggle-floating {
-  height: 32px; padding: 0 13px; border-radius: 16px; margin-bottom: 12px;
+  position: fixed; right: 14px; bottom: 14px; z-index: 880;
+  height: 34px; padding: 0 14px; border-radius: 17px;
   background: linear-gradient(180deg,var(--k3),#151A22); border: 1px solid var(--line2);
   color: #C6CFDA; cursor: pointer; font-size: 12px; font-weight: 600;
   display: none; align-items: center; gap: 6px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 2px 6px rgba(0,0,0,.3);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 4px 14px rgba(0,0,0,.45);
 }
 .inspector-toggle-floating:hover { border-color: #3A4656; color: var(--txt); }
 .inspector.collapsed + .inspector-toggle-floating { display: inline-flex; }
@@ -189,7 +193,7 @@ select option { background: var(--k2); color: var(--txt); }
 /* tipo selector — segmentado con relieve */
 .tipo-btns { display: flex; gap: 6px; }
 .tipo-btn {
-  flex: 1; padding: 9px 4px 8px; border-radius: 8px;
+  flex: 1; padding: 7px 4px 6px; border-radius: 8px;
   border: 1px solid var(--line2);
   background: linear-gradient(180deg,var(--k3),#151A22);
   color: #9AA6B7; font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: .15s;
@@ -327,15 +331,22 @@ select option { background: var(--k2); color: var(--txt); }
 
 /* btn calcular (sticky, degradado cian→magenta) */
 .btn-calc {
-  position: sticky; bottom: 0; margin: 12px 12px 12px; padding: 14px;
-  width: calc(100% - 24px);
+  /* Footer pegajoso a todo lo ancho: el halo sólido (--k0) ocluye el contenido
+     que se desliza por debajo — sin él, los inputs se veían encimados */
+  position: sticky; bottom: 0; margin: 10px 0 0; padding: 12px;
+  width: 100%;
   background: linear-gradient(93deg,#1FB5E4,#E7449A);
-  color: #fff; border: none; font-size: 14px; font-weight: 700; letter-spacing: .04em;
-  cursor: pointer; transition: .15s; z-index: 6; border-radius: 12px;
-  box-shadow: 0 6px 20px rgba(35,140,200,.35), inset 0 1px 0 rgba(255,255,255,.25);
+  color: #fff; border: none; font-size: 13.5px; font-weight: 700; letter-spacing: .04em;
+  cursor: pointer; transition: .15s; z-index: 6; border-radius: 0;
+  box-shadow: 0 -10px 14px -4px rgba(4,7,12,.85), inset 0 1px 0 rgba(255,255,255,.25);
   font-family: var(--sans);
 }
-.btn-calc:disabled { opacity: .35; cursor: default; filter: grayscale(.5); box-shadow: none; }
+.btn-calc:disabled {
+  /* Atenuado SÓLIDO (no opacity): el botón es pegajoso y con transparencia
+     se veía el contenido encimado a través de él */
+  cursor: default; filter: grayscale(.6) brightness(.5);
+  box-shadow: 0 -10px 14px -4px rgba(4,7,12,.85);
+}
 .btn-calc:hover:not(:disabled) { filter: brightness(1.07); }
 .btn-calc:focus-visible { outline: 2px solid var(--c-soft); outline-offset: 2px; }
 
@@ -344,16 +355,16 @@ select option { background: var(--k2); color: var(--txt); }
 
 /* ── MAIN ── */
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--k1); min-width: 0; }
-.tabs { display: flex; gap: 4px; background: var(--k1); padding: 12px 18px 10px;
+.tabs { display: flex; gap: 4px; background: var(--k1); padding: 8px 14px 7px;
         border-bottom: 1px solid var(--k4); align-items: center; overflow-x: auto; flex: none; }
-.tab { padding: 9px 14px 8px; font-size: 12.5px; cursor: pointer; border: 1px solid transparent;
+.tab { padding: 7px 12px 6px; font-size: 12.5px; cursor: pointer; border: 1px solid transparent;
        border-radius: 9px; color: var(--txt2); font-weight: 600; transition: .15s; white-space: nowrap;
        display: flex; align-items: center; gap: 7px; }
 .tab:hover { color: var(--txt); }
 .tab.active { color: var(--c-soft); border-color: #1F4553;
               background: linear-gradient(180deg,#17303D,#132835);
               box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 0 8px rgba(44,197,236,.14); }
-.tab-content { flex: 1; overflow-y: auto; padding: 18px 20px; display: none; }
+.tab-content { flex: 1; overflow-y: auto; padding: 14px 16px; display: none; }
 .tab-content.active { display: block; }
 
 /* hamburguesa (solo pantallas chicas) */
@@ -516,10 +527,10 @@ svg g.pieza-labels                 { pointer-events: none; }
 .rec-card p { font-size: 13px; color: #C6CFDA; line-height: 1.6; }
 
 /* btn pdf legacy (usos sueltos) */
-.btn-pdf { background: linear-gradient(180deg,#1FA9D6,#168DBE); color: #fff; padding: 10px 18px; border: 1px solid #35C3EA;
-           border-radius: 9px; font-size: 13px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center;
-           gap: 8px; text-decoration: none; transition: .15s;
-           box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 3px 10px rgba(31,169,214,.28); }
+.btn-pdf { background: linear-gradient(180deg,#1FA9D6,#168DBE); color: #fff; padding: 6px 10px; border: 1px solid #35C3EA;
+           border-radius: 8px; font-size: 11.5px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center;
+           justify-content: center; gap: 5px; text-decoration: none; transition: .15s; white-space: nowrap;
+           box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 2px 6px rgba(31,169,214,.22); }
 .btn-pdf:hover { filter: brightness(1.07); }
 
 /* toast */
@@ -765,10 +776,20 @@ svg g.pieza-labels                 { pointer-events: none; }
 }
 
 /* ── RESPONSIVO ── */
+@media (max-width: 1440px) {
+  .sidebar { width: 280px; min-width: 280px; }
+  .inspector { width: 264px; min-width: 264px; }
+}
 @media (max-width: 1180px) {
-  .sidebar { width: 296px; min-width: 296px; }
+  .sidebar { width: 264px; min-width: 264px; }
 }
 @media (max-width: 980px) {
+  /* El inspector pasa a panel deslizable (se abre con el botón ⚙ Precio) */
+  .inspector {
+    position: fixed; right: 0; top: 0; bottom: 0; z-index: 900;
+    width: min(300px, 88vw); min-width: 0;
+    box-shadow: -24px 0 60px rgba(0,0,0,.5);
+  }
   .app { display: block; height: auto; min-height: 100dvh; }
   .sidebar {
     position: fixed; left: 0; top: 0; bottom: 0; z-index: 900;
@@ -1732,13 +1753,20 @@ function toggleInspector(forceState) {
   try { localStorage.setItem("sgi_inspector_collapsed", collapsed ? "1" : "0"); } catch {}
 }
 
-// Restaurar estado del inspector al cargar
+// Restaurar estado del inspector al cargar. En pantallas angostas (< 1240 px)
+// inicia colapsado para no robar espacio al contenido — el usuario lo abre
+// con el botón flotante "⚙ Precio" y su elección queda guardada.
 (function restoreInspectorState() {
+  let collapsed = window.innerWidth < 1240;
   try {
-    if (localStorage.getItem("sgi_inspector_collapsed") === "1") {
-      document.addEventListener("DOMContentLoaded", () => toggleInspector(true));
-    }
+    const saved = localStorage.getItem("sgi_inspector_collapsed");
+    if (saved === "1") collapsed = true;
+    else if (saved === "0" && window.innerWidth >= 980) collapsed = false;
   } catch {}
+  if (collapsed) {
+    document.addEventListener("DOMContentLoaded", () =>
+      document.getElementById("inspector")?.classList.add("collapsed"));
+  }
 })();
 
 function setTipo(tipo, btn) {
@@ -3315,77 +3343,77 @@ function renderResult(d) {
 
   document.getElementById("result-content").innerHTML = `
     ${warningsHtml}
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
-      <div>
-        <h2 style="color:var(--azul);font-size:17px">Cotización — ${tipoLabel}</h2>
-        <p style="font-size:12px;color:#888">Folio: ${d.folio} · ${m.paths_detectados} elementos detectados</p>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <h2 style="color:var(--azul);font-size:16px">Cotización — ${tipoLabel}</h2>
+        <p style="font-size:11.5px;color:#888">Folio: ${d.folio} · ${m.paths_detectados} elementos</p>
       </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
-          <input id="pdf-cliente" type="text" placeholder="Cliente (opcional)"
-            style="font-size:12px;padding:4px 8px;border:1px solid #ccc;border-radius:6px;width:150px">
-          <a class="btn-pdf" id="btn-pdf-link" href="${d.pdf_url}" target="_blank"
-            onclick="return actualizarPdfUrl('${d.quote_id}')"
-            title="Cotización formal">📄 Cotización</a>
-          <a class="btn-pdf" id="btn-ot-link" href="/api/ot/${d.quote_id}" target="_blank"
-            onclick="return actualizarDocUrl('ot','${d.quote_id}')"
-            style="background:#2d5986"
-            title="Orden de trabajo (para autorizar con anticipo)">📋 Orden de Trabajo</a>
-          <a class="btn-pdf" id="btn-ent-link" href="/api/entrega/${d.quote_id}" target="_blank"
-            onclick="return actualizarDocUrl('entrega','${d.quote_id}')"
-            style="background:#2e7d32"
-            title="Acta de entrega y garantía (al terminar el trabajo)">✅ Acta de Entrega</a>
-          <a class="btn-pdf" id="btn-pln-link" href="/api/plano/${d.quote_id}" target="_blank"
-            onclick="return actualizarDocUrl('plano','${d.quote_id}')"
-            style="background:#6a4c93"
-            title="Plano de medidas para el cliente">📐 Plano</a>
-          <a class="btn-pdf" id="btn-plt-link" href="/api/plano-taller/${d.quote_id}" target="_blank"
-            onclick="return actualizarDocUrl('plano-taller','${d.quote_id}')"
-            style="background:#4527a0"
-            title="Plano de fabricación con material por pieza + notas">🛠️ Plano Taller</a>
-          <a class="btn-pdf" id="btn-xls-link" href="/api/excel/${d.quote_id}"
-            onclick="return actualizarDocUrl('excel','${d.quote_id}')"
-            style="background:#107c41"
-            title="Cotización en Excel editable">📊 Excel</a>
-        </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px;margin-bottom:6px">
+        <input id="pdf-cliente" type="text" placeholder="Cliente (opcional)"
+          style="height:30px;font-size:12px;padding:0 8px;border:1px solid #ccc;border-radius:6px">
         <input id="pdf-notas" type="text" placeholder="Notas para los documentos (opcional)"
-          style="font-size:11px;padding:3px 8px;border:1px solid #ddd;border-radius:6px;width:100%;color:#666;margin-top:4px">
+          style="height:30px;font-size:12px;padding:0 8px;border:1px solid #ddd;border-radius:6px;color:#666">
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:6px">
+        <a class="btn-pdf" id="btn-pdf-link" href="${d.pdf_url}" target="_blank"
+          onclick="return actualizarPdfUrl('${d.quote_id}')"
+          title="Cotización formal">📄 Cotización</a>
+        <a class="btn-pdf" id="btn-ot-link" href="/api/ot/${d.quote_id}" target="_blank"
+          onclick="return actualizarDocUrl('ot','${d.quote_id}')"
+          style="background:#2d5986"
+          title="Orden de trabajo (para autorizar con anticipo)">📋 Orden Trabajo</a>
+        <a class="btn-pdf" id="btn-ent-link" href="/api/entrega/${d.quote_id}" target="_blank"
+          onclick="return actualizarDocUrl('entrega','${d.quote_id}')"
+          style="background:#2e7d32"
+          title="Acta de entrega y garantía (al terminar el trabajo)">✅ Acta Entrega</a>
+        <a class="btn-pdf" id="btn-pln-link" href="/api/plano/${d.quote_id}" target="_blank"
+          onclick="return actualizarDocUrl('plano','${d.quote_id}')"
+          style="background:#6a4c93"
+          title="Plano de medidas para el cliente">📐 Plano</a>
+        <a class="btn-pdf" id="btn-plt-link" href="/api/plano-taller/${d.quote_id}" target="_blank"
+          onclick="return actualizarDocUrl('plano-taller','${d.quote_id}')"
+          style="background:#4527a0"
+          title="Plano de fabricación con material por pieza + notas">🛠️ Plano Taller</a>
+        <a class="btn-pdf" id="btn-xls-link" href="/api/excel/${d.quote_id}"
+          onclick="return actualizarDocUrl('excel','${d.quote_id}')"
+          style="background:#107c41"
+          title="Cotización en Excel editable">📊 Excel</a>
       </div>
     </div>
 
     <!-- ─── ZONA 1: 3 HEROES (precio cliente / costo construcción / margen) ─── -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px">
-      <div style="background:linear-gradient(135deg,#fff4e6 0%,#ffe0b2 100%);border:2px solid #ff9800;border-radius:10px;padding:16px;text-align:center">
-        <div style="font-size:11px;color:#7c4a00;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">💰 Precio al cliente</div>
-        <div style="font-size:28px;font-weight:800;color:#e65100;margin-top:4px;line-height:1.1">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;margin-bottom:14px">
+      <div style="background:linear-gradient(135deg,#fff4e6 0%,#ffe0b2 100%);border:2px solid #ff9800;border-radius:10px;padding:10px 12px;text-align:center">
+        <div style="font-size:10px;color:#7c4a00;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">💰 Precio al cliente</div>
+        <div style="font-size:clamp(17px,1.8vw,24px);font-weight:800;color:#e65100;margin-top:3px;line-height:1.1">
           $${precioFinal.toLocaleString('es-MX',{minimumFractionDigits:2})}
         </div>
-        <div style="font-size:11px;color:#7c4a00;margin-top:4px">
+        <div style="font-size:10.5px;color:#7c4a00;margin-top:3px">
           ${costos.mo_total>0?'+ MO ':''}${d.instalacion?.activa?'+ instalación':''}${!costos.mo_total && !d.instalacion?.activa?'fabricación':''}
         </div>
       </div>
-      <div style="background:linear-gradient(135deg,#e8eaf6 0%,#c5cae9 100%);border:2px solid #3f51b5;border-radius:10px;padding:16px;text-align:center">
-        <div style="font-size:11px;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">🔨 Costo construcción</div>
-        <div style="font-size:28px;font-weight:800;color:#1a237e;margin-top:4px;line-height:1.1">
+      <div style="background:linear-gradient(135deg,#e8eaf6 0%,#c5cae9 100%);border:2px solid #3f51b5;border-radius:10px;padding:10px 12px;text-align:center">
+        <div style="font-size:10px;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">🔨 Costo construcción</div>
+        <div style="font-size:clamp(17px,1.8vw,24px);font-weight:800;color:#1a237e;margin-top:3px;line-height:1.1">
           $${costoConstruccion.toLocaleString('es-MX',{minimumFractionDigits:2})}
         </div>
-        <div style="font-size:11px;color:#1a237e;margin-top:4px">
+        <div style="font-size:10.5px;color:#1a237e;margin-top:3px">
           materiales + IVA${costos.mo_total>0?' + MO':''}${d.instalacion?.activa?' + inst.':''}
         </div>
       </div>
-      <div style="background:linear-gradient(135deg,${margenPct>=50?'#e8f5e9':margenPct>=25?'#fff8e1':'#ffebee'} 0%,${margenPct>=50?'#c8e6c9':margenPct>=25?'#ffe0b2':'#ffcdd2'} 100%);border:2px solid ${margenColor};border-radius:10px;padding:16px;text-align:center">
-        <div style="font-size:11px;color:${margenColor};text-transform:uppercase;letter-spacing:0.5px;font-weight:600">📈 Margen bruto</div>
-        <div style="font-size:28px;font-weight:800;color:${margenColor};margin-top:4px;line-height:1.1">
+      <div style="background:linear-gradient(135deg,${margenPct>=50?'#e8f5e9':margenPct>=25?'#fff8e1':'#ffebee'} 0%,${margenPct>=50?'#c8e6c9':margenPct>=25?'#ffe0b2':'#ffcdd2'} 100%);border:2px solid ${margenColor};border-radius:10px;padding:10px 12px;text-align:center">
+        <div style="font-size:10px;color:${margenColor};text-transform:uppercase;letter-spacing:0.5px;font-weight:600">📈 Margen bruto</div>
+        <div style="font-size:clamp(17px,1.8vw,24px);font-weight:800;color:${margenColor};margin-top:3px;line-height:1.1">
           ${margenPct.toFixed(1)}%
         </div>
-        <div style="font-size:11px;color:${margenColor};margin-top:4px">
+        <div style="font-size:10.5px;color:${margenColor};margin-top:3px">
           ${margenIcon} ${margenLabel} · $${(precioFinal - costoConstruccion).toLocaleString('es-MX',{minimumFractionDigits:0})} utilidad
         </div>
       </div>
     </div>
 
     <!-- ─── ZONA 2: COMPARATIVA (cómo cobras vs en qué se va) ─── -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:10px;margin-bottom:16px">
       <!-- COLUMNA IZQUIERDA: cómo se cobra (fórmula) -->
       <div style="background:#fffbf5;border:1px solid #ffd29a;border-radius:10px;padding:14px">
         <h3 style="margin:0 0 10px;color:#e65100;font-size:13px;display:flex;align-items:center;gap:6px">
