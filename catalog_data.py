@@ -17,7 +17,7 @@ PEGAMENTOS = {
     #   Cloruro de Metileno 1 L → 50–70 m (capilaridad, no relleno)
     ("aluminio", "aluminio"):  {"nombre": "Soudaflex 40FC",                      "precio_aprox": 180, "metros_por_envase": 11},
     ("aluminio", "acrilico"):  {"nombre": "Silicón Transparente Arquitectónico", "precio_aprox":  90, "metros_por_envase": 11},
-    ("acrilico", "acrilico"):  {"nombre": "Cloruro de Metileno",                 "precio_aprox":  60, "metros_por_envase": 60},
+    ("acrilico", "acrilico"):  {"nombre": "Cloruro de Metileno",                 "precio_aprox": 250, "metros_por_envase": 60},
     ("acrilico", "alucobon"):  {"nombre": "Silicón Transparente Arquitectónico", "precio_aprox":  90, "metros_por_envase": 11},
     ("alucobon", "alucobon"):  {"nombre": "Soudaflex 40FC",                      "precio_aprox": 180, "metros_por_envase": 11},
     ("aluminio", "pvc"):       {"nombre": "Silicón Transparente Arquitectónico", "precio_aprox":  90, "metros_por_envase": 11},
@@ -25,38 +25,39 @@ PEGAMENTOS = {
 }
 
 # ─── LÁMINAS DE MATERIAL (precio por lámina 122×244 cm) ─────────────────────
+# Precios calibrados con catálogo del proveedor "Todo para el Anunciero" feb-2026
 LAMINAS = {
     "acrilico_3mm": {
         "nombre": "Acrílico 3mm",
-        "precio": 1200,
+        "precio": 1290,
         "ancho_cm": 122, "alto_cm": 244,
         "grosor_mm": 3,
         "uso": ["cara_letra_pequena", "cara_letra_mediana", "cara_caja"],
     },
     "acrilico_6mm": {
         "nombre": "Acrílico 6mm",
-        "precio": 1450,
+        "precio": 2615,
         "ancho_cm": 122, "alto_cm": 244,
         "grosor_mm": 6,
         "uso": ["cara_letra_grande", "cara_caja_premium"],
     },
     "pvc_3mm": {
         "nombre": "PVC Espumado 3mm",
-        "precio": 380,
+        "precio": 365,
         "ancho_cm": 122, "alto_cm": 244,
         "grosor_mm": 3,
         "uso": ["fondo_letra_interior", "señaletica"],
     },
     "pvc_6mm": {
         "nombre": "PVC Espumado 6mm",
-        "precio": 520,
+        "precio": 575,
         "ancho_cm": 122, "alto_cm": 244,
         "grosor_mm": 6,
         "uso": ["fondo_letra_exterior", "fondo_caja"],
     },
     "aluminio_cal22": {
         "nombre": "Aluminio Calibre 22 (0.76mm)",
-        "precio": 650,
+        "precio": 1190,
         "ancho_cm": 122, "alto_cm": 244,
         "grosor_mm": 0.76,
         "uso": ["cercha_letra_pequena"],
@@ -84,8 +85,8 @@ LAMINAS = {
     },
     # ── Acrílico por acabado / color ──────────────────────────────────────────
     "acrilico_3mm_blanco": {
-        "nombre": "Acrílico Blanco 3mm",
-        "precio": 1200,
+        "nombre": "Acrílico Blanco Translúcido 3mm",
+        "precio": 1390,
         "ancho_cm": 122, "alto_cm": 244,
         "grosor_mm": 3,
         "uso": ["cara_letra_pequena", "cara_letra_mediana", "cara_caja"],
@@ -108,7 +109,7 @@ LAMINAS = {
     },
     "acrilico_3mm_espejo": {
         "nombre": "Acrílico Espejo 3mm",
-        "precio": 1500,
+        "precio": 1510,
         "ancho_cm": 122, "alto_cm": 244,
         "grosor_mm": 3,
         "colores": ["Plata", "Dorado", "Rosa"],
@@ -153,6 +154,29 @@ LAMINAS = {
         "colores": ["Plata Espejo", "Dorado Espejo"],
         "uso": ["cara_letra", "decoracion"],
     },
+    # ── Aluminio sólido con acabado (cara de letra estilo corporativo) ────────
+    "aluminio_plata_cepillado": {
+        "nombre": "Aluminio Plata Cepillado cal 23",
+        "precio": 3990,
+        "ancho_cm": 122, "alto_cm": 244,
+        "grosor_mm": 0.6,
+        "uso": ["cara_letra", "decoracion"],
+    },
+    "aluminio_oro_cepillado": {
+        "nombre": "Aluminio Oro Cepillado cal 23",
+        "precio": 4270,
+        "ancho_cm": 122, "alto_cm": 244,
+        "grosor_mm": 0.6,
+        "uso": ["cara_letra", "decoracion"],
+    },
+    "aluminio_espejo": {
+        "nombre": "Aluminio Espejo cal 23",
+        "precio": 4470,
+        "ancho_cm": 122, "alto_cm": 244,
+        "grosor_mm": 0.6,
+        "colores": ["Plata Espejo", "Oro Espejo"],
+        "uso": ["cara_letra", "decoracion"],
+    },
 }
 
 # ─── MÓDULOS LED PARA LETRAS DE CANAL ────────────────────────────────────────
@@ -161,8 +185,8 @@ LEDS_CANAL = [
     {
         "id": "micro_sign",
         "nombre": "Módulo LED Micro Sign",
-        "precio_tira_20": 396.72,
-        "precio_modulo": 9.92,
+        "precio_tira_20": 70.00,
+        "precio_modulo": 3.50,
         "watts_modulo": 0.24,
         "lumenes": 25,
         "ip": "IP65",
@@ -174,8 +198,8 @@ LEDS_CANAL = [
     {
         "id": "mini_sign",
         "nombre": "Módulo LED Mini Sign",
-        "precio_tira_20": 231.07,
-        "precio_modulo": 11.55,
+        "precio_tira_20": 70.00,
+        "precio_modulo": 3.50,
         "watts_modulo": 0.32,
         "lumenes": 20,
         "ip": "IP65",
@@ -187,8 +211,8 @@ LEDS_CANAL = [
     {
         "id": "sign_03_rgb",
         "nombre": "Módulo LED Sign 03 RGB",
-        "precio_tira_20": 423.17,
-        "precio_modulo": 21.16,
+        "precio_tira_20": 170.00,
+        "precio_modulo": 8.50,
         "watts_modulo": 0.65,
         "lumenes": 20,
         "ip": "IP65",
@@ -215,8 +239,8 @@ LEDS_CANAL = [
     {
         "id": "sign_03",
         "nombre": "Módulo LED Sign 03",
-        "precio_tira_20": 198.36,
-        "precio_modulo": 9.92,
+        "precio_tira_20": 94.00,
+        "precio_modulo": 4.70,
         "watts_modulo": 0.72,
         "lumenes": 75,
         "ip": "IP65",
@@ -228,8 +252,8 @@ LEDS_CANAL = [
     {
         "id": "sign_02_high",
         "nombre": "Módulo LED Sign 02 HIGH",
-        "precio_tira_20": 290.93,
-        "precio_modulo": 14.55,
+        "precio_tira_20": 106.00,
+        "precio_modulo": 5.30,
         "watts_modulo": 0.72,
         "lumenes": 110,
         "ip": "IP67",
@@ -241,8 +265,8 @@ LEDS_CANAL = [
     {
         "id": "sign_03_green",
         "nombre": "Módulo LED 12v Sign 03 Verde",
-        "precio_tira_20": 214.60,
-        "precio_modulo": 10.73,
+        "precio_tira_20": 108.00,
+        "precio_modulo": 5.40,
         "watts_modulo": 0.72,
         "lumenes": 35,
         "ip": "IP65",
@@ -255,8 +279,8 @@ LEDS_CANAL = [
     {
         "id": "sign_03_red",
         "nombre": "Módulo LED 12v Sign 03 Rojo",
-        "precio_tira_20": 214.60,
-        "precio_modulo": 10.73,
+        "precio_tira_20": 108.00,
+        "precio_modulo": 5.40,
         "watts_modulo": 0.72,
         "lumenes": 15,
         "ip": "IP65",
@@ -269,8 +293,8 @@ LEDS_CANAL = [
     {
         "id": "sign_03_blue",
         "nombre": "Módulo LED 12v Sign 03 Azul",
-        "precio_tira_20": 214.60,
-        "precio_modulo": 10.73,
+        "precio_tira_20": 108.00,
+        "precio_modulo": 5.40,
         "watts_modulo": 0.72,
         "lumenes": 10,
         "ip": "IP65",
@@ -283,8 +307,8 @@ LEDS_CANAL = [
     {
         "id": "sign_03_high",
         "nombre": "Módulo LED Sign 03 HIGH",
-        "precio_tira_20": 370.04,
-        "precio_modulo": 18.51,
+        "precio_tira_20": 119.00,
+        "precio_modulo": 5.95,
         "watts_modulo": 1.08,
         "lumenes": 165,
         "ip": "IP66",
@@ -296,8 +320,8 @@ LEDS_CANAL = [
     {
         "id": "sign_03_pro",
         "nombre": "Módulo LED Sign 03 PRO",
-        "precio_tira_20": 214.60,
-        "precio_modulo": 10.73,
+        "precio_tira_20": 119.00,
+        "precio_modulo": 5.95,
         "watts_modulo": 1.32,
         "lumenes": 128,
         "ip": "IP65",
@@ -309,8 +333,8 @@ LEDS_CANAL = [
     {
         "id": "sign_03_ac",
         "nombre": "Módulo LED 110v Sign 03 AC",
-        "precio_tira_20": 713.40,
-        "precio_modulo": 35.67,
+        "precio_tira_20": 236.00,
+        "precio_modulo": 11.80,
         "watts_modulo": 2.0,
         "lumenes": 150,
         "ip": "IP65",
@@ -439,7 +463,7 @@ LEDS_CAJA = {
             # ultra blanco (alucobon blanco brillante reduce ~25% el número de
             # módulos necesarios vs el grid 15×15 estándar).
             "densidad_modulos_m2": 25,
-            "precio": 18.51,
+            "precio": 5.95,
             "watts": 1.08,
             "lumenes": 165,
             "ip": "IP66",
@@ -484,9 +508,9 @@ SILVATRIM = [
         "nombre": "Silvatrim Gemini 3/4\"",
         "ancho_pulg": 0.75,
         "ancho_mm": 19,
-        "precio_rollo": 1900,
+        "precio_rollo": 2100,
         "metros_rollo": 45.7,
-        "precio_ml": 41.58,
+        "precio_ml": 45.95,
         "colores": ["Blanco", "Negro", "Rojo", "Azul", "Plata Metálico", "Plata Cepillado", "Dorado"],
         "uso_recomendado": "Letras con cercha hasta 5 cm de profundidad",
     },
@@ -495,9 +519,9 @@ SILVATRIM = [
         "nombre": "Silvatrim Gemini 1\"",
         "ancho_pulg": 1.0,
         "ancho_mm": 25,
-        "precio_rollo": 2089,
+        "precio_rollo": 2400,
         "metros_rollo": 45.7,
-        "precio_ml": 45.71,
+        "precio_ml": 52.52,
         "colores": ["Blanco", "Negro", "Rojo", "Azul", "Plata Metálico", "Plata Cepillado", "Dorado"],
         "uso_recomendado": "Letras con cercha de 5–12 cm de profundidad",
     },
@@ -514,13 +538,13 @@ SILVATRIM = [
     },
     {
         "id": "silvatrim_gen",
-        "nombre": "Silvatrim Genérico 1\"",
-        "ancho_pulg": 1.0,
-        "ancho_mm": 25,
-        "precio_rollo": 1056,
-        "metros_rollo": 33.0,
-        "precio_ml": 32.0,
-        "colores": ["Blanco", "Negro"],
+        "nombre": "Silvatrim Rollo Económico 2cm",
+        "ancho_pulg": 0.79,
+        "ancho_mm": 20,
+        "precio_rollo": 399,
+        "metros_rollo": 40.0,
+        "precio_ml": 9.98,
+        "colores": ["Plata", "Negro", "Blanco", "Verde", "Azul", "Amarillo"],
         "uso_recomendado": "Uso interior o presupuesto ajustado",
     },
 ]
@@ -553,16 +577,20 @@ CABLES = {
 
 
 # ─── FUENTES DE PODER ────────────────────────────────────────────────────────
+# Precios calibrados con catálogo "Todo para el Anunciero" feb-2026
 FUENTES = [
-    {"nombre": "Fuente Exterior 60W",   "watts": 60,  "precio": 273.10,  "ip": "IP68", "uso": "exterior", "voltaje": 12},
-    {"nombre": "Fuente Exterior 100W",  "watts": 100, "precio": 438.82,  "ip": "IP68", "uso": "exterior", "voltaje": 12},
-    {"nombre": "Fuente Exterior 150W",  "watts": 150, "precio": 507.08,  "ip": "IP68", "uso": "exterior", "voltaje": 12},
-    {"nombre": "Fuente UL 60W",         "watts": 60,  "precio": 722.52,  "ip": "IP67", "uso": "ambos",    "voltaje": 12},
-    {"nombre": "Fuente UL 100W",        "watts": 100, "precio": 828.58,  "ip": "IP67", "uso": "ambos",    "voltaje": 12},
-    {"nombre": "Fuente UL 150W",        "watts": 150, "precio": 921.38,  "ip": "IP67", "uso": "ambos",    "voltaje": 12},
-    {"nombre": "Fuente SLIM Interior 60W",  "watts": 60,  "precio": 689.38,  "ip": "IP20", "uso": "interior", "voltaje": "12/24"},
-    {"nombre": "Fuente SLIM Interior 100W", "watts": 100, "precio": 775.54,  "ip": "IP20", "uso": "interior", "voltaje": "12/24"},
-    {"nombre": "Fuente SLIM Interior 200W", "watts": 200, "precio": 1073.82, "ip": "IP20", "uso": "interior", "voltaje": "12/24"},
+    {"nombre": "Fuente Exterior 60W",   "watts": 60,  "precio": 280,  "ip": "IP68", "uso": "exterior", "voltaje": 12},
+    {"nombre": "Fuente Exterior 100W",  "watts": 100, "precio": 365,  "ip": "IP68", "uso": "exterior", "voltaje": 12},
+    {"nombre": "Fuente Exterior 150W",  "watts": 150, "precio": 590,  "ip": "IP68", "uso": "exterior", "voltaje": 12},
+    {"nombre": "Fuente Exterior 200W",  "watts": 200, "precio": 575,  "ip": "IP68", "uso": "exterior", "voltaje": 12},
+    {"nombre": "Fuente Exterior 300W",  "watts": 300, "precio": 725,  "ip": "IP68", "uso": "exterior", "voltaje": 12},
+    {"nombre": "Fuente UL 60W",         "watts": 60,  "precio": 470,  "ip": "IP67", "uso": "ambos",    "voltaje": 12},
+    {"nombre": "Fuente UL 100W",        "watts": 100, "precio": 725,  "ip": "IP67", "uso": "ambos",    "voltaje": 12},
+    {"nombre": "Fuente UL 150W",        "watts": 150, "precio": 990,  "ip": "IP67", "uso": "ambos",    "voltaje": 12},
+    {"nombre": "Fuente UL 200W",        "watts": 200, "precio": 1185, "ip": "IP67", "uso": "ambos",    "voltaje": 12},
+    {"nombre": "Fuente SLIM Interior 60W",  "watts": 60,  "precio": 165, "ip": "IP20", "uso": "interior", "voltaje": "12/24"},
+    {"nombre": "Fuente SLIM Interior 100W", "watts": 100, "precio": 190, "ip": "IP20", "uso": "interior", "voltaje": "12/24"},
+    {"nombre": "Fuente SLIM Interior 200W", "watts": 200, "precio": 310, "ip": "IP20", "uso": "interior", "voltaje": "12/24"},
 ]
 
 # ─── LÓGICA DE PRECIOS BASE (hoja COTIZANDO) ─────────────────────────────────
@@ -678,6 +706,7 @@ TIPOS_CONSTRUCCION = {
         "distanciadores": False,
         "multiplicador_default": "acrilico_con_luz_std",
         "altura_min_rec": 8.0,
+        "modo_iluminacion": "cara",
     },
     "retro_halo": {
         "nombre": "Retroiluminada / Halo",
@@ -689,6 +718,9 @@ TIPOS_CONSTRUCCION = {
         "distanciadores": True,
         "multiplicador_default": "aluminio_con_luz",
         "altura_min_rec": 0.0,
+        # halo: los módulos apuntan a la pared → una corrida perimetral,
+        # NO cobertura de área como en cajón de luz
+        "modo_iluminacion": "halo",
     },
     "sin_luz": {
         "nombre": "Sin luz (cajón)",
@@ -711,6 +743,7 @@ TIPOS_CONSTRUCCION = {
         "distanciadores": False,
         "multiplicador_default": "aluminio_con_luz",
         "altura_min_rec": 30.0,
+        "modo_iluminacion": "cara",
     },
 }
 
