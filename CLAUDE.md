@@ -35,13 +35,18 @@ python -m pytest tests/test_calculator.py::test_<name> -v
 pip-compile requirements.txt -o requirements.lock
 ```
 
-Lint config: `pyproject.toml` (ruff, line-length 100, py310 target, rule sets E/W/F/I/B/UP/SIM). Tests live in `tests/` (pytest, 104 tests as of last count). CI: `.github/workflows/test.yml` runs ruff + pytest with coverage gate of 70% on push/PR to `main`.
+Lint config: `pyproject.toml` (ruff, line-length 100, py310 target, rule sets E/W/F/I/B/UP/SIM). Tests live in `tests/` (pytest, 151 tests as of last count). CI: `.github/workflows/test.yml` runs ruff + pytest with coverage gate of 70% on push/PR to `main`.
 
 Useful pattern for visually verifying PDF output (planos, OT): generate the PDF, render pages to PNG with PyMuPDF (`fitz`, ~110 dpi), then inspect the PNG with the Read tool. See `tmp/test_plano.py` for a working harness (requires `PYTHONPATH=.`).
 
 ## Deployment
 
-Deployed to Render.com via `render.yaml` (Python 3.11, `uvicorn main:app --host 0.0.0.0 --port $PORT`). Local development uses Python 3.10+ with a `.venv` virtual environment.
+Deployed to Render.com via `render.yaml` (Python 3.11, `uvicorn main:app --host 0.0.0.0 --port $PORT`, plan starter + **persistent disk** mounted at `/var/data` — closes C11). Local development uses Python 3.10+ with a `.venv` virtual environment.
+
+Two env vars make the app hosting-ready without changing local behavior:
+
+- **`COTIZADOR_DATA_DIR`** — directory for mutable data (`cotizador.db`, `catalog.json`, `backups/`). Read independently by `db.py`, `catalog_data.py` and `main.py` at import time. Unset = everything lives next to the code (local workshop use). On Render it points to the persistent disk (`/var/data`).
+- **`ACCESS_PASSWORD`** (+ optional `ACCESS_USER`, default `sgi`) — enables the **llave de acceso**: an HTTP Basic Auth middleware over the ENTIRE site (including `/static` and `/docs`); only `/health` stays open for the host's monitoring. Unset = no auth (local use). Timing-safe comparison via `secrets.compare_digest`. This is the pre-Fase-2 stopgap for remote testing — real multi-user auth (C1) still pending. On Render the password is set in the dashboard (`sync: false` in render.yaml), never committed.
 
 ## Architecture
 
@@ -53,7 +58,8 @@ Deployed to Render.com via `render.yaml` (Python 3.11, `uvicorn main:app --host 
 4. **History** → `GET /api/quotes` (list with filters), `GET /api/quotes/{id}/open` (re-open: rebuilds session + QuoteResult from DB), `DELETE /api/quotes/{id}`
 5. **Clients** → `GET /api/clients?q=` (search), `POST /api/clients` (upsert), `DELETE /api/clients/{id}`
 6. **Catalog** → `GET /api/catalog` returns current in-memory catalog; `POST /api/catalog` calls `catalog_apply()` + `catalog_save()` to persist to `catalog.json`
-7. **Raster → SVG** → `POST /api/vectorize` (uploads JPG/PNG, runs `vectorizer.vectorize()` — single-silhouette cutting pipeline: bilateral+median smoothing → K-means quantization in LAB → background = border-dominant clusters → foreground union cleaned (small components/holes dropped, letter counters preserved) → vtracer in binary mode → produces a synthetic SVG that is then re-fed through `parse_svg`, populating `_svg_store` as if the user had uploaded it directly). Only the raster→SVG `vectorize()` survives — the abandoned `vectorize_with_ai` experiment was removed (see §7).
+7. **Admin** → `GET /api/admin/status` (DB/disk/backup/cache panel), `GET /api/admin/backups` + `POST /api/admin/backup` + `GET /api/admin/backups/{nombre}/download` + `POST /api/admin/restore`, `POST /api/admin/db/limpiar`, `POST /api/admin/db/vacuum` — see "Módulo de administración" section
+8. **Raster → SVG** → `POST /api/vectorize` (uploads JPG/PNG, runs `vectorizer.vectorize()` — single-silhouette cutting pipeline: bilateral+median smoothing → K-means quantization in LAB → background = border-dominant clusters → foreground union cleaned (small components/holes dropped, letter counters preserved) → vtracer in binary mode → produces a synthetic SVG that is then re-fed through `parse_svg`, populating `_svg_store` as if the user had uploaded it directly). Only the raster→SVG `vectorize()` survives — the abandoned `vectorize_with_ai` experiment was removed (see §7).
 
 ### Module responsibilities
 
@@ -67,6 +73,7 @@ Deployed to Render.com via `render.yaml` (Python 3.11, `uvicorn main:app --host 
 | `plano_gen.py` | Plano de medidas PDFs: `generar_plano_cliente()` / `generar_plano_taller()` — see "Planos de medidas" section for the anti-overlap cota system |
 | `excel_gen.py` | openpyxl XLSX export of a `QuoteResult` (Resumen + Letras + Desglose sheets) |
 | `vectorizer.py` | Raster→SVG silhouette pipeline for cutting: K-means (LAB) quantization + border-based background detection + vtracer binary tracing. Handles textured/photographic backgrounds; the tuning params (`bg_tol`, `filter_speckle`, `color_precision`, `layer_difference`) map to user-facing sliders. Only `vectorize()` is real; do NOT add LLM-based variants (see §7). |
+| `nesting.py` | Cutting-layout optimizer (nesting), independent from quoting — see "Módulo de corte" section. shapely + cv2 raster-NFP; DXF export via ezdxf |
 | `static/index.html` | Single-file SPA (vanilla JS + inline CSS); no build step |
 | `catalog.json` | Runtime price overrides; loaded at startup by `catalog_load()`, updated via `POST /api/catalog` |
 | `cotizador.db` | SQLite database file (quotes, folio_seq, clients tables); auto-created by `db.init_db()` on startup. `init_db()` also runs a defensive migration adding `quotes.svg_text` if missing |
@@ -238,6 +245,23 @@ Beyond basic cost fields, `QuoteResult` includes:
 - `warnings` — list of inconsistency alerts (e.g. LEDs configured but 0 modules, unusual multiplier for flat letters)
 - `silvatrim`, `metros_silvatrim`, `costo_silvatrim` — Silvatrim profile selection and cost (channel letters only)
 - `vinil_cercha`, `metros_vinil_cercha`, `costo_vinil_cercha` — optional vinyl wrap on cercha (set by `vinil_cercha_id` in `LetrasRequest`)
+
+### Módulo de corte / nesting (`nesting.py`)
+
+Independent from the quoting flow (UI tab "Corte", deep-link `/#corte`). Upload 1–10 SVGs each with real width (cm) and copies; pieces from ALL files are mixed onto the same sheets. Sheet presets: lámina 122×244, vinyl roll 60 cm (franja = consumed length), retazo (custom). Defaults: gap 5 mm between pieces, 10 mm edge margin, rotations every 15°.
+
+**Algorithm** (raster NFP by convolution): sampled subpath rings → shapely polygons with holes assigned by even/odd containment depth (handles holes both as subpaths of the same path AND as separate paths); greedy bottom-left placement, pieces sorted by area desc; per candidate angle the piece mask (holes empty) is tested against the sheet occupancy grid with `cv2.matchTemplate` — all positions at once. Small pieces fall into letter counters naturally because placed pieces are stamped WITHOUT dilation. Two hard-won correctness rules: (1) masks use `np.rint`, not floor — floor bias shaved up to 1 px/side off the gap; (2) the candidate mask must be PADDED by `gap_px` before `cv2.dilate` — dilation clips at array edges, silently destroying the gap (there is a test measuring real polygon distance ≥ gap). An Illustrator artboard-sized background rect is dropped only if it covers ≥85% of the viewBox AND contains other pieces (a lone rectangle the user wants to cut is kept).
+
+**Endpoints**: `POST /api/nest` (multipart files + `config` JSON; sync `def` on purpose — CPU-bound, runs in threadpool, 15–90 s) → `{nest_id, laminas: [{svg preview, util_pct, franja_cm, …}], sin_lugar}` cached in `_nest_store` (TTL 24 h). Downloads: `/api/nest/{id}/pdf` (plano de corte, `generar_plano_corte` in `plano_gen.py` — one landscape page per lámina), `/svg/{idx}` (cm units, for plotter), `/dxf/{idx}` (**mm**, `$INSUNITS=4`, layers CORTE/LAMINA/ETIQUETAS — what laser shops ask for). Pieces that fit nowhere are always reported (`sin_lugar`), never dropped silently. Deps: `shapely`, `ezdxf` (in requirements + lock). Validation baseline (jul-2026, EJEMPLOS/anahuac): true-shape nesting saves ~1 sheet vs rectangle packing on the triple-letrero case; grains of the espiga tuck between letters and into letter counters.
+
+### Módulo de administración (`/#admin`)
+
+UI tab "Admin" + endpoints under `/api/admin/*` (section ADMINISTRACIÓN at the end of `main.py`). Backups follow `db.DB_PATH` (NOT a fixed path) so the test suite — which redirects both `db.DB_PATH` and `main.BACKUP_DIR` to temp dirs in `tests/conftest.py` — never touches the real DB or the real `backups/` folder.
+
+- **Backups**: list/create/download/restore for both the DB (`cotizador_*.db`) and the catalog (`catalog_*.json`). `_backup_path_seguro()` validates names (regex + parent check — no traversal). Restore validates the backup file BEFORE overwriting (`db.es_db_valida()` — opens read-only, reads `sqlite_master`) and always snapshots the current state first as `pre_restaurar_*.db`, so a restore can itself be undone; on failure it auto-reverts. After a DB restore, `db.init_db()` re-runs defensive migrations and the quote caches are cleared. Catalog restore calls `catalog_load()` to refresh the in-memory catalog.
+- **Limpieza**: `POST /api/admin/db/limpiar` (`{sin_cliente, desde, hasta}` — criteria ANDed, at least one required, dates `YYYY-MM-DD`) deletes quotes with an automatic backup right before; `db.clean_quotes()` raises `ValueError` with zero criteria so the table can't be emptied by accident. `POST /api/admin/db/vacuum` compacts the file (VACUUM can't run inside a transaction — `db.vacuum()` uses a raw connection, not the context manager).
+- **Gotcha aprendido**: `SELECT 1` does NOT validate a SQLite file (lazy open — it never reads the header). `db.ping()` reads `sqlite_master` for this reason; keep it that way.
+- Status panel: quotes/clients counts + DB size (`db.db_stats()`), disk usage, backup count/latest/retention, in-memory cache sizes.
 
 ### Catalog persistence
 

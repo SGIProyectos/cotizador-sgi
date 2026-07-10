@@ -1,9 +1,11 @@
 import asyncio
+import base64
 import dataclasses
 import json
 import logging
 import os
 import re
+import secrets
 import shutil
 import threading
 import time
@@ -13,22 +15,24 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 
 import db
+import nesting
 from calculator import QuoteResult, cotizar_caja, cotizar_letras, cotizar_planas, parse_svg
 from catalog_data import (
     GRUAS,
     catalog_apply,
+    catalog_load,
     catalog_save,
     catalog_to_dict,
 )
 from excel_gen import generar_xlsx
 from pdf_gen import generar_pdf, generar_pdf_entrega, generar_pdf_ot
-from plano_gen import generar_plano_cliente, generar_plano_taller
+from plano_gen import generar_plano_cliente, generar_plano_corte, generar_plano_taller
 
 BASE = Path(__file__).parent
 STATIC = BASE / "static"
@@ -101,12 +105,17 @@ _svg_store: dict[str, dict] = {}
 # Caché en memoria de cotizaciones (QuoteResult + meta) — respaldado por SQLite
 _quote_store: dict[str, QuoteResult] = {}
 
+# Resultados del módulo de corte (nesting) — solo en RAM, re-ejecutable
+_nest_store: dict[str, dict] = {}
+
 # Timestamps de último acceso por clave (para TTL)
 _svg_touch:   dict[str, float] = {}
 _quote_touch: dict[str, float] = {}
+_nest_touch:  dict[str, float] = {}
 
 SVG_TTL_SECONDS   = 24 * 3600        # 24 h — SVGs son re-subibles, expiran rápido
 QUOTE_TTL_SECONDS = 7 * 24 * 3600    # 7 d  — cotizaciones se recargan desde SQLite si hace falta
+NEST_TTL_SECONDS  = 24 * 3600        # 24 h — un acomodo se puede volver a correr
 CLEANUP_INTERVAL  = 3600             # 1 h
 
 
@@ -132,14 +141,22 @@ def _purge_expired_caches() -> None:
             _quote_store.pop(k, None)
             _quote_store.pop(k + "_meta", None)
             _quote_touch.pop(k, None)
-    if svg_dead or q_dead:
-        log.info("TTL purge: %d svgs, %d quotes", len(svg_dead), len(q_dead))
+        n_dead = [k for k, t in _nest_touch.items() if now - t > NEST_TTL_SECONDS]
+        for k in n_dead:
+            _nest_store.pop(k, None)
+            _nest_touch.pop(k, None)
+    if svg_dead or q_dead or n_dead:
+        log.info("TTL purge: %d svgs, %d quotes, %d nests",
+                 len(svg_dead), len(q_dead), len(n_dead))
 
 # ─── BACKUPS ─────────────────────────────────────────────────────────────────
 
-BACKUP_DIR    = BASE / "backups"
-DB_FILE       = BASE / "cotizador.db"
-CATALOG_FILE  = BASE / "catalog.json"
+# Datos mutables (DB/catálogo/respaldos) siguen a COTIZADOR_DATA_DIR — en
+# hosting con disco persistente apunta al punto de montaje; local = junto al código.
+DATA_DIR      = Path(os.environ.get("COTIZADOR_DATA_DIR") or BASE)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+BACKUP_DIR    = DATA_DIR / "backups"
+CATALOG_FILE  = DATA_DIR / "catalog.json"
 BACKUP_RETENTION_DAYS = 30
 BACKUP_INTERVAL = 24 * 3600  # diario
 
@@ -155,10 +172,11 @@ def _rotate_backups(prefix: str) -> None:
             log.warning("No se pudo borrar backup antiguo %s", old.name, exc_info=True)
 
 
-def _backup_file(src: Path, prefix: str) -> None:
-    """Copia src a backups/<prefix>_YYYYMMDD_HHMMSS<extension>, rota antiguos."""
+def _backup_file(src: Path, prefix: str) -> Path | None:
+    """Copia src a backups/<prefix>_YYYYMMDD_HHMMSS<extension>, rota antiguos.
+    Devuelve la ruta del respaldo creado (None si no había fuente o falló)."""
     if not src.exists():
-        return
+        return None
     BACKUP_DIR.mkdir(exist_ok=True)
     ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
     dest = BACKUP_DIR / f"{prefix}_{ts}{src.suffix}"
@@ -167,16 +185,19 @@ def _backup_file(src: Path, prefix: str) -> None:
         log.info("Backup creado: %s", dest.name)
     except Exception:
         log.exception("Backup falló para %s", src.name)
-        return
+        return None
     _rotate_backups(prefix)
+    return dest
 
 
-def _backup_db() -> None:
-    _backup_file(DB_FILE, "cotizador")
+def _backup_db() -> Path | None:
+    # Sigue a db.DB_PATH (no a una ruta fija): así los tests, que redirigen la
+    # DB a una temporal, nunca respaldan/restauran la base real del taller.
+    return _backup_file(Path(db.DB_PATH), "cotizador")
 
 
-def _backup_catalog() -> None:
-    _backup_file(CATALOG_FILE, "catalog")
+def _backup_catalog() -> Path | None:
+    return _backup_file(CATALOG_FILE, "catalog")
 
 # ─── LIFESPAN ────────────────────────────────────────────────────────────────
 
@@ -218,6 +239,40 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Cotizador SGI - Letras y Anuncios", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
+
+
+# ─── LLAVE DE ACCESO (para exposición pública) ───────────────────────────────
+# Se activa definiendo ACCESS_PASSWORD (y opcionalmente ACCESS_USER, default
+# "sgi") en el entorno o .env. Sin definir, NO pide nada — el uso local del
+# taller sigue igual. Con ella, TODO el sitio (incl. /static y /docs) exige
+# usuario/contraseña vía Basic Auth del navegador; solo /health queda libre
+# para que el hosting pueda monitorear. Es la medida pre-Fase 2 para pruebas
+# remotas; la autenticación real multi-usuario llega con fastapi-users (C1).
+
+ACCESS_USER     = os.environ.get("ACCESS_USER", "sgi").strip()
+ACCESS_PASSWORD = os.environ.get("ACCESS_PASSWORD", "").strip()
+
+
+@app.middleware("http")
+async def _llave_de_acceso(request: Request, call_next):
+    if not ACCESS_PASSWORD or request.url.path == "/health":
+        return await call_next(request)
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Basic "):
+        try:
+            usuario, _, clave = base64.b64decode(auth[6:]).decode("utf-8").partition(":")
+        except Exception:
+            usuario, clave = "", ""
+        # compare_digest en ambos campos: sin fuga de tiempos
+        user_ok = secrets.compare_digest(usuario, ACCESS_USER)
+        pass_ok = secrets.compare_digest(clave, ACCESS_PASSWORD)
+        if user_ok and pass_ok:
+            return await call_next(request)
+    return Response(
+        status_code=401,
+        content="Acceso restringido",
+        headers={"WWW-Authenticate": 'Basic realm="Cotizador SGI"'},
+    )
 
 
 # ─── HTML PRINCIPAL ──────────────────────────────────────────────────────────
@@ -589,10 +644,12 @@ async def api_cotizar_planas(req: PlanasRequest):
 async def api_list_quotes(
     cliente: str = Query(""),
     tipo:    str = Query(""),
+    estado:  str = Query(""),
     limit:   int = Query(150),
     offset:  int = Query(0),
 ):
-    return db.list_quotes(cliente=cliente, tipo=tipo, limit=limit, offset=offset)
+    return db.list_quotes(cliente=cliente, tipo=tipo, estado=estado,
+                          limit=limit, offset=offset)
 
 
 @app.get("/api/quotes/{quote_id}/open")
@@ -667,6 +724,47 @@ async def api_delete_quote(quote_id: str):
     return {"ok": True}
 
 
+# ─── PIPELINE DE ESTADOS Y PAGOS ─────────────────────────────────────────────
+
+class EstadoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    estado: str
+
+
+class PagoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    monto: float
+
+
+@app.post("/api/quotes/{quote_id}/estado")
+async def api_set_estado(quote_id: str, req: EstadoRequest):
+    if req.estado not in db.ESTADOS:
+        raise HTTPException(400, f"Estado inválido. Válidos: {', '.join(db.ESTADOS)}")
+    if not db.set_estado(quote_id, req.estado):
+        raise HTTPException(404, "Cotización no encontrada")
+    return {"ok": True, "estado": req.estado}
+
+
+@app.post("/api/quotes/{quote_id}/pago")
+async def api_registrar_pago(quote_id: str, req: PagoRequest):
+    if req.monto <= 0:
+        raise HTTPException(400, "El monto debe ser mayor a cero")
+    res = db.registrar_pago(quote_id, req.monto)
+    if res is None:
+        raise HTTPException(404, "Cotización no encontrada")
+    # Un pago implica que el cliente ya autorizó; si liquida, queda cobrada.
+    db.avanzar_estado(quote_id, "autorizada")
+    if res["saldo"] <= 0:
+        db.avanzar_estado(quote_id, "cobrada")
+    row = db.get_quote(quote_id) or {}
+    return {"ok": True, **res, "estado": row.get("estado") or "borrador"}
+
+
+@app.get("/api/dashboard")
+async def api_dashboard(meses: int = Query(6, ge=1, le=24)):
+    return db.resumen_dashboard(meses=meses)
+
+
 # ─── GENERAR PDF ─────────────────────────────────────────────────────────────
 
 def _get_meta(quote_id: str) -> dict:
@@ -710,6 +808,7 @@ async def api_ot(quote_id: str, cliente: str = "", notas: str = ""):
                 svg_text = ""
 
     _meta_con_cliente(meta)
+    db.avanzar_estado(quote_id, "fabricacion")  # la OT manda el trabajo al taller
     pdf_bytes = generar_pdf_ot(result, meta, svg_text=svg_text,
                                viewbox_w=vb_w, viewbox_h=vb_h,
                                paths_info=paths_info)
@@ -748,6 +847,14 @@ async def api_entrega(quote_id: str, cliente: str = "", notas: str = "",
     if anticipo >= 0:
         meta["anticipo"] = anticipo
     _meta_con_cliente(meta)
+    db.avanzar_estado(quote_id, "entregada")  # el acta certifica la entrega real
+    if anticipo > 0:
+        # El anticipo del acta es el total pagado a la fecha: solo se registra
+        # la diferencia, para que regenerar el acta no duplique el pago.
+        row = db.get_quote(quote_id) or {}
+        delta = anticipo - (row.get("pagado") or 0)
+        if delta > 0:
+            db.registrar_pago(quote_id, delta)
     pdf_bytes = generar_pdf_entrega(result, meta)
     filename  = f"Entrega_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
     return FileResponse(path=_write_tmp(pdf_bytes, filename), filename=filename, media_type="application/pdf")
@@ -865,6 +972,7 @@ async def api_pdf(quote_id: str, cliente: str = "", notas: str = ""):
     if notas:   meta["notas"]   = notas
 
     _meta_con_cliente(meta)
+    db.avanzar_estado(quote_id, "enviada")  # generar la cotización = ya se envió
     pdf_bytes = generar_pdf(result, meta)
     filename  = f"Cotizacion_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
 
@@ -892,6 +1000,150 @@ async def api_excel(quote_id: str, cliente: str = "", notas: str = ""):
         filename=filename,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+# ─── MÓDULO DE CORTE (NESTING) ───────────────────────────────────────────────
+# Independiente del cotizador: sube 1..N SVGs con su ancho real y copias,
+# acomoda las piezas en láminas/retazos/rollo y entrega PDF + SVG + DXF.
+
+_NEST_MAX_ARCHIVOS = 10
+
+
+@app.post("/api/nest")
+def api_nest(files: list[UploadFile] = File(...), config: str = Form("{}")):
+    """Corre el nesting. `config` (JSON):
+    {archivos: [{ancho_cm, copias}...]  (mismo orden que los files),
+     lamina: {ancho_cm, alto_cm}, gap_cm, margen_cm, paso_angulo, material}.
+    Endpoint sync a propósito: el cálculo es CPU-bound (corre en threadpool)."""
+    try:
+        cfg = json.loads(config or "{}")
+        if not isinstance(cfg, dict):
+            raise ValueError("config debe ser objeto JSON")
+    except ValueError as e:
+        raise HTTPException(400, f"config inválido: {e}")
+
+    if not files:
+        raise HTTPException(400, "Sube al menos un SVG")
+    if len(files) > _NEST_MAX_ARCHIVOS:
+        raise HTTPException(400, f"Máximo {_NEST_MAX_ARCHIVOS} archivos por acomodo")
+
+    lam_cfg   = cfg.get("lamina") or {}
+    lam_w     = float(lam_cfg.get("ancho_cm") or 122.0)
+    lam_h     = float(lam_cfg.get("alto_cm") or 244.0)
+    gap_cm    = float(cfg.get("gap_cm", 0.5))
+    margen_cm = float(cfg.get("margen_cm", 1.0))
+    paso_ang  = int(cfg.get("paso_angulo", 15))
+    if not (5.0 <= lam_w <= nesting.MAX_LADO_CM and 5.0 <= lam_h <= nesting.MAX_LADO_CM):
+        raise HTTPException(400, "Medidas de lámina fuera de rango (5–1500 cm)")
+    if not (0.0 <= gap_cm <= 5.0):
+        raise HTTPException(400, "La separación debe estar entre 0 y 5 cm")
+    if not (0.0 <= margen_cm <= 10.0):
+        raise HTTPException(400, "El margen debe estar entre 0 y 10 cm")
+    if paso_ang not in (5, 10, 15, 30, 45, 90, 180, 360):
+        raise HTTPException(400, "paso_angulo inválido (5/10/15/30/45/90/180/360)")
+
+    arch_cfg = cfg.get("archivos") or []
+    piezas: list = []
+    for i, f in enumerate(files):
+        contenido = f.file.read()
+        if len(contenido) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, f"{f.filename}: archivo demasiado grande")
+        ac = arch_cfg[i] if i < len(arch_cfg) else {}
+        ancho = float(ac.get("ancho_cm") or 0)
+        copias = max(1, min(50, int(ac.get("copias") or 1)))
+        if ancho <= 0:
+            raise HTTPException(400, f"{f.filename}: indica el ancho real en cm")
+        try:
+            pzs = nesting.piezas_desde_svg(contenido, ancho,
+                                           fuente=f.filename or f"svg{i+1}",
+                                           copias=copias)
+        except Exception as e:
+            log.exception("nest: fallo al extraer piezas de %s", f.filename)
+            raise HTTPException(400, f"{f.filename}: no se pudieron extraer piezas ({e})")
+        if not pzs:
+            raise HTTPException(400, f"{f.filename}: sin piezas cerradas que cortar")
+        piezas.extend(pzs)
+
+    try:
+        laminas, sin_lugar = nesting.nest(
+            piezas, lam_w, lam_h, gap_cm=gap_cm,
+            margen_cm=margen_cm, paso_angulo=paso_ang)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    params = {"ancho_cm": lam_w, "alto_cm": lam_h, "gap_cm": gap_cm,
+              "margen_cm": margen_cm, "paso_angulo": paso_ang,
+              "material": str(cfg.get("material") or "")}
+    nid = str(uuid.uuid4())
+    with _state_lock:
+        _nest_store[nid] = {"laminas": laminas, "sin_lugar": sin_lugar,
+                            "params": params}
+        _nest_touch[nid] = time.time()
+
+    return {
+        "nest_id": nid,
+        "laminas": [{
+            "idx": la.idx,
+            "piezas": len(la.colocaciones),
+            "util_pct": round(la.util_pct, 1),
+            "franja_cm": round(la.franja_cm, 1),
+            "util_franja_pct": round(la.util_franja_pct, 1),
+            "svg": nesting.lamina_svg(la, margen_cm=margen_cm),
+            "etiquetas": [c.etiqueta for c in la.colocaciones],
+        } for la in laminas],
+        "sin_lugar": [p.etiqueta for p in sin_lugar],
+        "total_piezas": len(piezas),
+        "area_total_m2": round(sum(p.area for p in piezas) / 10000, 2),
+    }
+
+
+def _nest_de_store(nest_id: str) -> dict:
+    with _state_lock:
+        data = _nest_store.get(nest_id)
+        if data:
+            _nest_touch[nest_id] = time.time()
+    if not data:
+        raise HTTPException(404, "Acomodo no encontrado (expiró o no existe); vuelve a correrlo")
+    return data
+
+
+def _lamina_de(data: dict, idx: int):
+    for la in data["laminas"]:
+        if la.idx == idx:
+            return la
+    raise HTTPException(404, f"No existe la lámina {idx}")
+
+
+@app.get("/api/nest/{nest_id}/dxf/{idx}")
+async def api_nest_dxf(nest_id: str, idx: int):
+    """DXF de una lámina (en mm, capas CORTE/LAMINA/ETIQUETAS) para el láser."""
+    data = _nest_de_store(nest_id)
+    dxf = nesting.lamina_dxf(_lamina_de(data, idx))
+    filename = f"Corte_lamina{idx}.dxf"
+    return FileResponse(path=_write_tmp(dxf, filename), filename=filename,
+                        media_type="application/dxf")
+
+
+@app.get("/api/nest/{nest_id}/svg/{idx}")
+async def api_nest_svg(nest_id: str, idx: int):
+    """SVG de una lámina (unidades cm) — para plotter o revisión."""
+    data = _nest_de_store(nest_id)
+    svg = nesting.lamina_svg(_lamina_de(data, idx),
+                             margen_cm=data["params"]["margen_cm"],
+                             con_etiquetas=False).encode("utf-8")
+    filename = f"Corte_lamina{idx}.svg"
+    return FileResponse(path=_write_tmp(svg, filename), filename=filename,
+                        media_type="image/svg+xml")
+
+
+@app.get("/api/nest/{nest_id}/pdf")
+async def api_nest_pdf(nest_id: str):
+    """Plano de corte en PDF: una página por lámina."""
+    data = _nest_de_store(nest_id)
+    pdf = generar_plano_corte(data["laminas"], data["sin_lugar"], data["params"])
+    filename = "PlanoCorte_SGI.pdf"
+    return FileResponse(path=_write_tmp(pdf, filename), filename=filename,
+                        media_type="application/pdf")
 
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -1141,6 +1393,164 @@ async def api_vectorize(
         "max_letter_height_px": round(svg_data.max_letter_height_px, 2),
         "artboard_w_cm":        round(svg_data.artboard_w_cm, 2),
     }
+
+
+# ─── ADMINISTRACIÓN ──────────────────────────────────────────────────────────
+# Panel /#admin: respaldos (crear/listar/descargar/restaurar) y mantenimiento
+# de la base (limpieza con respaldo previo automático, vacuum, estado general).
+
+_BACKUP_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+\.(db|json)$")
+_FECHA_RE       = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _backup_path_seguro(nombre: str) -> Path:
+    """Valida que `nombre` sea un archivo real DENTRO de backups/ (sin rutas,
+    sin traversal). 400 si el nombre es inválido, 404 si no existe."""
+    if not _BACKUP_NAME_RE.match(nombre) or ".." in nombre:
+        raise HTTPException(400, "Nombre de respaldo inválido")
+    p = BACKUP_DIR / nombre
+    if not p.is_file() or p.parent.resolve() != BACKUP_DIR.resolve():
+        raise HTTPException(404, "Respaldo no encontrado")
+    return p
+
+
+def _listar_backups() -> list[dict]:
+    if not BACKUP_DIR.exists():
+        return []
+    items = []
+    for f in sorted(BACKUP_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+        if not f.is_file() or f.suffix not in (".db", ".json"):
+            continue
+        items.append({
+            "nombre": f.name,
+            "tipo":   "base" if f.suffix == ".db" else "catalogo",
+            "bytes":  f.stat().st_size,
+            "fecha":  datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+        })
+    return items
+
+
+@app.get("/api/admin/status")
+async def api_admin_status():
+    stats = db.db_stats()
+    uso = shutil.disk_usage(BASE)
+    backups = _listar_backups()
+    with _state_lock:
+        caches = {"svgs": len(_svg_store), "quotes": len(_quote_touch),
+                  "nests": len(_nest_store)}
+    return {
+        "db_ok": db.ping(),
+        "db":    stats,
+        "disco": {"total_gb": round(uso.total / 1e9, 1),
+                  "libre_gb": round(uso.free / 1e9, 1)},
+        "backups": {"n": len(backups),
+                    "ultimo": backups[0] if backups else None,
+                    "retencion_dias": BACKUP_RETENTION_DAYS},
+        "caches": caches,
+        "started_at": getattr(app.state, "started_at", None),
+    }
+
+
+@app.get("/api/admin/backups")
+async def api_admin_backups():
+    return {"backups": _listar_backups()}
+
+
+@app.post("/api/admin/backup")
+async def api_admin_backup():
+    creados = [p.name for p in (_backup_db(), _backup_catalog()) if p]
+    if not creados:
+        raise HTTPException(500, "No se pudo crear el respaldo (revisa server.log)")
+    log.info("Respaldo manual: %s", creados)
+    return {"ok": True, "creados": creados}
+
+
+@app.get("/api/admin/backups/{nombre}/download")
+async def api_admin_backup_download(nombre: str):
+    p = _backup_path_seguro(nombre)
+    media = "application/octet-stream" if p.suffix == ".db" else "application/json"
+    return FileResponse(str(p), media_type=media, filename=p.name)
+
+
+class RestoreRequest(BaseModel):
+    nombre: str
+
+
+@app.post("/api/admin/restore")
+async def api_admin_restore(req: RestoreRequest):
+    src = _backup_path_seguro(req.nombre)
+
+    if src.suffix == ".db":
+        # El respaldo se valida ANTES de pisar la base viva
+        if not db.es_db_valida(src):
+            raise HTTPException(400, "El respaldo no es una base de datos válida")
+        destino = Path(db.DB_PATH)
+        # Respaldo del estado ACTUAL antes de pisarlo — la restauración misma
+        # se puede deshacer restaurando este archivo pre_restaurar_*.db.
+        previo = _backup_file(destino, "pre_restaurar")
+        try:
+            shutil.copy2(src, destino)
+            db.init_db()  # migraciones defensivas por si el respaldo trae esquema viejo
+        except Exception:
+            log.exception("Restauración de DB falló desde %s; revirtiendo", src.name)
+            if previo:
+                shutil.copy2(previo, destino)
+            raise HTTPException(500, "No se pudo restaurar la base; se revirtió el cambio")
+        with _state_lock:
+            _quote_store.clear()
+            _quote_touch.clear()
+        log.info("DB restaurada desde %s (estado previo: %s)",
+                 src.name, previo.name if previo else "—")
+        return {"ok": True, "tipo": "base", "restaurado_de": src.name,
+                "respaldo_previo": previo.name if previo else None}
+
+    # Catálogo (.json)
+    previo = _backup_catalog()
+    try:
+        shutil.copy2(src, CATALOG_FILE)
+        catalog_load()
+    except Exception:
+        log.exception("Restauración de catálogo falló desde %s", src.name)
+        if previo:
+            shutil.copy2(previo, CATALOG_FILE)
+            catalog_load()
+        raise HTTPException(500, "El respaldo de catálogo no es válido; se revirtió el cambio")
+    log.info("Catálogo restaurado desde %s", src.name)
+    return {"ok": True, "tipo": "catalogo", "restaurado_de": src.name,
+            "respaldo_previo": previo.name if previo else None}
+
+
+class LimpiarRequest(BaseModel):
+    sin_cliente: bool = False
+    desde: str = ""   # YYYY-MM-DD inclusive
+    hasta: str = ""   # YYYY-MM-DD inclusive
+
+
+@app.post("/api/admin/db/limpiar")
+async def api_admin_db_limpiar(req: LimpiarRequest):
+    desde, hasta = req.desde.strip(), req.hasta.strip()
+    for f in (desde, hasta):
+        if f and not _FECHA_RE.match(f):
+            raise HTTPException(400, "Fecha inválida: usa formato AAAA-MM-DD")
+    _backup_db()  # siempre hay copia inmediata previa al borrado
+    try:
+        borradas = db.clean_quotes(req.sin_cliente, desde, hasta)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    with _state_lock:
+        _quote_store.clear()
+        _quote_touch.clear()
+    restantes = db.db_stats()["quotes"]
+    log.info("Limpieza de quotes: %d borradas, %d restantes", borradas, restantes)
+    return {"ok": True, "borradas": borradas, "restantes": restantes}
+
+
+@app.post("/api/admin/db/vacuum")
+async def api_admin_db_vacuum():
+    liberado = db.vacuum()
+    log.info("VACUUM: %d bytes liberados", liberado)
+    return {"ok": True, "bytes_liberados": liberado,
+            "db_bytes": db.db_stats()["db_bytes"]}
 
 
 if __name__ == "__main__":

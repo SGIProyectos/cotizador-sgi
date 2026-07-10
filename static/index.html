@@ -855,6 +855,141 @@ svg g.pieza-labels                 { pointer-events: none; }
   *, *::before, *::after { transition: none !important; animation-duration: .01ms !important; }
 }
 
+/* ─── PANTALLA DE INICIO ──────────────────────────────────────────────────
+   Overlay de bienvenida con el wordmark trazado por "láser" (SVG puro, solo
+   anima stroke-dashoffset/opacity/transform — barato). Al cerrarse pasa a
+   display:none, con lo que el navegador deja de calcular sus animaciones. */
+#home {
+  position: fixed; inset: 0; z-index: 5000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 26px; padding: 28px 18px; overflow: hidden;
+  background: var(--k0);
+}
+.home-blob {
+  position: absolute; width: 55vmax; height: 55vmax; border-radius: 50%;
+  pointer-events: none; will-change: transform;
+}
+.home-blob.cian {
+  left: -18vmax; top: -22vmax;
+  background: radial-gradient(circle, rgba(44,197,236,.10) 0%, transparent 62%);
+  animation: homeDeriva1 26s ease-in-out infinite alternate;
+}
+.home-blob.magenta {
+  right: -20vmax; bottom: -24vmax;
+  background: radial-gradient(circle, rgba(237,78,151,.09) 0%, transparent 62%);
+  animation: homeDeriva2 32s ease-in-out infinite alternate;
+}
+@keyframes homeDeriva1 { to { transform: translate(9vmax, 6vmax); } }
+@keyframes homeDeriva2 { to { transform: translate(-8vmax, -7vmax); } }
+
+.home-marca { position: relative; text-align: center; }
+.home-word { width: min(560px, 82vw); height: auto; overflow: visible; }
+.home-word text {
+  font-family: var(--sans); font-weight: 700; font-size: 130px; letter-spacing: 6px;
+}
+.home-word .halo {
+  fill: var(--mg); opacity: .14; filter: blur(14px);
+  animation: homeHalo 4.5s ease-in-out infinite alternate;
+}
+@keyframes homeHalo { from { opacity: .10; } to { opacity: .26; } }
+.home-word .silueta { fill: rgba(230,235,242,.045); stroke: var(--k4); stroke-width: 1; }
+.home-word .laser {
+  fill: transparent; stroke: var(--c); stroke-width: 1.6; stroke-linecap: round;
+  stroke-dasharray: 70 330;
+  filter: drop-shadow(0 0 5px rgba(44,197,236,.85));
+  animation: homeTrazo 7s linear infinite;
+}
+@keyframes homeTrazo { to { stroke-dashoffset: -400; } }
+.home-sub {
+  margin-top: 2px; color: var(--txt2); font-size: 13.5px; letter-spacing: .22em;
+  text-transform: uppercase;
+}
+
+.home-grid {
+  position: relative; display: grid; gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(860px, 94vw);
+}
+@media (max-width: 720px) { .home-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+.home-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 9px;
+  padding: 16px 16px 14px; text-align: left; cursor: pointer;
+  background: var(--k2); border: 1px solid var(--k4); border-radius: 11px;
+  color: var(--txt); font-family: inherit; font-size: 14px; font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 8px 22px rgba(0,0,0,.35);
+  transition: border-color .18s, transform .18s, box-shadow .18s, background .18s;
+}
+.home-card:hover {
+  border-color: var(--c); transform: translateY(-2px);
+  background: rgba(44,197,236,.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 12px 28px rgba(0,0,0,.45),
+              0 0 0 1px rgba(44,197,236,.45), 0 0 34px rgba(44,197,236,.28),
+              inset 0 0 22px rgba(44,197,236,.10);
+}
+.home-card:hover .home-ic { filter: drop-shadow(0 0 6px rgba(44,197,236,.9)); }
+.home-card small { font-weight: 400; font-size: 11.5px; color: var(--txt2); line-height: 1.45; }
+.home-ic {
+  width: 26px; height: 26px; stroke: var(--c); fill: none;
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+  transition: filter .18s;
+}
+.home-card.secundaria .home-ic { stroke: var(--mg); }
+.home-card.secundaria:hover {
+  border-color: var(--mg);
+  background: rgba(237,78,151,.11);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 12px 28px rgba(0,0,0,.45),
+              0 0 0 1px rgba(237,78,151,.45), 0 0 34px rgba(237,78,151,.28),
+              inset 0 0 22px rgba(237,78,151,.10);
+}
+.home-card.secundaria:hover .home-ic { filter: drop-shadow(0 0 6px rgba(237,78,151,.9)); }
+.home-pie { position: relative; display: flex; gap: 22px; font-size: 12px; }
+.home-pie a { color: var(--txt3); cursor: pointer; text-decoration: none; }
+.home-pie a:hover { color: var(--txt2); text-decoration: underline; }
+
+/* Destello al elegir: la tarjeta elegida se enciende en su tinta, crece un
+   poco y se difumina lentamente, mientras las DEMÁS opciones y el wordmark
+   se apagan (la elección queda sola iluminada). El overlay completo se
+   desvanece al final, cuando el destello ya se vio. Solo anima
+   background/box-shadow/opacity/transform — sin reflow. */
+#home { opacity: 1; transition: opacity .4s ease .5s; }
+#home.cerrando { opacity: 0; pointer-events: none; }
+#home.cerrando .home-card:not(.elegida),
+#home.cerrando .home-marca,
+#home.cerrando .home-pie,
+#home.cerrando .home-blob {
+  opacity: .15; transition: opacity .35s ease;
+}
+.home-card.elegida {
+  animation: homeElegida 1s ease-out forwards;
+  border-color: var(--c);
+  transform: translateY(-2px) scale(1.05);
+}
+@keyframes homeElegida {
+  0%, 18% {
+    background: rgba(44,197,236,.55);
+    box-shadow: 0 0 0 2px var(--c), 0 0 60px rgba(44,197,236,.75),
+                inset 0 0 34px rgba(44,197,236,.45);
+  }
+  100% {
+    background: var(--k2);
+    box-shadow: 0 0 0 1px rgba(44,197,236,.20), 0 0 10px rgba(44,197,236,.10),
+                inset 0 0 0 rgba(44,197,236,0);
+  }
+}
+.home-card.secundaria.elegida { border-color: var(--mg); animation-name: homeElegidaMg; }
+@keyframes homeElegidaMg {
+  0%, 18% {
+    background: rgba(237,78,151,.52);
+    box-shadow: 0 0 0 2px var(--mg), 0 0 60px rgba(237,78,151,.75),
+                inset 0 0 34px rgba(237,78,151,.42);
+  }
+  100% {
+    background: var(--k2);
+    box-shadow: 0 0 0 1px rgba(237,78,151,.20), 0 0 10px rgba(237,78,151,.10),
+                inset 0 0 0 rgba(237,78,151,0);
+  }
+}
+
 </style>
 <script type="importmap">
 {
@@ -868,16 +1003,90 @@ svg g.pieza-labels                 { pointer-events: none; }
 </head>
 <body>
 
+<!-- ══════════════════ PANTALLA DE INICIO ══════════════════ -->
+<div id="home">
+  <div class="home-blob cian"></div>
+  <div class="home-blob magenta"></div>
+
+  <div class="home-marca">
+    <svg class="home-word" viewBox="0 0 560 170" aria-label="SGI">
+      <text class="halo"    x="50%" y="128" text-anchor="middle">SGI</text>
+      <text class="silueta" x="50%" y="128" text-anchor="middle">SGI</text>
+      <text class="laser"   x="50%" y="128" text-anchor="middle">SGI</text>
+    </svg>
+    <div class="home-sub">Cotizador de letras y anuncios</div>
+  </div>
+
+  <div class="home-grid">
+    <button class="home-card" onclick="homeIr('letras', this)">
+      <svg class="home-ic" viewBox="0 0 24 24">
+        <path d="M4 8l8-4.5L20 8v8l-8 4.5L4 16z"/><path d="M4 8l8 4.5L20 8"/><path d="M12 12.5V21"/>
+      </svg>
+      Letras 3D
+      <small>Cajón de luz, halo iluminado o sin luz. Con volumen y LEDs.</small>
+    </button>
+    <button class="home-card" onclick="homeIr('planas', this)">
+      <svg class="home-ic" viewBox="0 0 24 24">
+        <path d="M6 7V5h12v2"/><path d="M12 5v14"/><path d="M9 19h6"/>
+      </svg>
+      Letras planas
+      <small>Corte plano en acrílico, PVC o aluminio, sin iluminación.</small>
+    </button>
+    <button class="home-card" onclick="homeIr('caja', this)">
+      <svg class="home-ic" viewBox="0 0 24 24">
+        <rect x="4" y="7" width="16" height="11" rx="1.5"/>
+        <path d="M8 4l1.5 2M16 4l-1.5 2M12 3.4V6"/>
+      </svg>
+      Caja de luz
+      <small>Cajón luminoso con lona o acrílico y gráfico impreso o de corte.</small>
+    </button>
+    <button class="home-card secundaria" onclick="homeIr('corte', this)">
+      <svg class="home-ic" viewBox="0 0 24 24">
+        <circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/>
+        <path d="M8 7.6L20 18M8 16.4L20 6"/>
+      </svg>
+      Corte
+      <small>Acomoda las piezas en la lámina o rollo aprovechando el material.</small>
+    </button>
+    <button class="home-card secundaria" onclick="homeIr('historial', this)">
+      <svg class="home-ic" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3.2 2.2"/>
+      </svg>
+      Historial
+      <small>Cotizaciones guardadas: reabrir, documentos, estados y pagos.</small>
+    </button>
+    <button class="home-card secundaria" onclick="homeIr('dashboard', this)">
+      <svg class="home-ic" viewBox="0 0 24 24">
+        <path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/>
+      </svg>
+      Dashboard
+      <small>Resultados del negocio: cotizado vs vendido, margen y por cobrar.</small>
+    </button>
+  </div>
+
+  <div class="home-pie">
+    <a onclick="homeIr('catalog')">Catálogo de precios</a>
+    <a onclick="homeIr('admin')">Administración</a>
+    <a onclick="homeIr('salir')">Entrar sin elegir</a>
+  </div>
+</div>
+
 <div class="app">
 
   <!-- ══════════════════ SIDEBAR ══════════════════ -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h1>⬡ SGI Cotizador</h1>
-        <button class="btn-pill" onclick="abrirHistorial()" title="Historial de cotizaciones">
-          📋 Historial
-        </button>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador</h1>
+        <div style="display:flex;gap:6px">
+          <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
+            <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
+            Dashboard
+          </button>
+          <button class="btn-pill" onclick="abrirHistorial()" title="Historial de cotizaciones">
+            📋 Historial
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1164,7 +1373,9 @@ svg g.pieza-labels                 { pointer-events: none; }
       <div class="tab" onclick="switchTab('result')">Cotización</div>
       <div class="tab" onclick="switchTab('3d')">Vista 3D</div>
       <div class="tab" onclick="switchTab('rec')">Recomendaciones</div>
+      <div class="tab" onclick="switchTab('corte')">Corte</div>
       <div class="tab" onclick="switchTab('catalog'); loadCatalog()">📦 Catálogo</div>
+      <div class="tab" onclick="switchTab('admin'); adminLoad()">Admin</div>
     </nav>
 
     <!-- TAB: SVG -->
@@ -1231,6 +1442,185 @@ svg g.pieza-labels                 { pointer-events: none; }
           <p>Calcula una cotización para ver la extrusión 3D</p>
         </div>
         <div class="v3d-hint">Arrastrar · girar &nbsp;|&nbsp; Scroll · zoom &nbsp;|&nbsp; Clic derecho · pan</div>
+      </div>
+    </div>
+
+    <!-- TAB: CORTE (nesting) -->
+    <div class="tab-content" id="tab-corte">
+      <div style="max-width:1100px">
+        <div style="margin-bottom:14px">
+          <h2 style="color:var(--c);font-size:16px">Corte — acomodo de piezas en lámina</h2>
+          <p style="font-size:12px;color:var(--txt2);margin-top:3px">
+            Sube uno o varios SVG, indica su medida real y cuántas copias cortarás.
+            El acomodo optimiza la lámina girando las piezas y aprovechando los huecos.
+            Independiente del cotizador.
+          </p>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;margin-bottom:12px">
+
+          <!-- Panel archivos -->
+          <div style="background:var(--k2);border:1px solid var(--k4);border-radius:9px;overflow:hidden">
+            <div style="padding:8px 14px;border-bottom:1px solid var(--k4);font-size:11px;
+                        font-weight:700;color:var(--txt2);text-transform:uppercase;
+                        letter-spacing:.06em">1 · Archivos a cortar</div>
+            <div style="padding:12px 14px">
+              <input type="file" id="nest-file-input" accept=".svg" multiple style="display:none"
+                     onchange="nestAddFiles(this.files); this.value=''">
+              <button onclick="document.getElementById('nest-file-input').click()"
+                style="width:100%;padding:9px;background:var(--k3);border:1px dashed var(--line2);
+                       border-radius:7px;color:var(--txt2);font-size:12.5px;cursor:pointer;
+                       font-family:inherit">
+                + Agregar SVG (uno o varios)
+              </button>
+              <div id="nest-file-list" style="margin-top:10px"></div>
+            </div>
+          </div>
+
+          <!-- Panel material -->
+          <div style="background:var(--k2);border:1px solid var(--k4);border-radius:9px;overflow:hidden">
+            <div style="padding:8px 14px;border-bottom:1px solid var(--k4);font-size:11px;
+                        font-weight:700;color:var(--txt2);text-transform:uppercase;
+                        letter-spacing:.06em">2 · Material y separación</div>
+            <div style="padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:9px;font-size:12px">
+              <label style="grid-column:1/-1;color:var(--txt2)">Formato
+                <select id="nest-preset" onchange="nestPreset(this.value)"
+                  style="width:100%;margin-top:3px;height:30px;background:var(--k3);color:var(--txt);
+                         border:1px solid var(--line2);border-radius:6px;padding:0 8px;font-family:inherit">
+                  <option value="lamina">Lámina 122 × 244 cm</option>
+                  <option value="rollo">Rollo de vinil 60 cm (largo libre)</option>
+                  <option value="retazo">Retazo / medida personalizada</option>
+                </select>
+              </label>
+              <label style="color:var(--txt2)">Ancho (cm)
+                <input id="nest-lam-w" type="number" value="122" min="5" max="1500"
+                  style="width:100%;margin-top:3px;height:30px;background:var(--k3);color:var(--txt);
+                         border:1px solid var(--line2);border-radius:6px;padding:0 8px;font-family:var(--mono)">
+              </label>
+              <label style="color:var(--txt2)">Alto / largo (cm)
+                <input id="nest-lam-h" type="number" value="244" min="5" max="1500"
+                  style="width:100%;margin-top:3px;height:30px;background:var(--k3);color:var(--txt);
+                         border:1px solid var(--line2);border-radius:6px;padding:0 8px;font-family:var(--mono)">
+              </label>
+              <label style="color:var(--txt2)">Separación (mm)
+                <input id="nest-gap" type="number" value="5" min="0" max="50"
+                  style="width:100%;margin-top:3px;height:30px;background:var(--k3);color:var(--txt);
+                         border:1px solid var(--line2);border-radius:6px;padding:0 8px;font-family:var(--mono)">
+              </label>
+              <label style="color:var(--txt2)">Margen al borde (mm)
+                <input id="nest-margen" type="number" value="10" min="0" max="100"
+                  style="width:100%;margin-top:3px;height:30px;background:var(--k3);color:var(--txt);
+                         border:1px solid var(--line2);border-radius:6px;padding:0 8px;font-family:var(--mono)">
+              </label>
+              <label style="grid-column:1/-1;color:var(--txt2)">Material (opcional, sale en el plano)
+                <input id="nest-material" type="text" placeholder="ej. Acrílico blanco 3 mm"
+                  style="width:100%;margin-top:3px;height:30px;background:var(--k3);color:var(--txt);
+                         border:1px solid var(--line2);border-radius:6px;padding:0 8px;font-family:inherit">
+              </label>
+              <button id="nest-btn-run" onclick="nestRun()" disabled
+                style="grid-column:1/-1;padding:10px;background:var(--c-deep);border:1px solid var(--c);
+                       border-radius:7px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;
+                       font-family:inherit;margin-top:2px">
+                Acomodar piezas
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resultados -->
+        <div id="nest-resultados"></div>
+      </div>
+    </div>
+
+    <!-- TAB: ADMINISTRACIÓN -->
+    <div class="tab-content" id="tab-admin">
+      <div style="max-width:1100px">
+        <div style="margin-bottom:14px">
+          <h2 style="color:var(--c);font-size:16px">Administración del sistema</h2>
+          <p style="font-size:12px;color:var(--txt2);margin-top:3px">
+            Respaldos de la base de datos y el catálogo de precios, restauración
+            y mantenimiento. Antes de cualquier borrado o restauración se crea
+            un respaldo automático del estado actual.
+          </p>
+        </div>
+
+        <!-- Estado del sistema -->
+        <div id="admin-estado" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+             gap:10px;margin-bottom:12px"></div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:12px">
+
+          <!-- Panel respaldos -->
+          <div style="background:var(--k2);border:1px solid var(--k4);border-radius:9px;overflow:hidden">
+            <div style="padding:8px 14px;border-bottom:1px solid var(--k4);font-size:11px;
+                        font-weight:700;color:var(--txt2);text-transform:uppercase;
+                        letter-spacing:.06em;display:flex;justify-content:space-between;align-items:center">
+              <span>Respaldos</span>
+              <button onclick="adminBackupNow(this)"
+                style="padding:5px 12px;background:var(--c-deep);border:1px solid var(--c);
+                       border-radius:6px;color:#fff;font-size:11.5px;font-weight:700;
+                       cursor:pointer;font-family:inherit;text-transform:none;letter-spacing:0">
+                Respaldar ahora
+              </button>
+            </div>
+            <div id="admin-backups-list" style="padding:10px 14px;max-height:420px;overflow-y:auto;
+                 font-size:12px;color:var(--txt2)">Cargando…</div>
+          </div>
+
+          <!-- Panel mantenimiento -->
+          <div style="background:var(--k2);border:1px solid var(--k4);border-radius:9px;overflow:hidden">
+            <div style="padding:8px 14px;border-bottom:1px solid var(--k4);font-size:11px;
+                        font-weight:700;color:var(--txt2);text-transform:uppercase;
+                        letter-spacing:.06em">Mantenimiento de la base</div>
+            <div style="padding:12px 14px;font-size:12px">
+
+              <div style="margin-bottom:14px">
+                <div style="font-weight:700;color:var(--txt);margin-bottom:6px">Limpieza de cotizaciones</div>
+                <p style="color:var(--txt2);margin-bottom:8px">
+                  Borra cotizaciones según los criterios elegidos (se combinan).
+                  Se hace un respaldo automático justo antes.
+                </p>
+                <label style="display:flex;align-items:center;gap:7px;color:var(--txt2);margin-bottom:8px;cursor:pointer">
+                  <input type="checkbox" id="admin-limpiar-sincliente" checked>
+                  Solo cotizaciones <b>sin cliente</b> (pruebas)
+                </label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:9px">
+                  <label style="color:var(--txt2)">Desde (opcional)
+                    <input id="admin-limpiar-desde" type="date"
+                      style="width:100%;margin-top:3px;height:30px;background:var(--k3);color:var(--txt);
+                             border:1px solid var(--line2);border-radius:6px;padding:0 8px;font-family:var(--mono)">
+                  </label>
+                  <label style="color:var(--txt2)">Hasta (opcional)
+                    <input id="admin-limpiar-hasta" type="date"
+                      style="width:100%;margin-top:3px;height:30px;background:var(--k3);color:var(--txt);
+                             border:1px solid var(--line2);border-radius:6px;padding:0 8px;font-family:var(--mono)">
+                  </label>
+                </div>
+                <button onclick="adminLimpiar(this)"
+                  style="width:100%;padding:9px;background:var(--k3);border:1px solid var(--bad);
+                         border-radius:7px;color:var(--bad);font-size:12.5px;font-weight:700;
+                         cursor:pointer;font-family:inherit">
+                  Borrar cotizaciones según criterios
+                </button>
+              </div>
+
+              <div style="border-top:1px solid var(--k4);padding-top:12px">
+                <div style="font-weight:700;color:var(--txt);margin-bottom:6px">Compactar base de datos</div>
+                <p style="color:var(--txt2);margin-bottom:8px">
+                  Recupera el espacio en disco que dejan los registros borrados.
+                  Seguro de ejecutar en cualquier momento.
+                </p>
+                <button onclick="adminVacuum(this)"
+                  style="width:100%;padding:9px;background:var(--k3);border:1px solid var(--line2);
+                         border-radius:7px;color:var(--txt2);font-size:12.5px;font-weight:700;
+                         cursor:pointer;font-family:inherit">
+                  Compactar ahora
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3831,7 +4221,7 @@ async function renderRecomendaciones(d) {
 
 // ─── HELPERS UI ──────────────────────────────────────────────────────────────
 function switchTab(name) {
-  const names = ["svg","result","3d","rec","catalog"];
+  const names = ["svg","result","3d","rec","corte","catalog","admin"];
   document.querySelectorAll(".tab").forEach((t,i) => t.classList.toggle("active", names[i] === name));
   document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
   document.getElementById("tab-"+name).classList.add("active");
@@ -5368,6 +5758,18 @@ function aplicarConfiguracion() {
         <option value="caja_luz">Caja de luz</option>
         <option value="letras_planas">Letras planas</option>
       </select>
+      <select id="hist-estado" onchange="filtrarHistorial()"
+        style="height:34px;padding:0 12px;border:1px solid #cdd0d6;border-radius:6px;
+               font-size:13px;font-family:inherit;background:#fff">
+        <option value="">Todos los estados</option>
+        <option value="borrador">Borrador</option>
+        <option value="enviada">Enviada</option>
+        <option value="autorizada">Autorizada</option>
+        <option value="fabricacion">En fabricación</option>
+        <option value="entregada">Entregada</option>
+        <option value="cobrada">Cobrada</option>
+        <option value="perdida">Perdida</option>
+      </select>
       <button onclick="cargarHistorial()" style="height:34px;padding:0 14px;
         background:#2d5986;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer">
         Actualizar
@@ -5376,6 +5778,44 @@ function aplicarConfiguracion() {
 
     <!-- Lista -->
     <div id="historial-lista" style="padding:16px 24px;min-height:220px"></div>
+  </div>
+</div>
+
+<!-- ══════════════════ DASHBOARD MODAL ══════════════════ -->
+<div id="dashboard-modal" style="display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.72);z-index:2000;overflow-y:auto;padding:24px 16px">
+  <div style="max-width:1000px;margin:0 auto;background:var(--k1);border:1px solid var(--k4);
+              border-radius:12px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.55)">
+
+    <!-- Barra de título -->
+    <div style="background:var(--k2);border-bottom:1px solid var(--k4);padding:13px 20px;
+                display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg class="ic" viewBox="0 0 24 24" style="color:var(--c)">
+          <path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
+        <div>
+          <div style="font-size:14.5px;font-weight:700;color:var(--txt)">Dashboard de resultados</div>
+          <div style="font-size:10.5px;color:var(--txt2);margin-top:1px">
+            Cotizado vs vendido, conversión, margen y cobranza</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="dash-meses" onchange="cargarDashboard()"
+          style="height:30px;padding:0 10px;background:var(--k3);color:var(--txt);
+                 border:1px solid var(--line2);border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer">
+          <option value="3">3 meses</option>
+          <option value="6" selected>6 meses</option>
+          <option value="12">12 meses</option>
+        </select>
+        <button onclick="cerrarDashboard()"
+          style="height:30px;background:var(--k3);border:1px solid var(--line2);color:var(--txt);
+                 border-radius:6px;padding:0 12px;font-size:12px;cursor:pointer;font-family:inherit">
+          Cerrar
+        </button>
+      </div>
+    </div>
+
+    <div id="dashboard-body" style="padding:16px 20px 20px;min-height:260px"></div>
   </div>
 </div>
 
@@ -5394,9 +5834,11 @@ function cerrarHistorial() {
 async function cargarHistorial() {
   const cliente = document.getElementById("hist-search")?.value || "";
   const tipo    = document.getElementById("hist-tipo")?.value   || "";
+  const estado  = document.getElementById("hist-estado")?.value || "";
   const params  = new URLSearchParams();
   if (cliente) params.append("cliente", cliente);
   if (tipo)    params.append("tipo", tipo);
+  if (estado)  params.append("estado", estado);
   document.getElementById("historial-lista").innerHTML =
     `<div style="color:#aaa;text-align:center;padding:40px;font-size:13px">Cargando...</div>`;
   try {
@@ -5422,30 +5864,44 @@ function renderHistorial(lista) {
     return;
   }
   const label = {letras_3d:"Letras 3D", caja_luz:"Caja de luz", letras_planas:"Letras planas"};
-  const rows  = lista.map(q => `
+  const rows  = lista.map(q => {
+    const precio = q.precio_final || 0;
+    const pagado = q.pagado || 0;
+    const saldo  = Math.max(0, precio - pagado);
+    const pagosLinea = pagado > 0
+      ? `<div style="font-size:10.5px;font-weight:400;color:${saldo <= 0.005 ? '#2e7d32' : '#b26a00'};margin-top:2px">
+           ${saldo <= 0.005 ? 'Liquidada' : 'Pagado $' + pagado.toLocaleString('es-MX',{minimumFractionDigits:2}) + ' · Debe $' + saldo.toLocaleString('es-MX',{minimumFractionDigits:2})}
+         </div>`
+      : "";
+    return `
     <tr style="border-bottom:1px solid #f0f2f5">
       <td style="padding:10px 12px;font-family:var(--mono);font-weight:600;color:#1a2b4a;
                  font-size:12px;white-space:nowrap">${q.folio}</td>
-      <td style="padding:10px 12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;
+      <td style="padding:10px 12px;max-width:170px;overflow:hidden;text-overflow:ellipsis;
                  white-space:nowrap">${q.cliente || '<span style="color:#aaa">—</span>'}</td>
       <td style="padding:10px 12px">
         <span style="background:#e8f0fe;color:#1a2b4a;padding:2px 8px;border-radius:10px;
                      font-size:11px;font-weight:600">${label[q.tipo] || q.tipo}</span>
       </td>
-      <td style="padding:10px 12px;color:#666;font-size:12px;white-space:nowrap">${q.fecha}</td>
+      <td style="padding:10px 12px;color:#666;font-size:12px;white-space:nowrap">${(q.fecha||'').slice(0,10)}</td>
       <td style="padding:10px 12px;text-align:right;font-weight:700;color:#1a2b4a;
-                 white-space:nowrap">$${(q.precio_final||0).toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+                 white-space:nowrap">$${precio.toLocaleString('es-MX',{minimumFractionDigits:2})}${pagosLinea}</td>
+      <td style="padding:10px 8px">${estadoSelectHTML(q)}</td>
       <td style="padding:10px 12px;white-space:nowrap">
         <button onclick="reabrirCotizacion('${q.id}')"
           style="background:#2d5986;color:#fff;border:none;border-radius:5px;
                  padding:5px 11px;font-size:12px;cursor:pointer;margin-right:4px">
           Abrir
         </button>
+        <button onclick="registrarPagoUI('${q.id}', ${saldo})" title="Registrar pago (anticipo o abono)"
+          style="background:#fff;color:#2e7d32;border:1px solid #2e7d32;border-radius:5px;
+                 padding:5px 9px;font-size:12px;cursor:pointer;margin-right:4px;font-weight:700">$</button>
         <button onclick="eliminarCotizacion('${q.id}',this)"
           style="background:#fff;color:#e53935;border:1px solid #e53935;border-radius:5px;
                  padding:5px 9px;font-size:12px;cursor:pointer">✕</button>
       </td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
 
   cont.innerHTML = `
     <table style="width:100%;border-collapse:collapse;font-size:13px;font-family:var(--sans)">
@@ -5457,6 +5913,7 @@ function renderHistorial(lista) {
           <th style="padding:8px 12px">Tipo</th>
           <th style="padding:8px 12px">Fecha</th>
           <th style="padding:8px 12px;text-align:right">Precio final</th>
+          <th style="padding:8px 8px">Estado</th>
           <th style="padding:8px 12px"></th>
         </tr>
       </thead>
@@ -5466,6 +5923,438 @@ function renderHistorial(lista) {
       ${lista.length} cotización${lista.length!==1?'es':''} encontrada${lista.length!==1?'s':''}
     </div>`;
 }
+
+// ─── PIPELINE DE ESTADOS Y PAGOS ─────────────────────────────────────────────
+// Ciclo: borrador → enviada → autorizada → fabricacion → entregada → cobrada
+// (o perdida). Colores para fondo claro del modal de historial.
+
+const ESTADOS_META = {
+  borrador:    {label:"Borrador",       bg:"#eceff3", fg:"#5d6878"},
+  enviada:     {label:"Enviada",        bg:"#e0f4fb", fg:"#0f7ea5"},
+  autorizada:  {label:"Autorizada",     bg:"#e5e9fb", fg:"#3949ab"},
+  fabricacion: {label:"En fabricación", bg:"#fdf3d7", fg:"#9a6c00"},
+  entregada:   {label:"Entregada",      bg:"#e0f2ef", fg:"#00695c"},
+  cobrada:     {label:"Cobrada",        bg:"#e3f3e4", fg:"#2e7d32"},
+  perdida:     {label:"Perdida",        bg:"#fde7e5", fg:"#c62828"},
+};
+
+function estadoSelectHTML(q) {
+  const actual = q.estado || "borrador";
+  const m = ESTADOS_META[actual] || ESTADOS_META.borrador;
+  const opts = Object.entries(ESTADOS_META).map(([k, v]) =>
+    `<option value="${k}" ${k === actual ? "selected" : ""}>${v.label}</option>`).join("");
+  return `<select onchange="cambiarEstado('${q.id}', this)"
+    style="background:${m.bg};color:${m.fg};border:1px solid ${m.fg}33;border-radius:10px;
+           padding:3px 6px;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;
+           -webkit-appearance:none;appearance:none">${opts}</select>`;
+}
+
+async function cambiarEstado(qid, sel) {
+  const estado = sel.value;
+  sel.disabled = true;
+  try {
+    const res = await fetch(`/api/quotes/${qid}/estado`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({estado}),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || "Error");
+    showToast(`Estado: ${ESTADOS_META[estado]?.label || estado}`, "ok");
+    await cargarHistorial();
+  } catch (e) {
+    showToast("Error al cambiar estado: " + e.message, "error");
+    sel.disabled = false;
+  }
+}
+
+async function registrarPagoUI(qid, saldo) {
+  const sugerido = saldo > 0 ? saldo.toFixed(2) : "";
+  const txt = prompt(
+    `Monto del pago (anticipo o abono)${saldo > 0 ? `\nSaldo pendiente: $${saldo.toLocaleString('es-MX',{minimumFractionDigits:2})}` : ""}`,
+    sugerido);
+  if (txt === null) return;
+  const monto = parseFloat(String(txt).replace(/[$,\s]/g, ""));
+  if (!isFinite(monto) || monto <= 0) {
+    showToast("Monto inválido", "error");
+    return;
+  }
+  try {
+    const res = await fetch(`/api/quotes/${qid}/pago`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({monto}),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || "Error");
+    const data = await res.json();
+    showToast(data.saldo <= 0
+      ? "Pago registrado — cotización liquidada"
+      : `Pago registrado. Saldo: $${data.saldo.toLocaleString('es-MX',{minimumFractionDigits:2})}`, "ok");
+    await cargarHistorial();
+  } catch (e) {
+    showToast("Error al registrar pago: " + e.message, "error");
+  }
+}
+
+// ─── DASHBOARD DE RESULTADOS ─────────────────────────────────────────────────
+
+async function abrirDashboard() {
+  document.getElementById("dashboard-modal").style.display = "block";
+  await cargarDashboard();
+}
+
+function cerrarDashboard() {
+  document.getElementById("dashboard-modal").style.display = "none";
+}
+
+const _mx0 = v => "$" + (v || 0).toLocaleString("es-MX", {maximumFractionDigits: 0});
+
+async function cargarDashboard() {
+  const meses = document.getElementById("dash-meses")?.value || 6;
+  const body  = document.getElementById("dashboard-body");
+  body.innerHTML = `<div style="color:var(--txt3);text-align:center;padding:50px;font-size:13px">Cargando…</div>`;
+  try {
+    const res = await fetch(`/api/dashboard?meses=${meses}`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    renderDashboard(await res.json());
+  } catch (e) {
+    body.innerHTML = `<div style="color:var(--bad);text-align:center;padding:50px;font-size:13px">
+      Error al cargar: ${e.message}</div>`;
+  }
+}
+
+function renderDashboard(d) {
+  const t = d.totales;
+  const label = {letras_3d:"Letras 3D", caja_luz:"Caja de luz", letras_planas:"Letras planas"};
+
+  // KPIs
+  const kpi = (titulo, valor, sub, color) => `
+    <div style="flex:1;min-width:150px;background:var(--k2);border:1px solid var(--k4);
+                border-radius:9px;padding:11px 14px">
+      <div style="font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;
+                  letter-spacing:.06em">${titulo}</div>
+      <div style="font-size:20px;font-weight:700;color:${color || "var(--txt)"};
+                  font-family:var(--mono);margin-top:3px">${valor}</div>
+      <div style="font-size:10.5px;color:var(--txt2);margin-top:2px">${sub || "&nbsp;"}</div>
+    </div>`;
+  const kpis = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+      ${kpi("Cotizado", _mx0(t.monto_cotizado), t.cotizadas + " cotizaciones")}
+      ${kpi("Vendido", _mx0(t.monto_vendido), t.vendidas + " autorizadas o más", "var(--c)")}
+      ${kpi("Conversión", t.conversion_pct + "%", "cotizada → vendida")}
+      ${kpi("Margen promedio", t.margen_prom_pct != null ? t.margen_prom_pct + "%" : "—",
+            "real, sobre vendidas", "var(--ok)")}
+      ${kpi("Por cobrar", _mx0(t.por_cobrar), "saldo de trabajos vendidos",
+            t.por_cobrar > 0 ? "var(--mg)" : "var(--txt)")}
+    </div>`;
+
+  // Meses: barras cotizado (tenue) vs vendido (cian)
+  const maxM = Math.max(1, ...d.meses.map(m => m.monto_cotizado));
+  const filasMes = d.meses.map(m => {
+    const wCot = Math.round(m.monto_cotizado / maxM * 100);
+    const wVen = Math.round(m.monto_vendido  / maxM * 100);
+    return `
+    <tr style="border-bottom:1px solid var(--k4)">
+      <td style="padding:7px 10px;font-family:var(--mono);font-size:11.5px;color:var(--txt2);
+                 white-space:nowrap">${m.mes}</td>
+      <td style="padding:7px 10px;width:42%">
+        <div style="height:7px;background:var(--k3);border-radius:4px;width:${wCot}%;min-width:2px;margin-bottom:3px"></div>
+        <div style="height:7px;background:var(--c);border-radius:4px;width:${wVen}%;min-width:${m.monto_vendido>0?2:0}px"></div>
+      </td>
+      <td style="padding:7px 10px;text-align:right;font-family:var(--mono);font-size:11.5px;
+                 color:var(--txt2);white-space:nowrap">${_mx0(m.monto_cotizado)}<br>
+        <span style="color:var(--c)">${_mx0(m.monto_vendido)}</span></td>
+      <td style="padding:7px 10px;text-align:center;font-size:11.5px;color:var(--txt2)">
+        ${m.cotizadas} / ${m.vendidas}</td>
+      <td style="padding:7px 10px;text-align:right;font-size:11.5px;font-weight:600;
+                 color:${m.conversion_pct >= 50 ? "var(--ok)" : "var(--txt2)"}">${m.conversion_pct}%</td>
+    </tr>`;
+  }).join("");
+
+  const panel = (titulo, contenido) => `
+    <div style="background:var(--k2);border:1px solid var(--k4);border-radius:9px;overflow:hidden">
+      <div style="padding:8px 14px;border-bottom:1px solid var(--k4);font-size:11px;font-weight:700;
+                  color:var(--txt2);text-transform:uppercase;letter-spacing:.06em">${titulo}</div>
+      ${contenido}
+    </div>`;
+
+  const tablaMeses = panel("Por mes — cotizado vs <span style='color:var(--c)'>vendido</span>", `
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="font-size:10px;color:var(--txt3);text-transform:uppercase;
+                        letter-spacing:.05em;text-align:left;border-bottom:1px solid var(--k4)">
+        <th style="padding:6px 10px">Mes</th><th style="padding:6px 10px"></th>
+        <th style="padding:6px 10px;text-align:right">Monto</th>
+        <th style="padding:6px 10px;text-align:center">Cot / Ven</th>
+        <th style="padding:6px 10px;text-align:right">Conv.</th>
+      </tr></thead>
+      <tbody>${filasMes}</tbody>
+    </table>`);
+
+  // Por tipo
+  const filasTipo = d.por_tipo.length ? d.por_tipo.map(x => `
+    <tr style="border-bottom:1px solid var(--k4)">
+      <td style="padding:7px 14px;font-size:12px;color:var(--txt)">${label[x.tipo] || x.tipo}</td>
+      <td style="padding:7px 10px;text-align:center;font-size:11.5px;color:var(--txt2)">${x.vendidas}</td>
+      <td style="padding:7px 10px;text-align:right;font-family:var(--mono);font-size:11.5px;
+                 color:var(--txt)">${_mx0(x.monto)}</td>
+      <td style="padding:7px 14px;text-align:right;font-size:11.5px;font-weight:600;
+                 color:var(--ok)">${x.margen_prom_pct != null ? x.margen_prom_pct + "%" : "—"}</td>
+    </tr>`).join("")
+    : `<tr><td colspan="4" style="padding:16px;text-align:center;color:var(--txt3);font-size:12px">
+        Sin ventas en el periodo</td></tr>`;
+  const tablaTipo = panel("Qué producto vende más", `
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="font-size:10px;color:var(--txt3);text-transform:uppercase;
+                        letter-spacing:.05em;text-align:left;border-bottom:1px solid var(--k4)">
+        <th style="padding:6px 14px">Tipo</th>
+        <th style="padding:6px 10px;text-align:center">Ven.</th>
+        <th style="padding:6px 10px;text-align:right">Monto</th>
+        <th style="padding:6px 14px;text-align:right">Margen</th>
+      </tr></thead>
+      <tbody>${filasTipo}</tbody>
+    </table>`);
+
+  // Top clientes
+  const filasCli = d.top_clientes.length ? d.top_clientes.map((x, i) => `
+    <tr style="border-bottom:1px solid var(--k4)">
+      <td style="padding:7px 14px;font-size:11.5px;color:var(--txt3);width:24px">${i + 1}</td>
+      <td style="padding:7px 6px;font-size:12px;color:var(--txt);max-width:180px;overflow:hidden;
+                 text-overflow:ellipsis;white-space:nowrap">${x.cliente}</td>
+      <td style="padding:7px 14px;text-align:right;font-family:var(--mono);font-size:11.5px;
+                 color:var(--txt)">${_mx0(x.monto)}</td>
+    </tr>`).join("")
+    : `<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--txt3);font-size:12px">
+        Sin ventas en el periodo</td></tr>`;
+  const tablaCli = panel("Top clientes (vendido)", `
+    <table style="width:100%;border-collapse:collapse"><tbody>${filasCli}</tbody></table>`);
+
+  // Pipeline: conteo por estado
+  const chipsEstado = Object.entries(ESTADOS_META).map(([k, v]) => {
+    const n = d.por_estado[k] || 0;
+    if (!n) return "";
+    return `<span style="background:var(--k3);border:1px solid var(--line2);border-radius:12px;
+      padding:4px 10px;font-size:11px;color:var(--txt2)">${v.label}
+      <b style="color:var(--txt);font-family:var(--mono)">${n}</b></span>`;
+  }).join("");
+  const pipeline = panel("Pipeline del periodo", `
+    <div style="padding:11px 14px;display:flex;gap:7px;flex-wrap:wrap">
+      ${chipsEstado || `<span style="color:var(--txt3);font-size:12px">Sin cotizaciones en el periodo</span>`}
+    </div>`);
+
+  document.getElementById("dashboard-body").innerHTML = kpis + `
+    <div style="display:grid;grid-template-columns:1fr;gap:12px">
+      ${tablaMeses}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">
+        ${tablaTipo}${tablaCli}
+      </div>
+      ${pipeline}
+    </div>`;
+}
+
+document.getElementById("dashboard-modal").addEventListener("click", e => {
+  if (e.target === document.getElementById("dashboard-modal")) cerrarDashboard();
+});
+
+// ─── ADMINISTRACIÓN ──────────────────────────────────────────────────────────
+
+function adminFmtBytes(b) {
+  if (b >= 1e6) return (b / 1e6).toFixed(1) + " MB";
+  if (b >= 1e3) return (b / 1e3).toFixed(0) + " KB";
+  return b + " B";
+}
+
+async function adminLoad() {
+  try {
+    const [st, bk] = await Promise.all([
+      fetch("/api/admin/status").then(r => r.json()),
+      fetch("/api/admin/backups").then(r => r.json()),
+    ]);
+    adminRenderEstado(st);
+    adminRenderBackups(bk.backups || []);
+  } catch (e) {
+    showToast("Error cargando administración", "error");
+  }
+}
+
+function adminRenderEstado(st) {
+  const card = (titulo, valor, sub) => `
+    <div style="background:var(--k2);border:1px solid var(--k4);border-radius:9px;padding:10px 13px">
+      <div style="font-size:10.5px;font-weight:700;color:var(--txt3);text-transform:uppercase;
+                  letter-spacing:.06em;margin-bottom:4px">${titulo}</div>
+      <div style="font-size:16px;font-weight:700;color:var(--txt);font-family:var(--mono)">${valor}</div>
+      ${sub ? `<div style="font-size:11px;color:var(--txt2);margin-top:2px">${sub}</div>` : ""}
+    </div>`;
+  const dot = ok => `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;
+    background:${ok ? "var(--ok)" : "var(--bad)"};margin-right:6px;vertical-align:1px"></span>`;
+  const u = st.backups.ultimo;
+  document.getElementById("admin-estado").innerHTML =
+    card("Base de datos", dot(st.db_ok) + (st.db_ok ? "OK" : "ERROR"),
+         adminFmtBytes(st.db.db_bytes)) +
+    card("Cotizaciones", st.db.quotes,
+         st.db.quotes_sin_cliente > 0 ? st.db.quotes_sin_cliente + " sin cliente" : "todas con cliente") +
+    card("Clientes", st.db.clients, "") +
+    card("Respaldos", st.backups.n,
+         u ? "último: " + u.fecha : "sin respaldos") +
+    card("Disco libre", st.disco.libre_gb + " GB", "de " + st.disco.total_gb + " GB") +
+    card("En memoria", st.caches.svgs + " SVG / " + st.caches.quotes + " cot.",
+         "desde " + (st.started_at || "—").replace("T", " "));
+}
+
+function adminRenderBackups(list) {
+  const el = document.getElementById("admin-backups-list");
+  if (!list.length) {
+    el.innerHTML = "Sin respaldos todavía. Usa «Respaldar ahora».";
+    return;
+  }
+  el.innerHTML = list.map(b => `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--k4)">
+      <span style="flex:0 0 62px;font-size:10.5px;font-weight:700;text-transform:uppercase;
+        color:${b.tipo === "base" ? "var(--c)" : "var(--am)"}">${b.tipo === "base" ? "Base" : "Catálogo"}</span>
+      <span style="flex:1;min-width:0;font-family:var(--mono);color:var(--txt);font-size:11.5px;
+        overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${b.nombre}">${b.nombre}</span>
+      <span style="flex:0 0 60px;text-align:right;font-family:var(--mono)">${adminFmtBytes(b.bytes)}</span>
+      <a href="/api/admin/backups/${encodeURIComponent(b.nombre)}/download"
+         style="padding:4px 9px;background:var(--k3);border:1px solid var(--line2);border-radius:5px;
+                color:var(--txt2);font-size:11px;text-decoration:none">Descargar</a>
+      <button onclick="adminRestore('${b.nombre}')"
+         style="padding:4px 9px;background:var(--k3);border:1px solid var(--line2);border-radius:5px;
+                color:var(--txt2);font-size:11px;cursor:pointer;font-family:inherit">Restaurar</button>
+    </div>`).join("");
+}
+
+async function adminBackupNow(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = "..."; }
+  try {
+    const r = await fetch("/api/admin/backup", { method: "POST" });
+    if (!r.ok) throw new Error((await r.json()).detail || "Error");
+    showToast("Respaldo creado", "ok");
+    adminLoad();
+  } catch (e) {
+    showToast("Error al respaldar: " + e.message, "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Respaldar ahora"; }
+  }
+}
+
+async function adminRestore(nombre) {
+  const tipo = nombre.endsWith(".db") ? "la base de datos" : "el catálogo de precios";
+  if (!confirm(`¿Restaurar ${tipo} desde "${nombre}"?`)) return;
+  if (!confirm("La información actual se reemplazará por la del respaldo.\n" +
+               "Antes se guardará una copia automática del estado actual (pre_restaurar).\n\n¿Continuar?")) return;
+  try {
+    const r = await fetch("/api/admin/restore", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || "Error");
+    if (data.tipo === "catalogo") { catLoaded = false; }
+    showToast("Restaurado desde " + data.restaurado_de, "ok");
+    adminLoad();
+  } catch (e) {
+    showToast("Error al restaurar: " + e.message, "error");
+  }
+}
+
+async function adminLimpiar(btn) {
+  const sinCliente = document.getElementById("admin-limpiar-sincliente").checked;
+  const desde = document.getElementById("admin-limpiar-desde").value;
+  const hasta = document.getElementById("admin-limpiar-hasta").value;
+  if (!sinCliente && !desde && !hasta) {
+    showToast("Elige al menos un criterio de limpieza", "error");
+    return;
+  }
+  const desc = [
+    sinCliente ? "sin cliente" : "TODAS (con y sin cliente)",
+    desde ? "desde " + desde : "",
+    hasta ? "hasta " + hasta : "",
+  ].filter(Boolean).join(", ");
+  if (!confirm(`Se borrarán las cotizaciones: ${desc}.\n` +
+               "Se hará un respaldo automático antes.\n\n¿Continuar?")) return;
+  if (btn) { btn.disabled = true; }
+  try {
+    const r = await fetch("/api/admin/db/limpiar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sin_cliente: sinCliente, desde, hasta }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || "Error");
+    showToast(`${data.borradas} cotizaciones borradas — quedan ${data.restantes}`, "ok");
+    adminLoad();
+  } catch (e) {
+    showToast("Error en la limpieza: " + e.message, "error");
+  } finally {
+    if (btn) { btn.disabled = false; }
+  }
+}
+
+async function adminVacuum(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = "Compactando…"; }
+  try {
+    const r = await fetch("/api/admin/db/vacuum", { method: "POST" });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || "Error");
+    showToast("Base compactada: " + adminFmtBytes(data.bytes_liberados) + " liberados", "ok");
+    adminLoad();
+  } catch (e) {
+    showToast("Error al compactar: " + e.message, "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Compactar ahora"; }
+  }
+}
+
+// ─── PANTALLA DE INICIO ──────────────────────────────────────────────────────
+
+function homeAbrir() {
+  const h = document.getElementById("home");
+  h.classList.remove("cerrando");
+  h.querySelectorAll(".home-card.elegida").forEach(c => c.classList.remove("elegida"));
+  h.style.display = "flex";
+}
+
+function homeCerrar() {
+  // display:none detiene por completo las animaciones del intro (cero costo
+  // mientras se trabaja); volver a Inicio las reactiva.
+  document.getElementById("home").style.display = "none";
+}
+
+function homeIr(destino, card) {
+  const h = document.getElementById("home");
+  if (h.classList.contains("cerrando")) return;  // evita doble clic
+  // Destello en la tarjeta elegida (las demás se apagan) + desvanecido del
+  // overlay al final; la navegación ocurre al terminar — el usuario VE su
+  // elección encenderse sola y difuminarse antes de entrar.
+  if (card) card.classList.add("elegida");
+  h.classList.add("cerrando");
+  setTimeout(() => {
+    homeCerrar();
+    if (destino === "letras" || destino === "planas" || destino === "caja") {
+      const btn = document.querySelector(`.tipo-btn[data-tipo="${destino}"]`);
+      if (btn) setTipo(destino, btn);
+      switchTab("svg");
+    } else if (destino === "corte") {
+      switchTab("corte");
+    } else if (destino === "historial") {
+      abrirHistorial();
+    } else if (destino === "dashboard") {
+      abrirDashboard();
+    } else if (destino === "catalog") {
+      switchTab("catalog"); loadCatalog();
+    } else if (destino === "admin") {
+      switchTab("admin"); adminLoad();
+    }
+  }, 950);
+}
+
+// Deep-link: /#dashboard, /#historial, /#corte o /#admin abren directo
+// (y saltan la pantalla de inicio); sin hash, se muestra el inicio.
+window.addEventListener("DOMContentLoaded", () => {
+  if (location.hash === "#dashboard") { homeCerrar(); abrirDashboard(); }
+  else if (location.hash === "#historial") { homeCerrar(); abrirHistorial(); }
+  else if (location.hash === "#corte") { homeCerrar(); switchTab("corte"); }
+  else if (location.hash === "#admin") { homeCerrar(); switchTab("admin"); adminLoad(); }
+});
 
 async function reabrirCotizacion(qid) {
   const btn = event?.target;
@@ -5595,6 +6484,160 @@ document.getElementById("historial-modal").addEventListener("click", e => {
 document.getElementById("clientes-modal").addEventListener("click", e => {
   if (e.target === document.getElementById("clientes-modal")) cerrarClientes();
 });
+
+// ─── MÓDULO DE CORTE (NESTING) ───────────────────────────────────────────────
+
+let _nestFiles = [];   // [{file, ancho, copias}]
+let _nestId = null;
+
+function nestAddFiles(fileList) {
+  for (const f of fileList) {
+    if (!f.name.toLowerCase().endsWith(".svg")) {
+      showToast(`${f.name}: solo archivos SVG`, "error");
+      continue;
+    }
+    if (_nestFiles.length >= 10) { showToast("Máximo 10 archivos", "error"); break; }
+    _nestFiles.push({file: f, ancho: "", copias: 1});
+  }
+  nestRenderLista();
+}
+
+function nestQuitar(i) {
+  _nestFiles.splice(i, 1);
+  nestRenderLista();
+}
+
+function nestRenderLista() {
+  const cont = document.getElementById("nest-file-list");
+  if (!_nestFiles.length) {
+    cont.innerHTML = `<div style="color:var(--txt3);font-size:11.5px;text-align:center;
+      padding:6px">Sin archivos aún</div>`;
+  } else {
+    cont.innerHTML = _nestFiles.map((f, i) => `
+      <div style="display:flex;gap:7px;align-items:center;padding:6px 0;
+                  border-bottom:1px solid var(--k4);font-size:12px">
+        <span style="flex:1;color:var(--txt);overflow:hidden;text-overflow:ellipsis;
+                     white-space:nowrap" title="${f.file.name}">${f.file.name}</span>
+        <input type="number" placeholder="ancho cm" value="${f.ancho}" min="1" max="10000"
+          onchange="_nestFiles[${i}].ancho = this.value; nestValidar()"
+          style="width:78px;height:27px;background:var(--k3);color:var(--txt);
+                 border:1px solid var(--line2);border-radius:5px;padding:0 6px;
+                 font-family:var(--mono);font-size:11.5px">
+        <input type="number" value="${f.copias}" min="1" max="50" title="Copias"
+          onchange="_nestFiles[${i}].copias = this.value"
+          style="width:44px;height:27px;background:var(--k3);color:var(--txt);
+                 border:1px solid var(--line2);border-radius:5px;padding:0 6px;
+                 font-family:var(--mono);font-size:11.5px">
+        <button onclick="nestQuitar(${i})" title="Quitar"
+          style="width:27px;height:27px;background:var(--k3);border:1px solid var(--line2);
+                 border-radius:5px;color:var(--bad);cursor:pointer;font-size:12px">✕</button>
+      </div>`).join("") + `
+      <div style="display:flex;gap:7px;font-size:9.5px;color:var(--txt3);padding-top:4px;
+                  justify-content:flex-end">
+        <span style="width:78px">ancho real (cm)</span><span style="width:44px">copias</span>
+        <span style="width:27px"></span>
+      </div>`;
+  }
+  nestValidar();
+}
+
+function nestValidar() {
+  const ok = _nestFiles.length > 0 &&
+             _nestFiles.every(f => parseFloat(f.ancho) > 0);
+  const btn = document.getElementById("nest-btn-run");
+  btn.disabled = !ok;
+  btn.style.opacity = ok ? "1" : ".45";
+  btn.style.cursor = ok ? "pointer" : "not-allowed";
+}
+
+function nestPreset(v) {
+  const w = document.getElementById("nest-lam-w");
+  const h = document.getElementById("nest-lam-h");
+  if (v === "lamina")      { w.value = 122; h.value = 244; }
+  else if (v === "rollo")  { w.value = 60;  h.value = 500; }
+  // retazo: se deja lo que el usuario capture
+}
+
+async function nestRun() {
+  const btn = document.getElementById("nest-btn-run");
+  const cont = document.getElementById("nest-resultados");
+  btn.disabled = true;
+  btn.textContent = "Acomodando… (esto tarda unos segundos)";
+  cont.innerHTML = "";
+  try {
+    const fd = new FormData();
+    for (const f of _nestFiles) fd.append("files", f.file);
+    fd.append("config", JSON.stringify({
+      archivos: _nestFiles.map(f => ({ancho_cm: parseFloat(f.ancho),
+                                      copias: parseInt(f.copias) || 1})),
+      lamina: {ancho_cm: parseFloat(document.getElementById("nest-lam-w").value),
+               alto_cm:  parseFloat(document.getElementById("nest-lam-h").value)},
+      gap_cm:    (parseFloat(document.getElementById("nest-gap").value) || 5) / 10,
+      margen_cm: (parseFloat(document.getElementById("nest-margen").value) || 10) / 10,
+      material:  document.getElementById("nest-material").value || "",
+    }));
+    const res = await fetch("/api/nest", {method: "POST", body: fd});
+    if (!res.ok) throw new Error((await res.json()).detail || `HTTP ${res.status}`);
+    const data = await res.json();
+    _nestId = data.nest_id;
+    nestRenderResultados(data);
+  } catch (e) {
+    cont.innerHTML = `<div style="color:var(--bad);padding:14px;background:var(--k2);
+      border:1px solid var(--bad);border-radius:8px;font-size:12.5px">
+      Error: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Acomodar piezas";
+    nestValidar();
+  }
+}
+
+function nestRenderResultados(d) {
+  const cont = document.getElementById("nest-resultados");
+  const aviso = d.sin_lugar.length ? `
+    <div style="color:#F5C93B;background:var(--k2);border:1px solid #F5C93B;
+                border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:10px">
+      Atención: ${d.sin_lugar.length} pieza(s) no caben ni en una lámina vacía:
+      ${d.sin_lugar.slice(0, 5).join(", ")}${d.sin_lugar.length > 5 ? "…" : ""}.
+      Revisa el ancho real o el tamaño de lámina.
+    </div>` : "";
+  const laminas = d.laminas.map(l => `
+    <div style="background:var(--k2);border:1px solid var(--k4);border-radius:9px;
+                overflow:hidden;margin-bottom:12px">
+      <div style="padding:8px 14px;border-bottom:1px solid var(--k4);display:flex;
+                  justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+        <span style="font-size:11px;font-weight:700;color:var(--txt2);
+                     text-transform:uppercase;letter-spacing:.06em">
+          Lámina ${l.idx} de ${d.laminas.length} — ${l.piezas} piezas ·
+          franja usada ${l.franja_cm} cm (${l.util_franja_pct}%) ·
+          ${l.util_pct}% de la lámina</span>
+        <span style="display:flex;gap:6px">
+          <a href="/api/nest/${_nestId}/dxf/${l.idx}" download
+             style="padding:4px 12px;background:var(--k3);border:1px solid var(--line2);
+                    border-radius:6px;color:var(--c);font-size:11.5px;font-weight:700;
+                    text-decoration:none">DXF</a>
+          <a href="/api/nest/${_nestId}/svg/${l.idx}" download
+             style="padding:4px 12px;background:var(--k3);border:1px solid var(--line2);
+                    border-radius:6px;color:var(--txt);font-size:11.5px;text-decoration:none">SVG</a>
+        </span>
+      </div>
+      <div style="padding:10px 14px;background:#10141b">${l.svg}</div>
+    </div>`).join("");
+  cont.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                margin:4px 0 10px;flex-wrap:wrap;gap:8px">
+      <span style="font-size:12.5px;color:var(--txt2)">
+        ${d.total_piezas} piezas · ${d.area_total_m2} m² de material neto ·
+        ${d.laminas.length} lámina(s)</span>
+      <a href="/api/nest/${_nestId}/pdf" download
+         style="padding:7px 16px;background:var(--c-deep);border:1px solid var(--c);
+                border-radius:7px;color:#fff;font-size:12.5px;font-weight:700;
+                text-decoration:none">Descargar plano de corte (PDF)</a>
+    </div>
+    ${aviso}${laminas}`;
+}
+
+nestRenderLista();
 
 // ─── CLIENTES ────────────────────────────────────────────────────────────────
 

@@ -2,8 +2,25 @@ services:
   - type: web
     name: cotizador-sgi
     runtime: python
+    plan: starter          # plan de pago: sin apagado por inactividad y permite disco
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    # Disco persistente: aquí viven cotizador.db, catalog.json y backups/.
+    # Sin esto, el filesystem de Render es efímero y CADA redeploy borra la
+    # base de datos (riesgo C11 documentado en CLAUDE.md).
+    disk:
+      name: datos-cotizador
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
+      - key: COTIZADOR_DATA_DIR
+        value: /var/data
+      - key: ACCESS_USER
+        value: sgi
+      # La contraseña se captura en el dashboard de Render (Environment →
+      # ACCESS_PASSWORD), nunca en este archivo que va al repositorio.
+      - key: ACCESS_PASSWORD
+        sync: false

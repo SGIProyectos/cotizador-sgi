@@ -1343,3 +1343,186 @@ def generar_plano_taller(meta: dict, svg_text: str, paths_info: list,
                           modo_taller=True,
                           result=result, notas=notas,
                           artboard_w_cm_hint=artboard_w_cm_hint)
+
+
+# ─── PLANO DE CORTE (nesting) ────────────────────────────────────────────────
+# Documento del módulo de corte: una página landscape por lámina con el
+# acomodo a escala + panel de datos. Recibe LaminaNest de nesting.py
+# (duck-typing: no se importa nesting para no acoplar módulos).
+
+_PALETA_CORTE = ["#2CC5EC", "#ED4E97", "#F5C93B", "#41C983", "#9A7DF5",
+                 "#F2865F", "#5FA8F2", "#E36DC9", "#8FD14F", "#F25F5F"]
+
+
+def _dibujar_poly_corte(c, poly, ox: float, oy: float, esc: float,
+                        alto_cm: float, color_hex: str) -> None:
+    """Dibuja un polígono shapely (con huecos, fill even-odd) en el canvas.
+    Coordenadas de lámina (Y hacia abajo) -> canvas (Y hacia arriba)."""
+    geoms = poly.geoms if poly.geom_type == "MultiPolygon" else [poly]
+    for g in geoms:
+        p = c.beginPath()
+        anillos = [g.exterior] + list(g.interiors)
+        for ring in anillos:
+            pts = list(ring.coords)
+            x0, y0 = pts[0]
+            p.moveTo(ox + x0 * esc, oy + (alto_cm - y0) * esc)
+            for x, y in pts[1:]:
+                p.lineTo(ox + x * esc, oy + (alto_cm - y) * esc)
+            p.close()
+        c.setFillColor(colors.HexColor(color_hex), alpha=0.72)
+        c.setStrokeColor(colors.HexColor("#222222")); c.setLineWidth(0.5)
+        c.drawPath(p, stroke=1, fill=1, fillMode=0)   # 0 = even-odd
+
+
+def _panel_datos_corte(c, x: float, y_top: float, w: float, lam,
+                       n_laminas: int, params: dict) -> float:
+    """Panel de datos de la lámina (estilo cajetín). Devuelve la Y final."""
+    filas = [
+        ("Lámina", f"{lam.idx} de {n_laminas}"),
+        ("Material", params.get("material") or "—"),
+        ("Medida", f"{lam.ancho_cm:.0f} × {lam.alto_cm:.0f} cm"),
+        ("Piezas", str(len(lam.colocaciones))),
+        ("Aprovech.", f"{lam.util_pct:.1f}% de la lámina"),
+        ("Franja usada", f"{lam.franja_cm:.0f} cm ({lam.util_franja_pct:.0f}%)"),
+        ("Separación", f"{params.get('gap_cm', 0.5) * 10:.0f} mm entre piezas"),
+        ("Margen", f"{params.get('margen_cm', 1.0) * 10:.0f} mm al borde"),
+    ]
+    tit_h, fila_h = 14, 13
+    h = tit_h + fila_h * len(filas)
+    y = y_top - h
+    c.setStrokeColor(AZUL_DARK); c.setLineWidth(1.0)
+    c.setFillColor(colors.white)
+    c.rect(x, y, w, h, fill=1, stroke=1)
+    c.setFillColor(AZUL_DARK)
+    c.rect(x, y + h - tit_h, w, tit_h, fill=1, stroke=0)
+    c.setFillColor(colors.white); c.setFont(FONT_BOLD, 8)
+    c.drawString(x + 5, y + h - tit_h + 4, "DATOS DE LA LÁMINA")
+    y_f = y + h - tit_h - fila_h
+    for lbl, val in filas:
+        c.setStrokeColor(GRIS_BORDE); c.setLineWidth(0.4)
+        c.line(x, y_f, x + w, y_f)
+        c.setFillColor(GRIS_TXT); c.setFont(FONT_BOLD, 6.5)
+        c.drawString(x + 5, y_f + fila_h / 2 - 2.5, lbl.upper())
+        c.setFillColor(colors.black); c.setFont(FONT_NAME, 8)
+        c.drawString(x + 58, y_f + fila_h / 2 - 2.8, str(val))
+        y_f -= fila_h
+    return y
+
+
+def _tabla_piezas_corte(c, x: float, y_top: float, w: float, y_min: float,
+                        lam) -> None:
+    """Lista de piezas: # · etiqueta · ángulo. Trunca si no cabe."""
+    fila_h = 10.5
+    c.setFillColor(GRIS_TXT); c.setFont(FONT_BOLD, 7)
+    c.drawString(x, y_top, "PIEZAS EN ESTA LÁMINA")
+    y = y_top - fila_h - 2
+    for i, col in enumerate(lam.colocaciones):
+        if y < y_min + fila_h:
+            c.setFillColor(GRIS_TXT); c.setFont(FONT_NAME, 7)
+            c.drawString(x, y, f"… y {len(lam.colocaciones) - i} piezas más")
+            return
+        if i % 2 == 0:
+            c.setFillColor(GRIS_ZEBRA)
+            c.rect(x - 2, y - 2.5, w + 4, fila_h, fill=1, stroke=0)
+        c.setFillColor(colors.HexColor(_PALETA_CORTE[i % len(_PALETA_CORTE)]))
+        c.circle(x + 4, y + 1.5, 3.2, fill=1, stroke=0)
+        c.setFillColor(colors.black); c.setFont(FONT_BOLD, 6.5)
+        c.drawCentredString(x + 4, y - 0.6, str(i + 1))
+        c.setFont(FONT_NAME, 7)
+        et = col.etiqueta
+        while _text_width(et, FONT_NAME, 7) > w - 60 and len(et) > 4:
+            et = et[:-2]
+        c.drawString(x + 12, y, et)
+        c.setFillColor(GRIS_TXT)
+        c.drawRightString(x + w, y, f"{col.angulo:.0f}°")
+        y -= fila_h
+
+
+def generar_plano_corte(laminas: list, sin_lugar: list,
+                        params: dict, meta: dict | None = None) -> bytes:
+    """PDF del plano de corte: una página por lámina, acomodo a escala,
+    panel de datos y lista de piezas. `sin_lugar` (piezas que no caben ni en
+    lámina vacía) se reporta en un aviso — nunca se omite en silencio."""
+    meta = meta or {}
+    buf = io.BytesIO()
+    c = _canvas.Canvas(buf, pagesize=landscape(letter))
+    PW, PH = landscape(letter)
+    fecha = meta.get("fecha") or datetime.now().strftime("%d/%m/%Y")
+    n_lam = len(laminas)
+
+    if not laminas:
+        _dibujar_header(c, "PLANO DE CORTE", PW, PH, subtitulo=fecha)
+        c.setFillColor(colors.black); c.setFont(FONT_NAME, 11)
+        c.drawCentredString(PW / 2, PH / 2, "No hay piezas para acomodar.")
+        c.showPage()
+
+    for lam in laminas:
+        _dibujar_header(c, f"PLANO DE CORTE — LÁMINA {lam.idx} DE {n_lam}",
+                        PW, PH, subtitulo=fecha)
+
+        col_w  = 6.2 * cm
+        dib_x  = MARGEN
+        dib_w  = PW - MARGEN * 2 - col_w - GAP_COL
+        dib_y  = PIE_H + MARGEN
+        dib_h  = PH - HEADER_H - MARGEN - dib_y
+        esc    = min(dib_w / lam.ancho_cm, dib_h / lam.alto_cm)
+        ox     = dib_x + (dib_w - lam.ancho_cm * esc) / 2
+        oy     = dib_y + (dib_h - lam.alto_cm * esc) / 2
+
+        # Lámina + margen interior
+        c.setFillColor(colors.HexColor("#FBFAF5"))
+        c.setStrokeColor(colors.black); c.setLineWidth(1.0)
+        c.rect(ox, oy, lam.ancho_cm * esc, lam.alto_cm * esc, fill=1, stroke=1)
+        mg = params.get("margen_cm", 1.0)
+        c.setStrokeColor(GRIS_LIGHT); c.setLineWidth(0.4); c.setDash(2, 2)
+        c.rect(ox + mg * esc, oy + mg * esc,
+               (lam.ancho_cm - 2 * mg) * esc, (lam.alto_cm - 2 * mg) * esc)
+        # Franja usada (línea de corte del sobrante)
+        if 0 < lam.franja_cm < lam.alto_cm * 0.98:
+            y_l = oy + (lam.alto_cm - lam.franja_cm) * esc
+            c.setStrokeColor(colors.HexColor("#C93077")); c.setLineWidth(0.9)
+            c.line(ox, y_l, ox + lam.ancho_cm * esc, y_l)
+        c.setDash()
+
+        for i, col in enumerate(lam.colocaciones):
+            _dibujar_poly_corte(c, col.poly, ox, oy, esc, lam.alto_cm,
+                                _PALETA_CORTE[i % len(_PALETA_CORTE)])
+            pt = col.poly.representative_point()
+            c.setFillColor(colors.black)
+            c.setFont(FONT_BOLD, max(5.0, min(9.0, 3.5 * esc)))
+            c.drawCentredString(ox + pt.x * esc,
+                                oy + (lam.alto_cm - pt.y) * esc - 2, str(i + 1))
+
+        # Cota de la lámina bajo el dibujo
+        c.setFillColor(GRIS_TXT); c.setFont(FONT_NAME, 7.5)
+        c.drawCentredString(ox + lam.ancho_cm * esc / 2, oy - 10,
+                            f"{lam.ancho_cm:.0f} × {lam.alto_cm:.0f} cm — "
+                            f"franja usada: {lam.franja_cm:.0f} cm")
+
+        # Columna derecha: datos + piezas (+ aviso de no colocadas en la 1a)
+        col_x = PW - MARGEN - col_w
+        y_pan = _panel_datos_corte(c, col_x, PH - HEADER_H - MARGEN,
+                                   col_w, lam, n_lam, params)
+        y_tab_top = y_pan - 14
+        y_min = PIE_H + MARGEN
+        if sin_lugar and lam.idx == 1:
+            aviso_h = 26
+            c.setFillColor(colors.HexColor("#FDECEA"))
+            c.setStrokeColor(colors.HexColor("#C62828")); c.setLineWidth(0.8)
+            c.rect(col_x, y_min, col_w, aviso_h, fill=1, stroke=1)
+            c.setFillColor(colors.HexColor("#C62828")); c.setFont(FONT_BOLD, 7)
+            c.drawString(col_x + 4, y_min + aviso_h - 10,
+                         f"{len(sin_lugar)} PIEZA(S) NO CABEN")
+            c.setFont(FONT_NAME, 6.5)
+            c.drawString(col_x + 4, y_min + aviso_h - 19,
+                         "Revisa medida de lámina o divide la pieza.")
+            y_min += aviso_h + 6
+        _tabla_piezas_corte(c, col_x, y_tab_top, col_w, y_min, lam)
+
+        _dibujar_pie(c, PW,
+                     texto_izq="SGI · Plano de corte (nesting)",
+                     texto_der=f"Lámina {lam.idx}/{n_lam} · {fecha}")
+        c.showPage()
+
+    c.save()
+    return buf.getvalue()

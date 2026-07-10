@@ -1,10 +1,15 @@
 import json
 import logging
+import os
 from pathlib import Path
 
 log = logging.getLogger("cotizador.catalog")
 
-_CATALOG_FILE = Path(__file__).parent / "catalog.json"
+# Sigue a COTIZADOR_DATA_DIR (disco persistente en hosting); sin definir,
+# catalog.json vive junto al código como siempre.
+_CATALOG_FILE = Path(
+    os.environ.get("COTIZADOR_DATA_DIR") or Path(__file__).parent
+) / "catalog.json"
 
 # Catálogo completo extraído de CATALOGO LETRAS.xlsx
 
