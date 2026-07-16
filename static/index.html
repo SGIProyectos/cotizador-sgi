@@ -4512,13 +4512,19 @@ const _MULT_LABELS = {
   acrilico_con_luz_premium:   "Acrílico con luz premium",
 };
 
+// Nombre legible para una regla sin etiqueta conocida (recién agregada o
+// cargada de catalog.json en una sesión nueva): "mi_regla_especial" -> "Mi Regla Especial"
+function _prettyKey(key) {
+  return key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function renderPreciosBase() {
   const pb = catalog.precios_base || { precio_cm: 10, multiplicadores: {} };
   const mults = pb.multiplicadores || {};
 
   const rows = Object.entries(mults).map(([key, val]) => `
     <tr>
-      <td>${_MULT_LABELS[key] || key}</td>
+      <td>${_MULT_LABELS[key] || _prettyKey(key)}</td>
       <td>
         <input type="number" id="pb-mult-${key}" value="${val}"
                step="0.1" min="0.1"
@@ -4527,10 +4533,11 @@ function renderPreciosBase() {
       <td style="font-size:11px;color:#999">
         Ej: 20 cm × $${pb.precio_cm||10}/cm × ${val} = <strong>$${(20*(pb.precio_cm||10)*val).toFixed(0)}</strong>
       </td>
+      <td><button class="btn-del" onclick="deleteItem('multiplicador','${key}')" title="Eliminar regla">✕</button></td>
     </tr>`).join("");
 
   document.getElementById("tbl-precios-base-wrap").innerHTML = `
-    <div style="max-width:560px">
+    <div style="max-width:640px">
       <div style="background:#fff8f0;border:1.5px solid var(--naranja);border-radius:8px;padding:16px 20px;margin-bottom:20px">
         <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--azul);display:block;margin-bottom:8px">
           Precio base por cm de altura ($/cm)
@@ -4543,9 +4550,12 @@ function renderPreciosBase() {
         </div>
       </div>
 
-      <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--azul);display:block;margin-bottom:8px">
-        Multiplicadores por tipo de fabricación
-      </label>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:10px">
+        <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--azul)">
+          Multiplicadores por tipo de fabricación
+        </label>
+        <button class="btn-add" onclick="openAddModal('multiplicador')">+ Agregar regla</button>
+      </div>
       <p style="font-size:11px;color:#888;margin-bottom:10px">
         El precio de cada letra = alto_cm × precio_cm × multiplicador. Este valor ya incluye
         materiales, cercha, LEDs, mano de obra e instalación.
@@ -4555,6 +4565,7 @@ function renderPreciosBase() {
           <th>Tipo de fabricación</th>
           <th style="width:100px">Multiplicador</th>
           <th style="width:220px">Ejemplo (letra 20 cm)</th>
+          <th style="width:36px"></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -4570,7 +4581,9 @@ function collectPreciosBase() {
   if (!catalog.precios_base) catalog.precios_base = { precio_cm: 10, multiplicadores: {} };
   const pcEl = document.getElementById("pb-precio-cm");
   if (pcEl) catalog.precios_base.precio_cm = parseFloat(pcEl.value) || 10;
-  Object.keys(_MULT_LABELS).forEach(key => {
+  // Todas las reglas presentes (no solo las 5 conocidas) — así una regla
+  // recién agregada también recoge el valor editado antes de guardar.
+  Object.keys(catalog.precios_base.multiplicadores).forEach(key => {
     const el = document.getElementById("pb-mult-" + key);
     if (el) catalog.precios_base.multiplicadores[key] = parseFloat(el.value) || 1;
   });
@@ -4632,6 +4645,7 @@ function openAddModal(type) {
     pegamento: {nombre:"", precio_aprox:90},
     silvatrim: {id:"", nombre:"", ancho_pulg:0.75, ancho_mm:19, precio_rollo:1900, metros_rollo:45.7, precio_ml:41.58},
     vinil: {id:"", nombre:"", precio_ml:58, ancho_rollo_m:0.60, acabado:"opaco", colores:[]},
+    multiplicador: {id:"", nombre:"", valor:2.0},
   };
   const baseType = type.replace("_int","").replace("_ext","");
   const item = defs[baseType] || {};
@@ -4642,6 +4656,7 @@ function openAddModal(type) {
   else if (type==="pegamento") showModal("Nuevo pegamento", pegamentoFields(item,"","",false));
   else if (type==="silvatrim") showModal("Nuevo Silvatrim", silvatrimFields(item));
   else if (type==="vinil") showModal("Nuevo grupo de vinil", vinilFields(item));
+  else if (type==="multiplicador") showModal("Nueva regla de multiplicador", multiplicadorFields(item));
 }
 
 function showModal(title, bodyHtml) {
@@ -4737,6 +4752,18 @@ function silvatrimFields(m) {
   </div>`;
 }
 
+function multiplicadorFields(m) {
+  return `<div class="modal-grid2">
+    ${fld("id","ID / Clave (sin espacios)", m.id||"")}
+    ${fld("nombre","Nombre para mostrar", m.nombre||"")}
+    ${fld("valor","Multiplicador", m.valor||2.0,"number","0.1")}
+  </div>
+  <p style="font-size:11px;color:#888;margin-top:10px">
+    precio_letra = alto_cm × precio_cm × multiplicador. El ID es la clave interna
+    (se usa al seleccionar el tipo de fabricación); el nombre es solo para mostrar.
+  </p>`;
+}
+
 function vinilFields(m) {
   const coloresStr = (m.colores || []).join(", ");
   return `<div class="modal-grid2">
@@ -4816,6 +4843,16 @@ function saveModal() {
     if (isNew) catalog.vinilos.push(vals);
     else catalog.vinilos[key] = {...catalog.vinilos[key], ...vals};
     renderVinilos();
+  } else if (type === "multiplicador") {
+    const vals = getModalValues(["id","nombre","valor"]);
+    const id = vals.id.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    if (!id) { alert("El ID es obligatorio"); return; }
+    if (!catalog.precios_base) catalog.precios_base = { precio_cm: 10, multiplicadores: {} };
+    if (!isNew && key && key !== id) delete catalog.precios_base.multiplicadores[key];
+    catalog.precios_base.multiplicadores[id] = vals.valor || 1;
+    _MULT_LABELS[id] = vals.nombre.trim() || _prettyKey(id);
+    renderPreciosBase();
+    updateMultiplicadoresSelect();
   }
   closeModal();
   showToast("Elemento actualizado — recuerda guardar", "ok");
@@ -4829,6 +4866,11 @@ function deleteItem(type, key) {
   else if (type === "pegamento") { delete catalog.pegamentos[key]; renderPegamentos(); }
   else if (type === "silvatrim") { (catalog.silvatrim||[]).splice(key,1); renderSilvatrim(); }
   else if (type === "vinil") { (catalog.vinilos||[]).splice(key,1); renderVinilos(); }
+  else if (type === "multiplicador") {
+    delete catalog.precios_base.multiplicadores[key];
+    renderPreciosBase();
+    updateMultiplicadoresSelect();
+  }
   else if (type.startsWith("led_caja_")) {
     const side = type.replace("led_caja_","");
     catalog.leds_caja[side].splice(key,1); renderLedsCaja();
