@@ -1015,6 +1015,12 @@ def catalog_apply(raw: dict):
     if "vinilos_cercha" in raw:
         VINILOS_CERCHA.clear()
         VINILOS_CERCHA.extend(raw["vinilos_cercha"])
+    if "tipos_construccion" in raw:
+        TIPOS_CONSTRUCCION.clear()
+        TIPOS_CONSTRUCCION.update(raw["tipos_construccion"])
+    if "gruas" in raw:
+        GRUAS.clear()
+        GRUAS.extend(raw["gruas"])
 
 
 def _catalog_merge(raw: dict):
@@ -1103,6 +1109,21 @@ def _catalog_merge(raw: dict):
         for vinyl in raw["vinilos_cercha"]:
             if vinyl.get("id") not in existing_ids:
                 VINILOS_CERCHA.append(vinyl)
+    if "tipos_construccion" in raw:
+        for tid, tdata in raw["tipos_construccion"].items():
+            if tid in TIPOS_CONSTRUCCION:
+                TIPOS_CONSTRUCCION[tid].update(tdata)
+            else:
+                TIPOS_CONSTRUCCION[tid] = tdata
+    if "gruas" in raw:
+        raw_by_id = {g["id"]: g for g in raw["gruas"] if "id" in g}
+        for grua in GRUAS:
+            if grua.get("id") in raw_by_id:
+                grua.update(raw_by_id[grua["id"]])
+        existing_ids = {g.get("id") for g in GRUAS}
+        for grua in raw["gruas"]:
+            if grua.get("id") not in existing_ids:
+                GRUAS.append(grua)
 
 
 def catalog_load():

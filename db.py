@@ -249,14 +249,47 @@ def avanzar_estado(qid: str, estado_min: str) -> None:
 
 
 def registrar_pago(qid: str, monto: float) -> dict | None:
-    """Acumula un pago (anticipo o abono). Devuelve {pagado, saldo} o None."""
-    row = get_quote(qid)
-    if not row or monto <= 0:
+    """Acumula un pago (anticipo o abono). Devuelve {pagado, saldo} o None.
+    El incremento se hace en la propia sentencia SQL (no lee-calcula-escribe
+    desde Python) para que dos pagos concurrentes a la misma cotización no se
+    pisen entre sí — SQLite serializa la UPDATE, así que ambos incrementos
+    quedan aplicados."""
+    if monto <= 0:
         return None
-    pagado = round((row.get("pagado") or 0) + monto, 2)
     with _conn() as c:
-        c.execute("UPDATE quotes SET pagado=? WHERE id=?", (pagado, qid))
-    saldo = round((row.get("precio_final") or 0) - pagado, 2)
+        cur = c.execute(
+            "UPDATE quotes SET pagado = COALESCE(pagado,0) + ? WHERE id = ?",
+            (monto, qid)
+        )
+        if cur.rowcount == 0:
+            return None
+        row = c.execute(
+            "SELECT pagado, precio_final FROM quotes WHERE id=?", (qid,)
+        ).fetchone()
+    pagado = round(row["pagado"] or 0, 2)
+    saldo = round((row["precio_final"] or 0) - pagado, 2)
+    return {"pagado": pagado, "saldo": saldo}
+
+
+def registrar_pago_total(qid: str, monto_total: float) -> dict | None:
+    """Fija 'pagado' al monto TOTAL indicado si es mayor al ya registrado
+    (idempotente: no baja el pagado ni lo duplica). Lo usa el acta de entrega,
+    donde 'anticipo' es el total pagado a la fecha, no un abono adicional —
+    regenerar el acta con el mismo anticipo no debe sumar dos veces."""
+    if monto_total < 0:
+        return None
+    with _conn() as c:
+        cur = c.execute(
+            "UPDATE quotes SET pagado = MAX(COALESCE(pagado,0), ?) WHERE id = ?",
+            (monto_total, qid)
+        )
+        if cur.rowcount == 0:
+            return None
+        row = c.execute(
+            "SELECT pagado, precio_final FROM quotes WHERE id=?", (qid,)
+        ).fetchone()
+    pagado = round(row["pagado"] or 0, 2)
+    saldo = round((row["precio_final"] or 0) - pagado, 2)
     return {"pagado": pagado, "saldo": saldo}
 
 

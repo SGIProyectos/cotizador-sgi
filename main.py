@@ -116,6 +116,7 @@ _nest_touch:  dict[str, float] = {}
 SVG_TTL_SECONDS   = 24 * 3600        # 24 h — SVGs son re-subibles, expiran rápido
 QUOTE_TTL_SECONDS = 7 * 24 * 3600    # 7 d  — cotizaciones se recargan desde SQLite si hace falta
 NEST_TTL_SECONDS  = 24 * 3600        # 24 h — un acomodo se puede volver a correr
+TMP_TTL_SECONDS   = 24 * 3600        # 24 h — PDFs/Excel/DXF de tmp/ son regenerables con un clic
 CLEANUP_INTERVAL  = 3600             # 1 h
 
 
@@ -127,6 +128,26 @@ def _touch_svg(sid: str) -> None:
 def _touch_quote(qid: str) -> None:
     with _state_lock:
         _quote_touch[qid] = time.time()
+
+
+def _purge_tmp_files() -> int:
+    """Borra archivos de tmp/ (PDFs/Excel/DXF/SVG generados para descarga) con
+    más de TMP_TTL_SECONDS sin modificarse. Son subproductos regenerables con
+    un clic — dejarlos crecer sin límite llena el disco (crítico en hosting
+    con disco persistente acotado)."""
+    tmp_dir = BASE / "tmp"
+    if not tmp_dir.exists():
+        return 0
+    cutoff = time.time() - TMP_TTL_SECONDS
+    borrados = 0
+    for f in tmp_dir.iterdir():
+        try:
+            if f.is_file() and f.stat().st_mtime < cutoff:
+                f.unlink()
+                borrados += 1
+        except OSError:
+            log.warning("No se pudo borrar tmp/%s", f.name, exc_info=True)
+    return borrados
 
 
 def _purge_expired_caches() -> None:
@@ -145,9 +166,10 @@ def _purge_expired_caches() -> None:
         for k in n_dead:
             _nest_store.pop(k, None)
             _nest_touch.pop(k, None)
-    if svg_dead or q_dead or n_dead:
-        log.info("TTL purge: %d svgs, %d quotes, %d nests",
-                 len(svg_dead), len(q_dead), len(n_dead))
+    tmp_borrados = _purge_tmp_files()
+    if svg_dead or q_dead or n_dead or tmp_borrados:
+        log.info("TTL purge: %d svgs, %d quotes, %d nests, %d tmp files",
+                 len(svg_dead), len(q_dead), len(n_dead), tmp_borrados)
 
 # ─── BACKUPS ─────────────────────────────────────────────────────────────────
 
@@ -849,12 +871,10 @@ async def api_entrega(quote_id: str, cliente: str = "", notas: str = "",
     _meta_con_cliente(meta)
     db.avanzar_estado(quote_id, "entregada")  # el acta certifica la entrega real
     if anticipo > 0:
-        # El anticipo del acta es el total pagado a la fecha: solo se registra
-        # la diferencia, para que regenerar el acta no duplique el pago.
-        row = db.get_quote(quote_id) or {}
-        delta = anticipo - (row.get("pagado") or 0)
-        if delta > 0:
-            db.registrar_pago(quote_id, delta)
+        # El anticipo del acta es el total pagado a la fecha (no un abono más):
+        # fijamos 'pagado' a ese monto de forma atómica e idempotente, así
+        # regenerar el acta con el mismo anticipo no duplica el pago.
+        db.registrar_pago_total(quote_id, anticipo)
     pdf_bytes = generar_pdf_entrega(result, meta)
     filename  = f"Entrega_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
     return FileResponse(path=_write_tmp(pdf_bytes, filename), filename=filename, media_type="application/pdf")
@@ -1120,7 +1140,10 @@ async def api_nest_dxf(nest_id: str, idx: int):
     data = _nest_de_store(nest_id)
     dxf = nesting.lamina_dxf(_lamina_de(data, idx))
     filename = f"Corte_lamina{idx}.dxf"
-    return FileResponse(path=_write_tmp(dxf, filename), filename=filename,
+    # Nombre en disco único por nest_id: dos acomodos corridos al mismo tiempo
+    # no deben pisarse el archivo (el nombre visible al descargar sí es limpio).
+    disk_name = f"nest_{nest_id}_lamina{idx}.dxf"
+    return FileResponse(path=_write_tmp(dxf, disk_name), filename=filename,
                         media_type="application/dxf")
 
 
@@ -1132,7 +1155,8 @@ async def api_nest_svg(nest_id: str, idx: int):
                              margen_cm=data["params"]["margen_cm"],
                              con_etiquetas=False).encode("utf-8")
     filename = f"Corte_lamina{idx}.svg"
-    return FileResponse(path=_write_tmp(svg, filename), filename=filename,
+    disk_name = f"nest_{nest_id}_lamina{idx}.svg"
+    return FileResponse(path=_write_tmp(svg, disk_name), filename=filename,
                         media_type="image/svg+xml")
 
 
@@ -1142,7 +1166,8 @@ async def api_nest_pdf(nest_id: str):
     data = _nest_de_store(nest_id)
     pdf = generar_plano_corte(data["laminas"], data["sin_lugar"], data["params"])
     filename = "PlanoCorte_SGI.pdf"
-    return FileResponse(path=_write_tmp(pdf, filename), filename=filename,
+    disk_name = f"nest_{nest_id}_PlanoCorte.pdf"
+    return FileResponse(path=_write_tmp(pdf, disk_name), filename=filename,
                         media_type="application/pdf")
 
 
@@ -1270,12 +1295,16 @@ async def api_list_clients(q: str = Query("")):
 
 @app.post("/api/clients")
 async def api_upsert_client(data: dict):
+    def _s(key: str) -> str:
+        # data.get(key, "") no protege contra {"key": null} explícito
+        return (data.get(key) or "").strip()
+
     client_id = db.save_client(
-        nombre=data.get("nombre", "").strip(),
-        rfc=data.get("rfc", "").strip(),
-        email=data.get("email", "").strip(),
-        telefono=data.get("telefono", "").strip(),
-        direccion=data.get("direccion", "").strip(),
+        nombre=_s("nombre"),
+        rfc=_s("rfc"),
+        email=_s("email"),
+        telefono=_s("telefono"),
+        direccion=_s("direccion"),
         client_id=data.get("id"),
     )
     return {"ok": True, "id": client_id}
@@ -1307,11 +1336,12 @@ class CatalogPayload(BaseModel):
     pegamentos:         dict | None = None
     precios_base:       dict | None = None
     precios_caja_m2:    dict | None = None
+    cables:             dict | None = None
     silvatrim:          list | None = None
     vinilos:            list | None = None
     vinilos_cercha:     list | None = None
     tipos_construccion: dict | None = None
-    gruas:              dict | None = None
+    gruas:              list | None = None
 
 
 @app.post("/api/catalog")
