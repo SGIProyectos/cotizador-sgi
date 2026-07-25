@@ -77,7 +77,7 @@
       "precio": 950,
       "ancho_cm": 122,
       "alto_cm": 244,
-      "grosor_mm": 1.0,
+      "grosor_mm": 1,
       "uso": [
         "cercha_letra_grande",
         "estructura_caja"
@@ -141,6 +141,17 @@
       ],
       "uso": [
         "cara_letra_pequena",
+        "cara_caja"
+      ]
+    },
+    "acrilico_3mm_transparente": {
+      "nombre": "Acrílico Transparente 3mm",
+      "precio": 1200,
+      "ancho_cm": 122,
+      "alto_cm": 244,
+      "grosor_mm": 3,
+      "uso": [
+        "base_planas",
         "cara_caja"
       ]
     },
@@ -275,7 +286,7 @@
     {
       "id": "micro_sign",
       "nombre": "Módulo LED Micro Sign",
-      "precio_tira_20": 70.0,
+      "precio_tira_20": 70,
       "precio_modulo": 3.5,
       "watts_modulo": 0.24,
       "lumenes": 25,
@@ -289,7 +300,7 @@
     {
       "id": "mini_sign",
       "nombre": "Módulo LED Mini Sign",
-      "precio_tira_20": 70.0,
+      "precio_tira_20": 70,
       "precio_modulo": 3.5,
       "watts_modulo": 0.32,
       "lumenes": 20,
@@ -303,7 +314,7 @@
     {
       "id": "sign_03_rgb",
       "nombre": "Módulo LED Sign 03 RGB",
-      "precio_tira_20": 170.0,
+      "precio_tira_20": 170,
       "precio_modulo": 8.5,
       "watts_modulo": 0.65,
       "lumenes": 20,
@@ -333,7 +344,7 @@
     {
       "id": "sign_03",
       "nombre": "Módulo LED Sign 03",
-      "precio_tira_20": 94.0,
+      "precio_tira_20": 94,
       "precio_modulo": 4.7,
       "watts_modulo": 0.72,
       "lumenes": 75,
@@ -347,7 +358,7 @@
     {
       "id": "sign_02_high",
       "nombre": "Módulo LED Sign 02 HIGH",
-      "precio_tira_20": 106.0,
+      "precio_tira_20": 106,
       "precio_modulo": 5.3,
       "watts_modulo": 0.72,
       "lumenes": 110,
@@ -361,7 +372,7 @@
     {
       "id": "sign_03_green",
       "nombre": "Módulo LED 12v Sign 03 Verde",
-      "precio_tira_20": 108.0,
+      "precio_tira_20": 108,
       "precio_modulo": 5.4,
       "watts_modulo": 0.72,
       "lumenes": 35,
@@ -376,7 +387,7 @@
     {
       "id": "sign_03_red",
       "nombre": "Módulo LED 12v Sign 03 Rojo",
-      "precio_tira_20": 108.0,
+      "precio_tira_20": 108,
       "precio_modulo": 5.4,
       "watts_modulo": 0.72,
       "lumenes": 15,
@@ -391,7 +402,7 @@
     {
       "id": "sign_03_blue",
       "nombre": "Módulo LED 12v Sign 03 Azul",
-      "precio_tira_20": 108.0,
+      "precio_tira_20": 108,
       "precio_modulo": 5.4,
       "watts_modulo": 0.72,
       "lumenes": 10,
@@ -406,7 +417,7 @@
     {
       "id": "sign_03_high",
       "nombre": "Módulo LED Sign 03 HIGH",
-      "precio_tira_20": 119.0,
+      "precio_tira_20": 119,
       "precio_modulo": 5.95,
       "watts_modulo": 1.08,
       "lumenes": 165,
@@ -420,7 +431,7 @@
     {
       "id": "sign_03_pro",
       "nombre": "Módulo LED Sign 03 PRO",
-      "precio_tira_20": 119.0,
+      "precio_tira_20": 119,
       "precio_modulo": 5.95,
       "watts_modulo": 1.32,
       "lumenes": 128,
@@ -434,9 +445,9 @@
     {
       "id": "sign_03_ac",
       "nombre": "Módulo LED 110v Sign 03 AC",
-      "precio_tira_20": 236.0,
+      "precio_tira_20": 236,
       "precio_modulo": 11.8,
-      "watts_modulo": 2.0,
+      "watts_modulo": 2,
       "lumenes": 150,
       "ip": "IP65",
       "profundidad_min": 6,
@@ -464,7 +475,7 @@
         "id": "backlite",
         "nombre": "Barra LED Backlite",
         "tipo_led": "backlite",
-        "precio_serie_10": 551.0,
+        "precio_serie_10": 551,
         "precio": 55.1,
         "watts": 5,
         "lumenes": 600,
@@ -717,10 +728,10 @@
   "precios_base": {
     "precio_cm": 10.0,
     "multiplicadores": {
-      "aluminio_sin_luz": 2.0,
+      "aluminio_sin_luz": 2,
       "aluminio_con_luz": 2.5,
       "aluminio_acrilico_con_luz": 3.5,
-      "acrilico_con_luz_std": 4.5,
+      "acrilico_con_luz_std": 2,
       "acrilico_con_luz_premium": 5.5
     }
   },
@@ -738,7 +749,7 @@
     },
     "pot_cal18": {
       "nombre": "Cable POT cal 18",
-      "precio_m": 4.0,
+      "precio_m": 4,
       "uso": "acometida 110V (fuente ↔ toma)"
     }
   },
@@ -765,7 +776,7 @@
     {
       "id": "silvatrim_1",
       "nombre": "Silvatrim Gemini 1\"",
-      "ancho_pulg": 1.0,
+      "ancho_pulg": 1,
       "ancho_mm": 25,
       "precio_rollo": 2400,
       "metros_rollo": 45.7,
@@ -784,7 +795,7 @@
     {
       "id": "silvatrim_2",
       "nombre": "Silvatrim Gemini 2\"",
-      "ancho_pulg": 2.0,
+      "ancho_pulg": 2,
       "ancho_mm": 50,
       "precio_rollo": 2800,
       "metros_rollo": 45.7,
@@ -802,7 +813,7 @@
       "ancho_pulg": 0.79,
       "ancho_mm": 20,
       "precio_rollo": 399,
-      "metros_rollo": 40.0,
+      "metros_rollo": 40,
       "precio_ml": 9.98,
       "colores": [
         "Plata",
@@ -819,7 +830,7 @@
     {
       "id": "vinil_std",
       "nombre": "Vinil Estándar",
-      "precio_ml": 58.0,
+      "precio_ml": 58,
       "ancho_rollo_m": 0.6,
       "acabado": "opaco",
       "colores": [
@@ -851,7 +862,7 @@
     {
       "id": "vinil_std_plus",
       "nombre": "Vinil Estándar Plus",
-      "precio_ml": 87.0,
+      "precio_ml": 87,
       "ancho_rollo_m": 0.6,
       "acabado": "opaco",
       "colores": [
@@ -862,7 +873,7 @@
     {
       "id": "vinil_premium",
       "nombre": "Vinil Premium",
-      "precio_ml": 120.0,
+      "precio_ml": 120,
       "ancho_rollo_m": 0.6,
       "acabado": "opaco",
       "colores": [
@@ -881,7 +892,7 @@
     {
       "id": "vinil_premium_alto",
       "nombre": "Vinil Premium Especial",
-      "precio_ml": 180.0,
+      "precio_ml": 180,
       "ancho_rollo_m": 0.6,
       "acabado": "metalico",
       "colores": [
@@ -896,7 +907,7 @@
     {
       "id": "vc_std",
       "nombre": "Vinil Cercha Estándar",
-      "precio_ml": 48.0,
+      "precio_ml": 48,
       "ancho_rollo_m": 0.61,
       "acabado": "opaco",
       "colores": [
@@ -914,7 +925,7 @@
     {
       "id": "vc_metalico",
       "nombre": "Vinil Cercha Metálico",
-      "precio_ml": 75.0,
+      "precio_ml": 75,
       "ancho_rollo_m": 0.61,
       "acabado": "metalico",
       "colores": [
@@ -927,7 +938,7 @@
     {
       "id": "vc_premium",
       "nombre": "Vinil Cercha Premium",
-      "precio_ml": 98.0,
+      "precio_ml": 98,
       "ancho_rollo_m": 0.61,
       "acabado": "opaco",
       "colores": [
@@ -949,7 +960,7 @@
       "fuente": true,
       "distanciadores": false,
       "multiplicador_default": "acrilico_con_luz_std",
-      "altura_min_rec": 8.0,
+      "altura_min_rec": 8,
       "modo_iluminacion": "cara"
     },
     "retro_halo": {
@@ -961,7 +972,7 @@
       "fuente": true,
       "distanciadores": true,
       "multiplicador_default": "aluminio_con_luz",
-      "altura_min_rec": 0.0,
+      "altura_min_rec": 0,
       "modo_iluminacion": "halo"
     },
     "sin_luz": {
@@ -973,7 +984,7 @@
       "fuente": false,
       "distanciadores": false,
       "multiplicador_default": "aluminio_sin_luz",
-      "altura_min_rec": 0.0
+      "altura_min_rec": 0
     },
     "abierta_luz": {
       "nombre": "Abierta con luz",
@@ -984,7 +995,7 @@
       "fuente": true,
       "distanciadores": false,
       "multiplicador_default": "aluminio_con_luz",
-      "altura_min_rec": 30.0,
+      "altura_min_rec": 30,
       "modo_iluminacion": "cara"
     }
   },

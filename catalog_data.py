@@ -112,6 +112,13 @@ LAMINAS = {
         "colores": ["Verde", "Azul", "Rojo"],
         "uso": ["cara_letra_pequena", "cara_caja"],
     },
+    "acrilico_3mm_transparente": {
+        "nombre": "Acrílico Transparente 3mm",
+        "precio": 1200,
+        "ancho_cm": 122, "alto_cm": 244,
+        "grosor_mm": 3,
+        "uso": ["base_planas", "cara_caja"],
+    },
     "acrilico_3mm_espejo": {
         "nombre": "Acrílico Espejo 3mm",
         "precio": 1510,

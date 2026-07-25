@@ -59,6 +59,7 @@ TRABAJOS/
 
 # SVGs y PDFs de prueba del propietario
 EJEMPLOS/
+PLANAS/
 
 # Estado local de Claude Code
 .claude/

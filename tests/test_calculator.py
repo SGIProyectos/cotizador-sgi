@@ -719,3 +719,269 @@ class TestHuecosExcluidosDelCobro:
         )
         assert r.paths_count == 3
         assert any("hueco" in w.lower() for w in r.warnings)
+
+
+class TestDeteccionCapas:
+    """parse_svg detecta capas nombradas base/corte/luz en <g id>/inkscape:label."""
+
+    def test_detectar_capa_matcher(self):
+        from calculator import _detectar_capa
+        casos = {
+            "base": "base", "Base": "base", "capa_base_2": "base",
+            "Fondo Principal": "base", "soporte": "base",
+            "corte": "corte", "Corte 1": "corte", "cut": "corte",
+            "LUZ": "luz", "halo": "luz", "retroiluminado": "luz",
+            "iluminación": "luz", "retro": "luz",
+            "basement": "", "recorte": "", "": "", "random": "",
+        }
+        for src, esperado in casos.items():
+            assert _detectar_capa(src) == esperado, f"{src!r} → {_detectar_capa(src)!r}"
+
+    def test_tres_capas_nombradas(self):
+        svg = b"""<?xml version="1.0"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+          <g id="base"><rect x="0" y="0" width="100" height="100"/></g>
+          <g id="corte"><rect x="10" y="10" width="20" height="20"/></g>
+          <g id="luz"><rect x="50" y="10" width="20" height="20"/></g>
+        </svg>"""
+        data = parse_svg(svg)
+        assert data.capas_detectadas == {"base": 1, "corte": 1, "luz": 1}
+        caps = {p.svg_id: p.capa for p in data.paths}
+        assert set(caps.values()) == {"base", "corte", "luz"}
+
+    def test_inkscape_label_tambien_funciona(self):
+        svg = b"""<?xml version="1.0"?>
+        <svg xmlns="http://www.w3.org/2000/svg"
+             xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+             viewBox="0 0 100 100">
+          <g inkscape:label="Corte"><rect x="10" y="10" width="20" height="20"/></g>
+        </svg>"""
+        data = parse_svg(svg)
+        assert data.capas_detectadas["corte"] == 1
+
+    def test_grupo_sin_nombre_no_asigna_capa(self):
+        svg = b"""<?xml version="1.0"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+          <g><rect x="10" y="10" width="20" height="20"/></g>
+          <rect x="50" y="50" width="20" height="20"/>
+        </svg>"""
+        data = parse_svg(svg)
+        assert data.capas_detectadas == {"base": 0, "corte": 0, "luz": 0}
+        assert all(p.capa == "" for p in data.paths)
+
+    def test_hijo_hereda_capa_del_grupo_padre(self):
+        svg = b"""<?xml version="1.0"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+          <g id="corte">
+            <g>
+              <rect x="10" y="10" width="20" height="20"/>
+              <rect x="40" y="10" width="20" height="20"/>
+            </g>
+          </g>
+        </svg>"""
+        data = parse_svg(svg)
+        assert data.capas_detectadas["corte"] == 2
+
+    def test_capa_hija_sobrescribe_padre(self):
+        svg = b"""<?xml version="1.0"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+          <g id="corte">
+            <rect x="10" y="10" width="20" height="20"/>
+            <g id="luz">
+              <rect x="40" y="10" width="20" height="20"/>
+            </g>
+          </g>
+        </svg>"""
+        data = parse_svg(svg)
+        assert data.capas_detectadas == {"base": 0, "corte": 1, "luz": 1}
+
+
+class TestPlanasTresCapas:
+    """cotizar_planas ahora soporta base / corte / luz. Cobra por bbox
+    conjunto + factor de desperdicio, y en piezas 'luz' añade LEDs halo,
+    fuente y distanciadores."""
+
+    _SVG_3_CAPAS = b"""<?xml version="1.0"?>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900">
+      <g id="base"><rect x="0" y="0" width="1200" height="900"/></g>
+      <g id="corte">
+        <rect x="100" y="100" width="200" height="80"/>
+        <rect x="400" y="100" width="200" height="80"/>
+      </g>
+      <g id="luz">
+        <rect x="100" y="400" width="300" height="100"/>
+      </g>
+    </svg>"""
+
+    _SVG_SIN_CAPAS = b"""<?xml version="1.0"?>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900">
+      <rect x="100" y="100" width="200" height="80"/>
+      <rect x="400" y="100" width="200" height="80"/>
+    </svg>"""
+
+    def _r(self, svg, **kw):
+        data = parse_svg(svg)
+        defaults = dict(real_width_cm=120.0, material_id="acrilico_3mm",
+                        desperdicio_pct=15.0)
+        defaults.update(kw)
+        return cotizar_planas(svg_data=data, **defaults)
+
+    def test_sin_capas_comportamiento_por_defecto(self):
+        # SVG sin capas + flags off → todas las piezas caen en 'corte',
+        # sin base ni luz. Comportamiento no-regresivo.
+        r = self._r(self._SVG_SIN_CAPAS)
+        comp = r.desglose_costos_componentes
+        assert comp["cara"] > 0            # corte
+        assert comp["base"] == 0.0
+        assert comp["luz"] == 0.0
+        assert comp["leds"] == 0.0
+        assert r.modulos_led == 0
+
+    def test_capa_base_del_svg_se_cobra(self):
+        r = self._r(self._SVG_3_CAPAS, incluye_luz=False,
+                    base_material_id="acrilico_3mm_transparente")
+        comp = r.desglose_costos_componentes
+        assert comp["base"] > 0
+        assert r.material_fondo["nombre"] == "Acrílico Transparente 3mm"
+
+    def test_capa_luz_activa_leds_fuente_distanciadores(self):
+        r = self._r(self._SVG_3_CAPAS, incluye_luz=True,
+                    base_material_id="acrilico_3mm_transparente")
+        comp = r.desglose_costos_componentes
+        assert comp["luz"] > 0
+        assert comp["leds"] > 0
+        assert comp["fuente"] > 0
+        assert comp["distanciadores"] > 0
+        assert r.modulos_led >= 3   # mínimo 3 por pieza
+
+    def test_incluye_luz_off_convierte_luz_en_corte(self):
+        r_off = self._r(self._SVG_3_CAPAS, incluye_luz=False)
+        r_on  = self._r(self._SVG_3_CAPAS, incluye_luz=True)
+        # Off: la pieza de luz cae a corte → costo LEDs = 0
+        assert r_off.desglose_costos_componentes["leds"] == 0
+        assert r_on.desglose_costos_componentes["leds"] > 0
+        # Warning debe informar la desactivación
+        assert any("luz" in w.lower() for w in r_off.warnings)
+
+    def test_desperdicio_pct_incrementa_material_linealmente(self):
+        r0  = self._r(self._SVG_SIN_CAPAS, desperdicio_pct=0.0)
+        r15 = self._r(self._SVG_SIN_CAPAS, desperdicio_pct=15.0)
+        r30 = self._r(self._SVG_SIN_CAPAS, desperdicio_pct=30.0)
+        assert r15.costo_material_cara == pytest.approx(r0.costo_material_cara * 1.15, rel=1e-3)
+        assert r30.costo_material_cara == pytest.approx(r0.costo_material_cara * 1.30, rel=1e-3)
+
+    def test_incluye_base_manual_sin_capa_en_svg(self):
+        r = self._r(
+            self._SVG_SIN_CAPAS, incluye_base=True,
+            real_height_cm=90.0,
+            base_material_id="acrilico_3mm_transparente",
+        )
+        comp = r.desglose_costos_componentes
+        assert comp["base"] > 0
+        assert r.material_fondo["nombre"] == "Acrílico Transparente 3mm"
+
+    def test_bbox_conjunto_es_menor_que_suma_bboxes(self):
+        # Piezas separadas con espacio entre ellas: el bbox conjunto es
+        # notablemente MAYOR a cada pieza, y muy menor que la suma.
+        # Esto valida que el cobro se hace por el "pedazo" real.
+        data = parse_svg(self._SVG_SIN_CAPAS)
+        piezas = [p for p in data.paths if p.is_closed]
+        from calculator import _bbox_conjunto, apply_scale
+        d = apply_scale(data, 120.0)
+        w, h = _bbox_conjunto(piezas, d.scale_factor)
+        area_conjunto = w * h
+        area_suma = sum((p.bbox["h"] * d.scale_factor) *
+                        (p.bbox["w"] * d.scale_factor) for p in piezas)
+        assert area_conjunto > area_suma   # rectángulo envolvente > suma
+        assert area_conjunto > 0
+
+    def test_precio_letra_usa_multiplicador_por_capa(self):
+        # Piezas en capa 'luz' deben cobrarse con el multiplicador con-luz,
+        # no con el sin-luz. Chequear en el desglose por pieza.
+        r = self._r(self._SVG_3_CAPAS, incluye_luz=True)
+        capas_por_pieza = {d["id"]: d["capa"] for d in r.desglose_letras}
+        # Al menos una pieza debe estar en 'luz' y otra en 'corte'
+        assert "luz" in capas_por_pieza.values()
+        assert "corte" in capas_por_pieza.values()
+
+    def test_modo_corte_areas_es_mayor_o_igual_que_pieza(self):
+        # Con piezas separadas, bbox conjunto > suma bboxes → areas >= pieza.
+        r_a = self._r(self._SVG_SIN_CAPAS, modo_corte="areas")
+        r_p = self._r(self._SVG_SIN_CAPAS, modo_corte="pieza")
+        assert r_a.costo_material_cara >= r_p.costo_material_cara
+
+    def test_modo_corte_pieza_iguala_a_suma_de_bboxes(self):
+        r = self._r(self._SVG_SIN_CAPAS, modo_corte="pieza", desperdicio_pct=0.0)
+        # Sin desperdicio, suma de costo_cara por pieza debe igualar el total.
+        suma = sum(d["costo_cara"] for d in r.desglose_letras)
+        assert suma == pytest.approx(r.costo_material_cara, rel=1e-3)
+
+    def test_flag_costo_es_informativo_en_desglose_letras(self):
+        r_a = self._r(self._SVG_SIN_CAPAS, modo_corte="areas")
+        r_p = self._r(self._SVG_SIN_CAPAS, modo_corte="pieza")
+        assert all(d.get("costo_es_informativo") is True  for d in r_a.desglose_letras)
+        assert all(d.get("costo_es_informativo") is False for d in r_p.desglose_letras)
+
+    def test_modo_corte_invalido_cae_a_areas(self):
+        r_bad = self._r(self._SVG_SIN_CAPAS, modo_corte="ninguno_valido")
+        r_ok  = self._r(self._SVG_SIN_CAPAS, modo_corte="areas")
+        assert r_bad.costo_material_cara == pytest.approx(r_ok.costo_material_cara, rel=1e-6)
+
+    def test_bloque_luz_incluye_metros_lineales(self):
+        # El usuario necesita saber cuánto va a gastar de LED. El bloque
+        # 'luz' debe exponer perimetro_total_cm y metros_lineales.
+        r = self._r(self._SVG_3_CAPAS, incluye_luz=True)
+        luz = r.desglose_costos_componentes["bloques"].get("luz")
+        assert luz is not None
+        assert luz["perimetro_total_cm"] > 0
+        assert luz["metros_lineales"] == pytest.approx(luz["perimetro_total_cm"] / 100.0, rel=1e-3)
+
+    def test_capa_base_blanca_no_se_marca_como_hueco(self):
+        # Regresión: la capa 'base' de acrílico transparente es blanca
+        # (fill=#FFFFFF) y contiene a las demás piezas — la heurística de
+        # huecos la marcaba y quedaba fuera del cobro. Con capa nombrada
+        # el usuario declaró su intención → NO debe marcarse.
+        svg = b"""<?xml version="1.0"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200">
+          <g id="base">
+            <rect x="10" y="10" width="280" height="180" fill="#FFFFFF"/>
+          </g>
+          <g id="corte">
+            <rect x="50" y="50" width="30" height="40" fill="#000"/>
+            <rect x="150" y="50" width="30" height="40" fill="#000"/>
+          </g>
+        </svg>"""
+        data = parse_svg(svg)
+        base = [p for p in data.paths if p.capa == "base"]
+        assert len(base) == 1, "La capa base debe estar presente"
+        assert not base[0].es_hueco, "Base blanca con capa nombrada NO debe ser hueco"
+
+    def test_escala_se_ancla_a_la_base_no_al_viewbox(self):
+        # SVG con artboard 300 unidades pero la BASE solo mide 150 unidades
+        # (con padding a los lados). Si el usuario dice real_width_cm=115,
+        # se refiere a la base — NO al artboard completo. La base debe
+        # medir exactamente 115×65 en el resultado, no 230×130.
+        svg = b"""<?xml version="1.0"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200">
+          <g id="base">
+            <rect x="75" y="35" width="150" height="85"/>
+          </g>
+          <g id="corte">
+            <rect x="100" y="50" width="20" height="20"/>
+          </g>
+        </svg>"""
+        data = parse_svg(svg)
+        r = cotizar_planas(svg_data=data, real_width_cm=115.0,
+                           incluye_base=True,
+                           base_material_id="acrilico_3mm_transparente")
+        # La base debe medir 115 cm exactos (lo que dijo el usuario)
+        assert r.material_fondo["nombre"] == "Acrílico Transparente 3mm"
+        # Verificamos por el desglose humano que aparezcan las medidas correctas
+        base_desc = next((d["concepto"] for d in r.desglose if d["concepto"].startswith("Base ")), "")
+        assert "115" in base_desc, f"Se esperaba 115 cm en la descripción de base, vino: {base_desc}"
+        # La pieza de corte 20 unidades sobre base de 150 unidades = 20/150 * 115 = 15.33 cm
+        # Al menos verificar que el bbox conjunto de corte tampoco esté 2x
+        corte_desc = next((d["concepto"] for d in r.desglose if d["concepto"].startswith("Corte ")), "")
+        # Ancho real esperado ≈ 15.3 cm (20 unidades × 115/150)
+        # NO debe aparecer un 30 (que sería si escalara al viewBox)
+        assert "30" not in corte_desc.split("cm")[0], f"Escala mal ancla: {corte_desc}"

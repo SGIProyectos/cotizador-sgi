@@ -1305,14 +1305,27 @@ svg g.pieza-labels                 { pointer-events: none; }
 
     <!-- Parámetros PLANAS -->
     <div class="panel field-group" id="params-planas">
-      <h3>Parámetros — Letras Planas</h3>
-      <label>Material de corte</label>
+      <h3>Parámetros — Letras Planas
+        <button class="btn-pill" onclick="planasAbrirModal(true)"
+          title="Cómo debe venir el SVG"
+          style="float:right;padding:2px 8px;font-size:11px">?</button>
+      </h3>
+
+      <label>Tipo de anuncio</label>
+      <select id="planas-tipo-anuncio" onchange="planasOnTipoAnuncio()">
+        <option value="solo_corte">Solo corte (piezas planas)</option>
+        <option value="corte_base">Corte + base (montadas sobre fondo)</option>
+        <option value="corte_base_luz">Corte + base + iluminación (parte con halo)</option>
+      </select>
+
+      <label style="margin-top:8px">Material de corte</label>
       <select id="mat-plana">
         <optgroup label="Acrílico">
           <option value="acrilico_3mm">Acrílico 3mm</option>
           <option value="acrilico_3mm_blanco">Acrílico Blanco 3mm</option>
           <option value="acrilico_3mm_colores">Acrílico Color 3mm</option>
           <option value="acrilico_3mm_translucido">Acrílico Translúcido 3mm</option>
+          <option value="acrilico_3mm_transparente">Acrílico Transparente 3mm</option>
           <option value="acrilico_3mm_espejo">Acrílico Espejo 3mm</option>
           <option value="acrilico_5mm">Acrílico 5mm</option>
           <option value="acrilico_6mm">Acrílico 6mm</option>
@@ -1335,6 +1348,79 @@ svg g.pieza-labels                 { pointer-events: none; }
           <option value="alucobon_3mm">Alucobon / Dibond 3mm</option>
         </optgroup>
       </select>
+
+      <!-- BLOQUE BASE — visible con tipo != solo_corte -->
+      <div id="planas-base-section" style="display:none;margin-top:12px;padding:10px;
+           border:1px solid #2a4068;border-radius:6px;background:rgba(20,32,54,.6)">
+        <div style="font-weight:600;font-size:11.5px;color:#7fb8ff;margin-bottom:6px">
+          📄 Base / Soporte
+        </div>
+        <label style="font-size:10.5px">Material base</label>
+        <select id="planas-base-material">
+          <option value="acrilico_3mm_transparente">Acrílico Transparente 3mm</option>
+          <option value="acrilico_3mm_translucido">Acrílico Translúcido 3mm</option>
+          <option value="acrilico_3mm">Acrílico 3mm</option>
+          <option value="acrilico_3mm_blanco">Acrílico Blanco 3mm</option>
+          <option value="pvc_3mm">PVC 3mm</option>
+          <option value="pvc_6mm">PVC 6mm</option>
+          <option value="alucobon_3mm">Alucobond 3mm</option>
+          <option value="alucom_base">Alucom Color Base</option>
+        </select>
+        <label style="font-size:10.5px;margin-top:6px">Alto real (cm)
+          <span style="color:#9fb0cb">(vacío = inferido del SVG)</span></label>
+        <input id="planas-real-height" type="number" placeholder="ej. 90" min="0" step="1">
+      </div>
+
+      <!-- BLOQUE LUZ — visible con tipo == corte_base_luz -->
+      <div id="planas-luz-section" style="display:none;margin-top:10px;padding:10px;
+           border:1px solid #2a4068;border-radius:6px;background:rgba(30,25,10,.5)">
+        <div style="font-weight:600;font-size:11.5px;color:#ffcf7f;margin-bottom:6px">
+          💡 Piezas retroiluminadas (halo)
+        </div>
+        <label style="font-size:10.5px">Material iluminado
+          <span style="color:#9fb0cb">(vacío = mismo que corte)</span></label>
+        <select id="planas-luz-material">
+          <option value="">(mismo que corte)</option>
+          <option value="acrilico_3mm">Acrílico 3mm</option>
+          <option value="acrilico_3mm_blanco">Acrílico Blanco 3mm</option>
+          <option value="acrilico_3mm_colores">Acrílico Color 3mm</option>
+          <option value="acrilico_3mm_translucido">Acrílico Translúcido 3mm</option>
+          <option value="pvc_3mm">PVC 3mm</option>
+          <option value="alucobon_3mm">Alucobond 3mm</option>
+        </select>
+        <label style="font-size:10.5px;margin-top:6px">LED</label>
+        <select id="planas-luz-led">
+          <option value="auto">Auto (recomendado)</option>
+        </select>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <div style="flex:1">
+            <label style="font-size:10.5px" title="0 = sin cercha (halo directo)">Cercha (cm)</label>
+            <input id="planas-luz-cercha" type="number" value="0" min="0" step="0.5">
+          </div>
+          <div style="flex:1">
+            <label style="font-size:10.5px" title="Juegos de distanciadores por pieza">Juegos dist/pza</label>
+            <input id="planas-luz-dist" type="number" value="1" min="1" step="1">
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <div style="flex:1">
+          <label style="font-size:10.5px" title="'Áreas' cobra el bbox conjunto (piezas acomodadas juntas). 'Por pieza' suma bboxes individuales (más caro).">Modo de cobro</label>
+          <select id="planas-modo-corte">
+            <option value="areas">Por áreas (bbox conjunto)</option>
+            <option value="pieza">Por pieza (bbox individual)</option>
+          </select>
+        </div>
+        <div style="flex:1">
+          <label style="font-size:10.5px" title="Merma real de corte láser/CNC">Desperdicio (%)</label>
+          <input id="planas-desperdicio" type="number" value="15" min="0" max="50" step="1">
+        </div>
+      </div>
+
+      <!-- Banner de capas detectadas — se llena tras subir SVG -->
+      <div id="planas-capas-banner" style="display:none;margin-top:10px;padding:8px 10px;
+           border-radius:6px;font-size:11px;line-height:1.4"></div>
     </div>
 
     </div><!-- /sidebar-vault -->
@@ -2153,6 +2239,7 @@ let svgViewboxW      = 0;
 let svgViewboxH      = 0;
 let svgArtboardWCm   = 0;    // >0 si SVG de Illustrator (ancho artboard en cm)
 let svgPathsRaw      = [];   // paths con px, para recalcular en cm
+let svgCapasDetectadas = {base:0, corte:0, luz:0};  // capas nombradas encontradas en el SVG (planas)
 let lastScaleFactor  = 0;   // último sf calculado, para re-render al cambiar tipo
 let lastCerchaAltura = 0;
 let currentSvgText   = null; // SVG source para vista 3D
@@ -2200,6 +2287,9 @@ function setTipo(tipo, btn) {
   document.getElementById("params-letras").classList.toggle("visible", tipo === "letras");
   document.getElementById("params-planas").classList.toggle("visible", tipo === "planas");
   document.getElementById("params-caja").classList.toggle("visible",   tipo === "caja");
+  if (tipo === "planas" && typeof planasActualizarBannerCapas === "function") {
+    planasActualizarBannerCapas();
+  }
   // Ajuste de precio y multiplicador solo aplican a letras y planas, no a caja
   const ajusteSection = document.getElementById("ajuste-section");
   if (ajusteSection) ajusteSection.style.display = tipo !== "caja" ? "" : "none";
@@ -2477,8 +2567,14 @@ async function uploadSVG(file) {
     svgViewboxH    = data.viewbox_h || 0;
     svgArtboardWCm = data.artboard_w_cm || 0;
     svgPathsRaw    = data.paths || [];
+    svgCapasDetectadas = data.capas_detectadas || {base: 0, corte: 0, luz: 0};
     currentSvgText = data.svg_text || null;
     _svgFromVectorizer = false;
+    // Auto-detección del tipo de anuncio a partir de las capas del SVG.
+    // Se hace independiente del tipoActual porque el usuario pudo subir
+    // primero y elegir tipo después. La UI editable siempre gana.
+    if (typeof planasAutodetectarTipo === "function") planasAutodetectarTipo();
+    if (typeof planasActualizarBannerCapas === "function") planasActualizarBannerCapas();
 
     // Limpiar campos del diseño anterior
     document.getElementById("pared-ancho").value = "";
@@ -2486,7 +2582,15 @@ async function uploadSVG(file) {
     // FASE B: el archivo declara su unidad real → respetarla. Sobreescribir
     // cualquier valor previo del input (autofill del navegador, restauración
     // de quote anterior, etc.) con el ancho real del archivo.
-    if (svgArtboardWCm > 0) {
+    // Prioridad: capa 'base' explícita > artboard completo. Cuando hay capa
+    // base, el usuario espera que el "ancho real" sea el de la placa base,
+    // no el del artboard con padding.
+    const baseRealW = data.base_real_w_cm || 0;
+    if (baseRealW > 0) {
+      document.getElementById("ancho-real").value = baseRealW.toFixed(2);
+      document.getElementById("altura-letra").value = "";
+      showToast(`Capa 'base' detectada — ${baseRealW.toFixed(1)} cm × ${(data.base_real_h_cm||0).toFixed(1)} cm`, "ok");
+    } else if (svgArtboardWCm > 0) {
       document.getElementById("ancho-real").value = svgArtboardWCm.toFixed(3);
       document.getElementById("altura-letra").value = "";   // forzar recálculo
       showToast(`Unidad real detectada — artboard ${svgArtboardWCm.toFixed(3)} cm`, "ok");
@@ -3571,7 +3675,8 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
          Ingresa el ancho real o la altura para ver medidas en cm
        </div>`;
 
-  const cards = paths.map((p, idx) => {
+  // Card individual (reutilizada por render plano y agrupado)
+  const _cardHtml = (p, idx) => {
     const c         = pathColors[idx];
     const perim_cm  = hasCm ? (p.perimeter_px * scaleFactor).toFixed(3) : "—";
     const area_cm2  = hasCm ? (p.area_px * scaleFactor * scaleFactor).toFixed(3) : "—";
@@ -3615,8 +3720,44 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
         </div>
       </div>` : ""}
     </div>`;
-  });
+  };
 
+  // Agrupamiento por capa: SOLO para planas cuando el SVG trae capas nombradas
+  const totCapas = (svgCapasDetectadas?.base||0) + (svgCapasDetectadas?.corte||0) + (svgCapasDetectadas?.luz||0);
+  if (tipoActual === "planas" && totCapas > 0) {
+    const grupos = {base: [], corte: [], luz: [], "": []};
+    paths.forEach((p, idx) => {
+      const cap = p.capa || "";
+      (grupos[cap] || grupos[""]).push({p, idx});
+    });
+    const seccion = (titulo, icono, color, items, ayuda) => {
+      if (!items.length) return "";
+      const cards = items.map(({p, idx}) => _cardHtml(p, idx)).join("");
+      const n = items.filter(({p}) => p.is_closed && !p.es_hueco).length;
+      return `<div style="grid-column:1/-1;margin-top:10px;padding:6px 10px;
+                border-left:4px solid ${color};background:${color}12;border-radius:4px">
+                <div style="font-size:12.5px;font-weight:700;color:${color}">
+                  ${icono} ${titulo} <span style="color:#666;font-weight:400;font-size:11px">(${n} pza${n===1?'':'s'})</span>
+                </div>
+                ${ayuda ? `<div style="font-size:10.5px;color:#8899b0;margin-top:2px">${ayuda}</div>` : ""}
+              </div>${cards}`;
+    };
+    let html = header;
+    html += seccion("Base",  "📄", "#4a9eff", grupos.base,
+                    "Soporte / fondo — se cobra por su bbox × material base.");
+    html += seccion("Corte", "✂️", "#7cd67c", grupos.corte,
+                    "Piezas planas sin luz — se cobran por bbox conjunto × material corte.");
+    html += seccion("Luz",   "💡", "#ffcf55", grupos.luz,
+                    "Retroiluminadas — cobran material + LEDs + fuente + distanciadores.");
+    if (grupos[""].length) {
+      html += seccion("Sin capa", "•", "#888", grupos[""],
+                      "Estas piezas no tienen capa nombrada — se tratan como corte.");
+    }
+    grid.innerHTML = html;
+    return;
+  }
+
+  const cards = paths.map((p, idx) => _cardHtml(p, idx));
   grid.innerHTML = header + cards.join("");
 }
 
@@ -3663,6 +3804,7 @@ async function calcular() {
       };
     } else if (tipoActual === "planas") {
       url  = "/api/cotizar/planas";
+      const tipoAnun = document.getElementById("planas-tipo-anuncio")?.value || "solo_corte";
       body = {
         session_id:      sessionId,
         real_width_cm:   anchoReal,
@@ -3670,6 +3812,17 @@ async function calcular() {
         margen_ganancia: margen,
         tipo_multiplicador: document.getElementById("tipo-multiplicador").value,
         ajuste_pct:      parseFloat(document.getElementById("ajuste-pct").value) || 0,
+        // Extensión 3 capas
+        real_height_cm:  parseFloat(document.getElementById("planas-real-height")?.value) || 0,
+        incluye_base:    tipoAnun !== "solo_corte",
+        base_material_id: document.getElementById("planas-base-material")?.value || "",
+        incluye_luz:     tipoAnun === "corte_base_luz",
+        luz_material_id: document.getElementById("planas-luz-material")?.value || "",
+        luz_led_id:      document.getElementById("planas-luz-led")?.value || "auto",
+        luz_cercha_cm:   parseFloat(document.getElementById("planas-luz-cercha")?.value) || 0,
+        luz_juegos_dist_por_pieza: parseInt(document.getElementById("planas-luz-dist")?.value) || 1,
+        desperdicio_pct: parseFloat(document.getElementById("planas-desperdicio")?.value) || 15,
+        modo_corte:      document.getElementById("planas-modo-corte")?.value || "areas",
         cliente,
         ..._instBody(),
       };
@@ -3724,6 +3877,108 @@ async function calcular() {
 }
 
 // ─── RENDERIZAR RESULTADO ────────────────────────────────────────────────────
+// Panel resumen de bloques (base/corte/luz) — solo letras planas
+function _renderBloquesPlanasHtml(bloques) {
+  if (!bloques || !Object.keys(bloques).length) return "";
+  const $ = n => (n||0).toLocaleString('es-MX',{minimumFractionDigits:2});
+  const orden = ["base", "corte", "luz"];
+  const meta = {
+    base:  {icon:"📄", nombre:"Base / Soporte", color:"#4a9eff"},
+    corte: {icon:"✂️", nombre:"Corte (sin luz)", color:"#7cd67c"},
+    luz:   {icon:"💡", nombre:"Retroiluminadas", color:"#e8a338"},
+  };
+  const cards = orden.filter(k => bloques[k]).map(k => {
+    const b = bloques[k];
+    const m = meta[k];
+    const modoTxt = b.modo === "pieza" ? "por pieza" : "por bbox conjunto";
+    const dims = `${(b.w_cm||0).toFixed(1)} × ${(b.h_cm||0).toFixed(1)} cm`;
+    const areaM2 = ((b.area_cm2||0)/10000).toFixed(3);
+    let extra = "";
+    let costoTotal = b.costo || 0;
+    if (k === "luz") {
+      costoTotal = b.costo_total || 0;
+      const led = b.led || {};
+      const fnt = b.fuente || {};
+      const dst = b.distanciadores || {};
+      const metrosLinealesTxt = (b.metros_lineales != null)
+        ? `<b>${b.metros_lineales.toFixed(2)} m</b> (${(b.perimetro_total_cm||0).toFixed(0)} cm de perímetro)`
+        : "—";
+      extra = `
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid ${m.color}33">
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="color:#9fb0cb">Recorrido iluminado</span>
+            <span>${metrosLinealesTxt}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="color:#9fb0cb">💡 LED</span>
+            <span>${led.nombre || "—"}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="color:#9fb0cb">Módulos</span>
+            <span><b>${led.modulos||0}</b> × ${led.watts_por_modulo||0} W = <b>${(led.watts_totales||0).toFixed(1)} W</b></span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="color:#9fb0cb">Fuente</span>
+            <span>${fnt.nombre||"—"} (${fnt.capacidad_w||0}W)</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="color:#9fb0cb">Distanciadores</span>
+            <span>${dst.total_juegos||0} juegos (${dst.juegos_por_pieza||1}/pza)</span>
+          </div>
+          <div style="margin-top:6px;padding-top:6px;border-top:1px dashed ${m.color}55;
+                      display:flex;justify-content:space-between;font-size:11px;color:#9fb0cb">
+            <span>Material</span><span>$${$(b.costo_material)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:#9fb0cb">
+            <span>LEDs + fuente + dist.</span>
+            <span>$${$((led.costo||0)+(fnt.costo||0)+(dst.costo||0))}</span>
+          </div>
+        </div>`;
+    }
+    const fuenteBadge = k === "base" && b.fuente === "manual"
+      ? `<span style="font-size:9px;background:${m.color}33;color:${m.color};padding:1px 6px;border-radius:8px;margin-left:6px">manual</span>`
+      : "";
+    const modoBadge = b.modo === "pieza"
+      ? `<span style="font-size:9px;background:#666;color:#fff;padding:1px 6px;border-radius:8px;margin-left:6px">${modoTxt}</span>`
+      : "";
+    return `
+      <div style="background:linear-gradient(145deg,#1b2947,#151f38);border:1px solid ${m.color}55;
+                  border-left:4px solid ${m.color};border-radius:8px;padding:12px;font-size:12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+          <div style="font-weight:700;color:${m.color};font-size:13px">
+            ${m.icon} ${m.nombre}
+            <span style="color:#9fb0cb;font-weight:400;font-size:11px"> · ${b.n_piezas||0} pieza${(b.n_piezas||0)===1?'':'s'}</span>
+            ${fuenteBadge}${modoBadge}
+          </div>
+          <div style="font-weight:700;color:#4FDB95;font-size:15px">$${$(costoTotal)}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+          <span style="color:#9fb0cb">Dimensiones</span>
+          <span><b>${dims}</b></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+          <span style="color:#9fb0cb">Área</span>
+          <span>${(b.area_cm2||0).toLocaleString('es-MX')} cm² (${areaM2} m²)</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+          <span style="color:#9fb0cb">Material</span>
+          <span>${b.material || "—"}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#9fb0cb">
+          <span>+ desperdicio</span><span>${(b.desperdicio_pct||0).toFixed(0)}%</span>
+        </div>
+        ${extra}
+      </div>`;
+  }).join("");
+  return `
+    <div style="margin-bottom:14px">
+      <h3 style="color:var(--am);font-size:13px;margin:0 0 8px 0">Resumen por bloque</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">
+        ${cards}
+      </div>
+    </div>`;
+}
+
 function renderResult(d) {
   const m      = d.medidas;
   const costos = d.costos;
@@ -3803,6 +4058,8 @@ function renderResult(d) {
           title="Cotización en Excel editable">📊 Excel</a>
       </div>
     </div>
+
+    ${esPlanas ? _renderBloquesPlanasHtml(d.desglose_costos_componentes?.bloques || {}) : ""}
 
     <!-- ─── ZONA 1: 3 HEROES (precio cliente / costo construcción / margen) ─── -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;margin-bottom:14px">
@@ -4217,6 +4474,121 @@ async function renderRecomendaciones(d) {
       </p>
     </div>
   `;
+}
+
+// ─── LETRAS PLANAS: capas base/corte/luz ────────────────────────────────────
+function planasOnTipoAnuncio(esAutodeteccion) {
+  const t = document.getElementById("planas-tipo-anuncio")?.value || "solo_corte";
+  const showBase = t !== "solo_corte";
+  const showLuz  = t === "corte_base_luz";
+  const secBase  = document.getElementById("planas-base-section");
+  const secLuz   = document.getElementById("planas-luz-section");
+  if (secBase) secBase.style.display = showBase ? "block" : "none";
+  if (secLuz)  secLuz.style.display  = showLuz  ? "block" : "none";
+  planasActualizarBannerCapas();
+  // Modal la primera vez que el USUARIO elige algo con capas — pero NO
+  // cuando el cambio viene de auto-detección (el SVG ya dice cómo va).
+  if (!esAutodeteccion && t !== "solo_corte" && !localStorage.getItem("planasModalCapasVisto")) {
+    planasAbrirModal(false);
+  }
+}
+
+// Auto-selecciona el dropdown según lo que trae el SVG. La UI queda
+// editable para que el usuario pueda forzar otro comportamiento.
+function planasAutodetectarTipo() {
+  const sel = document.getElementById("planas-tipo-anuncio");
+  if (!sel) return;
+  const c = svgCapasDetectadas || {base:0, corte:0, luz:0};
+  let tipo = "solo_corte";
+  if ((c.luz||0) > 0)       tipo = "corte_base_luz";
+  else if ((c.base||0) > 0) tipo = "corte_base";
+  // Solo cambiar si el detectado es distinto (no molestar al usuario si eligió a mano)
+  if (sel.value !== tipo) {
+    sel.value = tipo;
+    planasOnTipoAnuncio(true);   // refresca secciones visibles + banner (sin modal)
+  }
+}
+
+function planasActualizarBannerCapas() {
+  const b = document.getElementById("planas-capas-banner");
+  if (!b) return;
+  if (!sessionId || tipoActual !== "planas") { b.style.display = "none"; return; }
+  const c = svgCapasDetectadas || {base:0,corte:0,luz:0};
+  const t = document.getElementById("planas-tipo-anuncio")?.value || "solo_corte";
+  const total = (c.base||0) + (c.corte||0) + (c.luz||0);
+  if (total === 0) {
+    if (t === "solo_corte") { b.style.display = "none"; return; }
+    b.style.background = "rgba(255,180,60,.15)";
+    b.style.border = "1px solid rgba(255,180,60,.5)";
+    b.style.color = "#ffcf7f";
+    b.innerHTML = "⚠ El SVG no tiene capas nombradas — todas las piezas se tratan como corte. " +
+      "Para separar base/luz, exporta con capas nombradas <b>base</b>, <b>corte</b>, <b>luz</b>.";
+    b.style.display = "block";
+    return;
+  }
+  const partes = [];
+  if (c.base)  partes.push(`<b>${c.base}</b> base`);
+  if (c.corte) partes.push(`<b>${c.corte}</b> corte`);
+  if (c.luz)   partes.push(`<b>${c.luz}</b> luz`);
+  b.style.background = "rgba(80,170,120,.15)";
+  b.style.border = "1px solid rgba(80,170,120,.5)";
+  b.style.color = "#a8e3bf";
+  b.innerHTML = "✓ Capas detectadas en el SVG: " + partes.join(" · ");
+  // Sugerir cambio de tipo si no coincide
+  const necesita = c.luz > 0 ? "corte_base_luz" : (c.base > 0 ? "corte_base" : "solo_corte");
+  if (necesita !== t) {
+    b.innerHTML += `<br><span style="color:#ffcf7f">Sugerencia: cambia el tipo a "${
+      necesita === "corte_base_luz" ? "Corte + base + iluminación" :
+      necesita === "corte_base"     ? "Corte + base" : "Solo corte"}".</span>`;
+  }
+  b.style.display = "block";
+}
+
+function planasAbrirModal(fromButton) {
+  const m = document.getElementById("planas-modal-capas");
+  if (!m) return;
+  const t = document.getElementById("planas-tipo-anuncio")?.value || "solo_corte";
+  // Cuerpo del modal cambia según el tipo elegido
+  let body = "";
+  if (t === "solo_corte") {
+    body = `<p>Sube tu SVG con las piezas a cortar. <b>No necesitas capas nombradas</b>
+      — todas las piezas se costean como corte plano.</p>`;
+  } else if (t === "corte_base") {
+    body = `
+      <p>Organiza tu SVG en Illustrator/Corel/Inkscape con <b>dos capas nombradas</b>:</p>
+      <ul style="line-height:1.5">
+        <li>📄 <b>base</b> — soporte/fondo (una forma, cualquier geometría; rectangular u orgánica).</li>
+        <li>✂️ <b>corte</b> — piezas planas a montar sobre la base.</li>
+      </ul>
+      <p style="color:#9fb0cb;font-size:11.5px">Los materiales (transparente, negro, MDF, alucobond…)
+        los eliges después en la UI. El SVG solo lleva la geometría.</p>`;
+  } else {
+    body = `
+      <p>Organiza tu SVG con <b>tres capas nombradas</b>:</p>
+      <ul style="line-height:1.5">
+        <li>📄 <b>base</b> — soporte/fondo.</li>
+        <li>✂️ <b>corte</b> — piezas planas <b>sin</b> luz.</li>
+        <li>💡 <b>luz</b> — piezas retroiluminadas halo (LEDs contra la pared,
+          se separan con distanciadores). Sin cercha por default.</li>
+      </ul>
+      <p style="color:#9fb0cb;font-size:11.5px">Los materiales de cada capa los eliges en la UI.
+        Las piezas <b>luz</b> pagan LEDs + fuente + distanciadores automáticamente.</p>`;
+  }
+  document.getElementById("planas-modal-body").innerHTML = body;
+  m.style.display = "flex";
+  // Mostrar checkbox "no volver a mostrar" solo cuando lo dispara el sistema
+  const noVolver = document.getElementById("planas-modal-novolver");
+  if (noVolver) noVolver.parentElement.style.display = fromButton ? "none" : "block";
+}
+
+function planasCerrarModal() {
+  const m = document.getElementById("planas-modal-capas");
+  if (!m) return;
+  const noVolver = document.getElementById("planas-modal-novolver");
+  if (noVolver && noVolver.checked) {
+    localStorage.setItem("planasModalCapasVisto", "1");
+  }
+  m.style.display = "none";
 }
 
 // ─── HELPERS UI ──────────────────────────────────────────────────────────────
@@ -5760,6 +6132,34 @@ function aplicarConfiguracion() {
              border:1px solid #3a9440;font-size:13px;font-weight:700;font-family:var(--sans)">
       ✅ Generar acta de entrega
     </button>
+  </div>
+</div>
+
+<!-- ══════════════════ LETRAS PLANAS: MODAL DE CAPAS ══════════════════ -->
+<div id="planas-modal-capas" style="display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.65);z-index:2100;align-items:center;justify-content:center;padding:24px 16px">
+  <div style="max-width:560px;background:#fff;border-radius:12px;overflow:hidden;
+              box-shadow:0 24px 60px rgba(0,0,0,.35)">
+    <div style="background:linear-gradient(135deg,#13203a,#1a2b4a);color:#eef3fb;
+                padding:16px 22px;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:15px;font-weight:700">Cómo debe venir el SVG</div>
+      <button onclick="planasCerrarModal()"
+        style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+               color:#eef3fb;border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer">✕</button>
+    </div>
+    <div id="planas-modal-body" style="padding:18px 22px;color:#26324a;font-size:13px;line-height:1.5">
+    </div>
+    <div style="padding:0 22px 14px;color:#657593;font-size:11.5px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="planas-modal-novolver">
+        <span>No volver a mostrar este aviso</span>
+      </label>
+    </div>
+    <div style="padding:12px 22px 18px;text-align:right;border-top:1px solid #e4e8ef">
+      <button onclick="planasCerrarModal()"
+        style="background:#1a2b4a;color:#fff;border:0;border-radius:6px;padding:8px 18px;
+               font-size:13px;cursor:pointer">Entendido</button>
+    </div>
   </div>
 </div>
 

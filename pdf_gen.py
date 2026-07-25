@@ -205,24 +205,35 @@ def generar_pdf(result, meta: dict) -> bytes:
     n = 1
     def _mrow(num, nombre, cant, costo):
         return [_p(str(num), S_TC), _p(nombre, S_TC), _p(cant, S_TC), _p(costo, S_TR)]
-    if result.costo_material_cara > 0:
-        mat_rows.append(_mrow(n, result.material_cara.get("nombre","—"),
-                              f"{result.laminas_cara} lám.", f"${result.costo_material_cara:,.2f}")); n+=1
-    if result.costo_material_cercha > 0:
-        mat_rows.append(_mrow(n, result.material_cercha.get("nombre","—"),
-                              f"{result.laminas_cercha} lám.", f"${result.costo_material_cercha:,.2f}")); n+=1
-    if result.costo_material_fondo > 0:
-        mat_rows.append(_mrow(n, result.material_fondo.get("nombre","—"),
-                              f"{result.laminas_fondo} lám.", f"${result.costo_material_fondo:,.2f}")); n+=1
-    if result.costo_led > 0:
-        mat_rows.append(_mrow(n, result.led.get("nombre","—"),
-                              f"{result.modulos_led} mód.", f"${result.costo_led:,.2f}")); n+=1
-    if result.costo_fuente > 0:
-        mat_rows.append(_mrow(n, result.fuente.get("nombre","—"), "1 pza",
-                              f"${result.costo_fuente:,.2f}")); n+=1
-    if result.costo_pegamento > 0:
-        mat_rows.append(_mrow(n, result.pegamento.get("nombre","—"), "c/nec.",
-                              f"${result.costo_pegamento:,.2f}"))
+
+    # Letras planas: usar el desglose humano ya armado en cotizar_planas
+    # (una línea por bloque: corte, base, luz-material, LEDs, fuente, distanciadores).
+    # Cubre 3 capas y refleja el bbox conjunto + desperdicio en la descripción.
+    if result.tipo == "letras_planas" and (result.desglose or []):
+        for row in result.desglose:
+            if row.get("costo", 0) <= 0:
+                continue
+            mat_rows.append(_mrow(n, row.get("concepto", "—"), "",
+                                  f"${row['costo']:,.2f}")); n+=1
+    else:
+        if result.costo_material_cara > 0:
+            mat_rows.append(_mrow(n, result.material_cara.get("nombre","—"),
+                                  f"{result.laminas_cara} lám.", f"${result.costo_material_cara:,.2f}")); n+=1
+        if result.costo_material_cercha > 0:
+            mat_rows.append(_mrow(n, result.material_cercha.get("nombre","—"),
+                                  f"{result.laminas_cercha} lám.", f"${result.costo_material_cercha:,.2f}")); n+=1
+        if result.costo_material_fondo > 0:
+            mat_rows.append(_mrow(n, result.material_fondo.get("nombre","—"),
+                                  f"{result.laminas_fondo} lám.", f"${result.costo_material_fondo:,.2f}")); n+=1
+        if result.costo_led > 0:
+            mat_rows.append(_mrow(n, result.led.get("nombre","—"),
+                                  f"{result.modulos_led} mód.", f"${result.costo_led:,.2f}")); n+=1
+        if result.costo_fuente > 0:
+            mat_rows.append(_mrow(n, result.fuente.get("nombre","—"), "1 pza",
+                                  f"${result.costo_fuente:,.2f}")); n+=1
+        if result.costo_pegamento > 0:
+            mat_rows.append(_mrow(n, result.pegamento.get("nombre","—"), "c/nec.",
+                                  f"${result.costo_pegamento:,.2f}"))
 
     mat_tbl = Table(mat_rows, colWidths=[PW*0.05, PW*0.57, PW*0.13, PW*0.25])
     mat_tbl.setStyle(TableStyle([
@@ -237,6 +248,80 @@ def generar_pdf(result, meta: dict) -> bytes:
     ]))
     elements.append(mat_tbl)
     elements.append(Spacer(1, 0.4*cm))
+
+    # ── Piezas a fabricar (solo planas, agrupado por capa) ───────────────
+    # Tabla informativa para el cliente y el taller. NO lleva costo por pieza:
+    # cuando modo_corte='areas' el costo ya se cobra global por capa arriba.
+    if result.tipo == "letras_planas" and len(result.desglose_letras or []) >= 2:
+        _CAPA_LABELS = {"base": "📄 Base", "corte": "✂️ Corte",
+                        "luz": "💡 Retroiluminadas", "": "· Sin capa"}
+        _CAPA_COLORS = {"base": colors.HexColor("#4a9eff"),
+                        "corte": colors.HexColor("#7cd67c"),
+                        "luz": colors.HexColor("#e8a338"),
+                        "": colors.HexColor("#888")}
+        _CAPA_ORDER = ["base", "corte", "luz", ""]
+
+        grupos: dict = {}
+        for d in result.desglose_letras:
+            cap = d.get("capa", "") or ""
+            grupos.setdefault(cap, []).append(d)
+
+        elements.append(Paragraph("Piezas a Fabricar", S_H2))
+        S_PF_H  = ParagraphStyle("sgi_pf_h",  fontSize=8.5, textColor=BLANCO, fontName="Helvetica-Bold")
+        S_PF_C  = ParagraphStyle("sgi_pf_c",  fontSize=8.5, textColor=colors.black, leading=11)
+        S_PF_CR = ParagraphStyle("sgi_pf_cr", fontSize=8.5, textColor=colors.black, leading=11, alignment=TA_RIGHT)
+        S_PF_G  = ParagraphStyle("sgi_pf_g",  fontSize=9,   textColor=colors.white, fontName="Helvetica-Bold")
+
+        pf_rows: list = [[_p("#", S_PF_H), _p("Pieza", S_PF_H),
+                          _p("Alto × Ancho", S_PF_H), _p("Perímetro", S_PF_H),
+                          _p("Notas", S_PF_H)]]
+        style_extra: list = []   # ((row_i_start, row_i_end), color) para el header de cada grupo
+        row_i = 1
+        pieza_n = 0
+        for cap in _CAPA_ORDER:
+            items = grupos.get(cap) or []
+            if not items:
+                continue
+            # Header de grupo (fila completa combinada)
+            label = _CAPA_LABELS.get(cap, cap or "—") + f" ({len(items)} pieza{'s' if len(items)!=1 else ''})"
+            pf_rows.append([_p(label, S_PF_G), "", "", "", ""])
+            style_extra.append(("BACKGROUND", (0, row_i), (-1, row_i), _CAPA_COLORS.get(cap, colors.grey)))
+            style_extra.append(("SPAN",       (0, row_i), (-1, row_i)))
+            row_i += 1
+            for d in items:
+                pieza_n += 1
+                notas_pieza = ""
+                if cap == "luz" and d.get("n_modulos_led"):
+                    notas_pieza = f"{d['n_modulos_led']} LEDs · {d.get('watts', 0):.1f} W"
+                pf_rows.append([
+                    _p(str(pieza_n), S_PF_C),
+                    _p(d.get("id", "—"), S_PF_C),
+                    _p(f"{d.get('alto_cm',0):.1f} × {d.get('ancho_cm',0):.1f} cm", S_PF_CR),
+                    _p(f"{d.get('perimetro_cm',0):.1f} cm", S_PF_CR),
+                    _p(notas_pieza or "—", S_PF_C),
+                ])
+                row_i += 1
+
+        pf_tbl = Table(pf_rows, colWidths=[PW*0.05, PW*0.30, PW*0.25, PW*0.15, PW*0.25])
+        pf_style = [
+            ("BACKGROUND",     (0, 0), (-1, 0),  AZUL_MED),
+            ("GRID",           (0, 0), (-1, -1), 0.3, colors.lightgrey),
+            ("LEFTPADDING",    (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING",   (0, 0), (-1, -1), 5),
+            ("TOPPADDING",     (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING",  (0, 0), (-1, -1), 3),
+            ("VALIGN",         (0, 0), (-1, -1), "TOP"),
+        ] + style_extra
+        pf_tbl.setStyle(TableStyle(pf_style))
+        elements.append(pf_tbl)
+        elements.append(Spacer(1, 0.2*cm))
+        elements.append(Paragraph(
+            "El costo del material se cobra por capa (ver tabla anterior). "
+            "Esta lista es referencial para fabricación.",
+            ParagraphStyle("sgi_pf_foot", fontSize=8, textColor=colors.HexColor("#666"),
+                           leading=10, alignment=TA_LEFT)
+        ))
+        elements.append(Spacer(1, 0.35*cm))
 
     # Notas
     notas = meta.get("notas", "")

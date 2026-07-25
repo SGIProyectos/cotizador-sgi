@@ -45,6 +45,7 @@ class PathInfo:
     svg_id: str = ""    # original id attribute from the SVG element
     fill: str = ""      # fill resuelto (attr, style o clase CSS)
     es_hueco: bool = False   # contador de letra o placa de fondo (fill blanco)
+    capa: str = ""      # capa nombrada del SVG: "" | "base" | "corte" | "luz"
 
 @dataclass
 class SVGData:
@@ -55,6 +56,7 @@ class SVGData:
     scale_factor: float = 1.0
     max_pieza_height_px: float = 0.0    # altura máx detectada entre las piezas
     artboard_w_cm: float = 0.0          # >0 si la unidad real del SVG se puede mapear a cm
+    capas_detectadas: dict = None       # {"base": n, "corte": n, "luz": n} para piezas con capa
     # — alias retro-compatible para callers viejos —
     @property
     def max_letter_height_px(self) -> float:
@@ -490,12 +492,21 @@ def _marcar_huecos(paths: list[PathInfo]) -> None:
     (contenidas en el bbox de una pieza no-blanca) o placa de fondo del
     artboard (contienen a la mayoría de las demás piezas). Los SVG de
     rotulación pintan los huecos con el color del fondo (blanco); una pieza
-    blanca aislada (p.ej. letra blanca real) NO se marca."""
+    blanca aislada (p.ej. letra blanca real) NO se marca.
+
+    IMPORTANTE: piezas con capa nombrada (`base`/`corte`/`luz`) NO se marcan
+    aunque sean blancas. El usuario declaró explícitamente su rol en el SVG —
+    la heurística de detección de huecos NO debe sobrescribir esa intención.
+    Ejemplo: en letras planas, la capa `base` suele ser un rectángulo blanco
+    (acrílico transparente) que envuelve todo — sin este bypass, se detectaría
+    como placa de fondo y se excluiría del cobro."""
     cerrados = [p for p in paths if p.is_closed]
     if len(cerrados) < 2:
         return
     for p in cerrados:
         if not _es_fill_blanco(p.fill):
+            continue
+        if p.capa:  # capa nombrada → respetar intención del usuario
             continue
         tol = max(p.bbox["w"], p.bbox["h"]) * 0.02 + 0.5
         contador = any(
@@ -512,10 +523,45 @@ def _marcar_huecos(paths: list[PathInfo]) -> None:
             p.es_hueco = True
 
 
+# Nombres reservados de capas (convención cotizador SGI):
+#   base  → soporte/fondo (acrílico transparente, MDF, alucobond, etc.)
+#   corte → piezas planas sin luz
+#   luz   → piezas retroiluminadas halo (LEDs perimetrales + distanciadores)
+# Match por PALABRA COMPLETA en el id / inkscape:label del <g> — evita falsos
+# positivos tipo "basement" o "recorte".
+_CAPA_KEYWORDS = {
+    "base":  {"base", "fondo", "soporte"},
+    "corte": {"corte", "cut"},
+    "luz":   {"luz", "halo", "iluminado", "iluminacion", "iluminada", "iluminadas",
+              "retro", "retroiluminado", "retroiluminada"},
+}
+
+_ACENTOS = str.maketrans("áéíóúÁÉÍÓÚñÑ", "aeiouAEIOUnN")
+
+_INKSCAPE_LABEL = "{http://www.inkscape.org/namespaces/inkscape}label"
+
+
+def _detectar_capa(nombre: str) -> str:
+    """Devuelve 'base', 'corte', 'luz' o '' según el nombre de capa/grupo.
+    Case-insensitive, tolera acentos y separadores (_-. espacio). Match por
+    palabra COMPLETA, así 'basement' no dispara 'base'."""
+    if not nombre:
+        return ""
+    normal = nombre.translate(_ACENTOS).lower()
+    tokens = re.findall(r"[a-z]+", normal)
+    if not tokens:
+        return ""
+    for capa, palabras in _CAPA_KEYWORDS.items():
+        if any(t in palabras for t in tokens):
+            return capa
+    return ""
+
+
 def _collect_primitives(elem, class_to_fill: dict, parent_matrix: tuple,
-                        parent_class: str = "", out: list | None = None) -> list:
-    """Recorre el XML acumulando transforms heredados. Devuelve lista de dicts
-    con {elem, matrix, fill_resuelto}."""
+                        parent_class: str = "", parent_capa: str = "",
+                        out: list | None = None) -> list:
+    """Recorre el XML acumulando transforms y capa heredada. Devuelve lista
+    de dicts con {elem, matrix, fill, tag, capa}."""
     if out is None:
         out = []
     # Acumular transform de este elemento
@@ -539,14 +585,25 @@ def _collect_primitives(elem, class_to_fill: dict, parent_matrix: tuple,
                 own_fill = class_to_fill[cls]
                 break
 
+    # Resolver capa: si este elemento (típicamente un <g>) declara id/label
+    # que matchea capa reservada, se convierte en la capa efectiva para todos
+    # sus descendientes. Un hijo con su propio id de capa lo sobrescribe.
+    capa = parent_capa
+    if tag == "g":
+        nombre_grupo = elem.get("id", "") or elem.get(_INKSCAPE_LABEL, "")
+        c = _detectar_capa(nombre_grupo)
+        if c:
+            capa = c
+
     if tag in _SVG_PRIMITIVES:
-        out.append({"elem": elem, "matrix": matrix, "fill": own_fill, "tag": tag})
+        out.append({"elem": elem, "matrix": matrix, "fill": own_fill,
+                    "tag": tag, "capa": capa})
 
     # Recursar en hijos
     for ch in elem:
         if _ns(ch.tag) in ("defs", "style", "title", "desc", "metadata"):
             continue
-        _collect_primitives(ch, class_to_fill, matrix, own_class, out)
+        _collect_primitives(ch, class_to_fill, matrix, own_class, capa, out)
     return out
 
 
@@ -601,6 +658,7 @@ def parse_svg(svg_bytes: bytes) -> SVGData:
             is_closed=is_closed,
             svg_id=orig_id,
             fill=info["fill"],
+            capa=info.get("capa", ""),
         ))
 
     _marcar_huecos(path_infos)
@@ -618,6 +676,12 @@ def parse_svg(svg_bytes: bytes) -> SVGData:
     # 7. Calcular ancho real del artboard en cm (si la unidad lo permite)
     artboard_w_cm = vb_w * factor_to_cm if factor_to_cm > 0 else 0.0
 
+    # 8. Resumen de capas detectadas (para UI y validación de "tipo de anuncio")
+    capas_detectadas = {"base": 0, "corte": 0, "luz": 0}
+    for p in path_infos:
+        if p.capa in capas_detectadas:
+            capas_detectadas[p.capa] += 1
+
     return SVGData(
         paths=path_infos,
         viewbox_w=vb_w,
@@ -625,6 +689,7 @@ def parse_svg(svg_bytes: bytes) -> SVGData:
         svg_unit=unit,
         max_pieza_height_px=max_h_px,
         artboard_w_cm=artboard_w_cm,
+        capas_detectadas=capas_detectadas,
     )
 
 
@@ -1130,6 +1195,32 @@ def cotizar_letras(
 
 # ─── COTIZACIÓN LETRAS PLANAS ────────────────────────────────────────────────
 
+def _bbox_conjunto(piezas, sf) -> tuple[float, float]:
+    """Devuelve (ancho_cm, alto_cm) del bbox que envuelve TODAS las piezas
+    dadas. Refleja la lámina/pedazo mínimo del que se cortarían asumiendo que
+    se acomodan lado a lado (mucho más realista que sumar bboxes individuales,
+    que ignora que los recortes entre piezas casi nunca se reutilizan)."""
+    if not piezas or sf <= 0:
+        return (0.0, 0.0)
+    xs_min = min(p.bbox["x"] for p in piezas)
+    ys_min = min(p.bbox["y"] for p in piezas)
+    xs_max = max(p.bbox["x"] + p.bbox["w"] for p in piezas)
+    ys_max = max(p.bbox["y"] + p.bbox["h"] for p in piezas)
+    return ((xs_max - xs_min) * sf, (ys_max - ys_min) * sf)
+
+
+def _area_material_cm2(piezas, sf: float, modo: str) -> float:
+    """Área total del material que se cobra según el modo:
+      · 'areas' (default) → bbox conjunto (una placa envolvente).
+      · 'pieza'           → suma de bboxes individuales (una placa por pieza)."""
+    if not piezas or sf <= 0:
+        return 0.0
+    if modo == "pieza":
+        return sum((p.bbox["h"] * sf) * (p.bbox["w"] * sf) for p in piezas)
+    w, h = _bbox_conjunto(piezas, sf)
+    return w * h
+
+
 def cotizar_planas(
     svg_data: SVGData,
     real_width_cm: float,
@@ -1137,54 +1228,232 @@ def cotizar_planas(
     margen_ganancia: float = 0.35,
     tipo_multiplicador: str = "aluminio_sin_luz",
     ajuste_pct: float = 0.0,
+    # ── Extensión: 3 capas nombradas en el SVG (base/corte/luz) ──────────
+    real_height_cm: float = 0.0,
+    incluye_base: bool = False,
+    base_material_id: str = "",
+    incluye_luz: bool = False,
+    luz_material_id: str = "",
+    luz_led_id: str = "auto",
+    luz_cercha_cm: float = 0.0,               # 0 = sin cercha (default)
+    luz_juegos_dist_por_pieza: int = 1,
+    luz_tipo_multiplicador: str = "aluminio_con_luz",
+    desperdicio_pct: float = 15.0,
+    modo_corte: str = "areas",   # "areas" (default, bbox conjunto) | "pieza" (suma bboxes)
 ) -> QuoteResult:
+    """
+    Cotización de letras planas con soporte de 3 capas nombradas en el SVG:
+      · base   → soporte/fondo (opcional; forma cualquiera)
+      · corte  → piezas planas sin luz
+      · luz    → piezas retroiluminadas halo (LEDs + distanciadores)
 
+    Sin capas nombradas → todas las piezas se tratan como 'corte'.
+    Los flags `incluye_base` / `incluye_luz` permiten activar el cobro incluso
+    cuando el SVG no trae la capa correspondiente (útil con SVG sencillos).
+
+    Modos de cobro del material (parametro `modo_corte`):
+      · "areas"  (default) → bbox CONJUNTO de las piezas × precio × desperdicio.
+                             Refleja que se acomodan juntas al cortar.
+      · "pieza"           → suma de bboxes individuales × precio × desperdicio.
+                             Aplica cuando cada pieza va en material distinto o
+                             no se pueden acomodar juntas. Da un total mayor.
+    """
     svg_data = apply_scale(svg_data, real_width_cm)
 
-    # Igual que letras 3D: los huecos (blancos) no se fabrican ni se cobran
-    letras = [
+    # Si el SVG trae capa 'base', RE-ANCLAR la escala al bbox de la base.
+    # Motivo: `real_width_cm` que da el usuario es el ancho REAL DE LA BASE,
+    # no del viewBox/artboard del SVG. Sin este ajuste, cuando el diseño
+    # tiene padding o el artboard es mayor que la base, todo el sistema
+    # queda 2-3× más grande (la base ficticia mide más que la real).
+    piezas_base_raw = [
+        p for p in svg_data.paths
+        if p.capa == "base" and p.is_closed and not p.es_hueco
+    ]
+    if piezas_base_raw and real_width_cm > 0:
+        xs_min = min(p.bbox["x"] for p in piezas_base_raw)
+        xs_max = max(p.bbox["x"] + p.bbox["w"] for p in piezas_base_raw)
+        base_w_svg = xs_max - xs_min
+        if base_w_svg > 0:
+            nuevo_sf = real_width_cm / base_w_svg
+            svg_data.scale_factor = nuevo_sf
+            for p in svg_data.paths:
+                p.perimeter_cm = p.perimeter_px * nuevo_sf
+                p.area_cm2     = p.area_px     * (nuevo_sf ** 2)
+
+    # Piezas válidas: cerradas, no huecos, área > 0.5 cm²
+    piezas = [
         p for p in svg_data.paths
         if p.is_closed and not p.es_hueco and p.area_cm2 > 0.5
     ]
     n_huecos = sum(1 for p in svg_data.paths if p.is_closed and p.es_hueco)
-    if not letras:
-        letras = svg_data.paths
+    if not piezas:
+        piezas = svg_data.paths
 
-    sf_p = svg_data.scale_factor
-    # Letras planas: bounding box para costo de material (equivale a la pieza cortada)
-    area_total      = sum(
-        (p.bbox["h"] * sf_p) * (p.bbox["w"] * sf_p) for p in letras
-    )
-    perimetro_total = sum(p.perimeter_cm for p in letras)
+    # ── Separación por capa nombrada del SVG ─────────────────────────────
+    piezas_base  = [p for p in piezas if p.capa == "base"]
+    piezas_luz   = [p for p in piezas if p.capa == "luz"]
+    piezas_corte = [p for p in piezas if p.capa in ("", "corte")]
 
+    # Si el usuario NO activa "incluye luz" pero el SVG trae capa luz,
+    # esas piezas se cotizan como corte plano (no se pierden). Da control
+    # al operador: puede ver el precio "sin iluminación" activando/desactivando.
+    if not incluye_luz and piezas_luz:
+        piezas_corte.extend(piezas_luz)
+        piezas_luz = []
+
+    sf = svg_data.scale_factor
+    factor_desperdicio = 1.0 + max(0.0, desperdicio_pct) / 100.0
+
+    modo_corte = "pieza" if str(modo_corte).lower() == "pieza" else "areas"
+
+    # ── MATERIAL DE CORTE (bbox conjunto o suma-por-pieza según modo_corte) ─
     if material_id not in LAMINAS:
         material_id = "acrilico_3mm"
-    mat  = LAMINAS[material_id]
-    lam  = laminas_necesarias(area_total, material_id)
-    ppcm2_mat = precio_cm2(mat)
-    c_mat = round(area_total * ppcm2_mat, 2)
+    mat_corte    = LAMINAS[material_id]
+    ppcm2_corte  = precio_cm2(mat_corte)
 
-    subtotal = c_mat
+    corte_w_cm, corte_h_cm = _bbox_conjunto(piezas_corte, sf)   # bbox informativo
+    corte_area_cm2 = _area_material_cm2(piezas_corte, sf, modo_corte)
+    c_corte = round(corte_area_cm2 * ppcm2_corte * factor_desperdicio, 2)
+    lam_corte = laminas_necesarias(corte_area_cm2, material_id) if corte_area_cm2 > 0 else 0
+
+    # ── MATERIAL BASE (opcional) ─────────────────────────────────────────
+    # Prioridad: 1) capa "base" del SVG · 2) incluye_base=True + medidas · 3) nada
+    base_w_cm = base_h_cm = 0.0
+    base_area_cm2 = 0.0
+    c_base = 0.0
+    mat_base = None
+    base_fuente = ""   # "svg" | "manual" | ""
+    _def_base = "acrilico_3mm_transparente" if "acrilico_3mm_transparente" in LAMINAS else material_id
+    if piezas_base:
+        base_w_cm, base_h_cm = _bbox_conjunto(piezas_base, sf)
+        base_area_cm2 = _area_material_cm2(piezas_base, sf, modo_corte)
+        mid = base_material_id or _def_base
+        if mid not in LAMINAS:
+            mid = _def_base
+        mat_base = LAMINAS[mid]
+        c_base = round(base_area_cm2 * precio_cm2(mat_base) * factor_desperdicio, 2)
+        base_material_id = mid
+        base_fuente = "svg"
+    elif incluye_base:
+        base_w_cm = real_width_cm
+        if real_height_cm > 0:
+            base_h_cm = real_height_cm
+        else:
+            # inferir alto del bbox conjunto de todas las piezas
+            _w_todo, h_todo = _bbox_conjunto(piezas, sf)
+            base_h_cm = h_todo if h_todo > 0 else corte_h_cm
+        base_area_cm2 = base_w_cm * base_h_cm   # placa virtual: SIEMPRE una sola
+        mid = base_material_id or _def_base
+        if mid not in LAMINAS:
+            mid = _def_base
+        mat_base = LAMINAS[mid]
+        c_base = round(base_area_cm2 * precio_cm2(mat_base) * factor_desperdicio, 2)
+        base_material_id = mid
+        base_fuente = "manual"
+
+    # ── MATERIAL LUZ + LEDs + FUENTE + DISTANCIADORES ────────────────────
+    luz_w_cm = luz_h_cm = 0.0
+    luz_area_cm2 = 0.0
+    c_luz_mat = c_luz_leds = c_luz_fuente = c_luz_dist = 0.0
+    modulos_luz = 0
+    watts_luz   = 0.0
+    led_luz    = {"nombre": "Sin iluminación", "precio_modulo": 0,
+                  "watts_modulo": 0, "ip": "—", "lumenes": 0}
+    fuente_luz = {"nombre": "Sin fuente", "precio": 0}
+    mat_luz    = None
+    if piezas_luz:
+        # Material: si no se especifica, usa el mismo del corte
+        lmid = luz_material_id or material_id
+        if lmid not in LAMINAS:
+            lmid = material_id
+        mat_luz = LAMINAS[lmid]
+        luz_material_id = lmid
+        luz_w_cm, luz_h_cm = _bbox_conjunto(piezas_luz, sf)
+        luz_area_cm2 = _area_material_cm2(piezas_luz, sf, modo_corte)
+        c_luz_mat = round(luz_area_cm2 * precio_cm2(mat_luz) * factor_desperdicio, 2)
+
+        # LEDs modo halo: 1 corrida por perímetro, mín 3 por pieza
+        led_sel = None
+        if luz_led_id and luz_led_id != "auto":
+            led_sel = next((l for l in LEDS_CANAL if l.get("id") == luz_led_id), None)
+        if led_sel is None:
+            # Sin cercha declarada → tamaño de canal "shallow" (~3 cm equivalente)
+            led_sel = led_recomendado(max(luz_cercha_cm, 3.0), "interior")
+        led_luz = led_sel
+        modulos_luz = sum(
+            max(3, math.ceil(p.perimeter_cm / _ESPACIADO_HALO_CM))
+            for p in piezas_luz
+        )
+        watts_luz  = modulos_luz * led_luz["watts_modulo"]
+        c_luz_leds = round(modulos_luz * led_luz["precio_modulo"], 2)
+
+        fuente_luz = fuente_optima(watts_luz, "interior")
+        frac_f = max(0.20, watts_luz / fuente_luz["watts"]) if fuente_luz.get("watts", 0) > 0 else 1.0
+        c_luz_fuente = round(fuente_luz["precio"] * frac_f, 2)
+
+        c_luz_dist = round(
+            len(piezas_luz) * max(1, luz_juegos_dist_por_pieza) * DISTANCIADORES["precio"],
+            2,
+        )
+
+    # ── SUBTOTAL / IVA / TOTAL ───────────────────────────────────────────
+    subtotal = c_corte + c_base + c_luz_mat + c_luz_leds + c_luz_fuente + c_luz_dist
     iva      = subtotal * 0.16
     total    = subtotal + iva
 
-    precio_cm     = PRECIOS_BASE["precio_cm"]
-    multiplicador = PRECIOS_BASE["multiplicadores"].get(tipo_multiplicador, 2.0)
+    # ── PRECIO POR PIEZA (fórmula altura × precio_cm × multiplicador) ────
+    precio_cm  = PRECIOS_BASE["precio_cm"]
+    mult_corte = PRECIOS_BASE["multiplicadores"].get(tipo_multiplicador, 2.0)
+    mult_luz   = PRECIOS_BASE["multiplicadores"].get(luz_tipo_multiplicador, 2.5)
 
-    # Fase G: per-pieza con costo + receta (planas NO llevan luz/cercha/fuente)
+    perimetro_total     = sum(p.perimeter_cm for p in piezas)
+
     desglose_letras = []
     precio_formula_total = 0.0
-    for p in letras:
-        alto_cm   = round(p.bbox["h"] * svg_data.scale_factor, 2)
-        ancho_cm  = round(p.bbox["w"] * svg_data.scale_factor, 2)
+    for p in piezas:
+        alto_cm   = round(p.bbox["h"] * sf, 2)
+        ancho_cm  = round(p.bbox["w"] * sf, 2)
         area_bbox = round(alto_cm * ancho_cm, 2)
-        costo_mat = round(area_bbox * ppcm2_mat, 2)
-        precio_letra = round(alto_cm * precio_cm * multiplicador, 2)
-        precio_formula_total += precio_letra
-        margen_pct = round((precio_letra - costo_mat) / precio_letra * 100, 1) if precio_letra > 0 else 0.0
+
+        if p in piezas_luz:
+            mat_id_pz  = luz_material_id or material_id
+            mat_nom_pz = (mat_luz or mat_corte)["nombre"]
+            mult_pz    = mult_luz
+            capa_pz    = "luz"
+            ppcm2_pz   = precio_cm2(mat_luz or mat_corte)
+            n_mod_pz   = max(3, math.ceil(p.perimeter_cm / _ESPACIADO_HALO_CM))
+            watts_pz   = n_mod_pz * (led_luz.get("watts_modulo") or 0)
+        elif p in piezas_base:
+            mat_id_pz  = base_material_id or material_id
+            mat_nom_pz = (mat_base or mat_corte)["nombre"]
+            mult_pz    = mult_corte
+            capa_pz    = "base"
+            ppcm2_pz   = precio_cm2(mat_base or mat_corte)
+            n_mod_pz   = 0
+            watts_pz   = 0.0
+        else:
+            mat_id_pz  = material_id
+            mat_nom_pz = mat_corte["nombre"]
+            mult_pz    = mult_corte
+            capa_pz    = "corte"
+            ppcm2_pz   = ppcm2_corte
+            n_mod_pz   = 0
+            watts_pz   = 0.0
+
+        # costo_mat_pz aquí es el costo de "esta pieza sola" (bbox individual).
+        # Solo se cobra al total cuando modo_corte == 'pieza'. En modo 'areas'
+        # queda como referencia informativa — el total del material lo
+        # dominan c_corte/c_base/c_luz_mat calculados por bbox conjunto.
+        costo_mat_pz = round(area_bbox * ppcm2_pz * factor_desperdicio, 2)
+        precio_pz    = round(alto_cm * precio_cm * mult_pz, 2)
+        precio_formula_total += precio_pz
+        margen_pct = round((precio_pz - costo_mat_pz) / precio_pz * 100, 1) if precio_pz > 0 else 0.0
+
         desglose_letras.append({
             "id":               p.id,
             "svg_id":           getattr(p, "svg_id", "") or p.id,
+            "capa":             capa_pz,
             "alto_cm":          alto_cm,
             "ancho_cm":         ancho_cm,
             "area_bbox_cm2":    area_bbox,
@@ -1193,27 +1462,29 @@ def cotizar_planas(
             "cercha_neta_cm":   0,
             "cercha_total_cm":  0,
             "cercha_area_cm2":  0,
-            "cercha_altura_cm": 0,
-            "material_cara_id":     material_id,
-            "material_cara_nombre": mat["nombre"],
-            # Receta: planas son corte plano único, sin cercha ni iluminación
-            "lleva_cercha":         False,
-            "lleva_luz":            False,
+            "cercha_altura_cm": luz_cercha_cm if capa_pz == "luz" else 0,
+            "material_cara_id":     mat_id_pz,
+            "material_cara_nombre": mat_nom_pz,
+            "lleva_cercha":         capa_pz == "luz" and luz_cercha_cm > 0,
+            "lleva_luz":            capa_pz == "luz",
             "lleva_fondo":          False,
-            "lleva_distanciadores": False,
-            "n_modulos_led":        0,
-            "watts":                0.0,
-            "costo_cara":           costo_mat,
+            "lleva_distanciadores": capa_pz == "luz",
+            "n_modulos_led":        n_mod_pz,
+            "watts":                round(watts_pz, 1),
+            "costo_cara":           costo_mat_pz,
             "costo_cercha":         0.0,
             "costo_fondo":          0.0,
-            "costo_leds":           0.0,
+            "costo_leds":           0.0,   # el total se factura en c_luz_leds (evita doble cobro)
             "costo_fuente":         0.0,
             "costo_pegamento":      0.0,
             "costo_distanciadores": 0.0,
             "costo_extras":         0.0,
-            "costo_mat":            costo_mat,
-            "costo_total":          costo_mat,
-            "precio_letra":         precio_letra,
+            "costo_mat":            costo_mat_pz,
+            "costo_total":          costo_mat_pz,
+            # Flag para el frontend: cuando True, `costo_*` es referencia
+            # (no forma parte del total cobrado). Solo aplica a planas.
+            "costo_es_informativo": modo_corte == "areas",
+            "precio_letra":         precio_pz,
             "margen_real_pct":      margen_pct,
         })
 
@@ -1221,63 +1492,195 @@ def cotizar_planas(
     precio_formula_ajustado = round(precio_formula_total * (1 + ajuste_pct / 100), 2)
     precio_venta_costo      = round(total / (1 - margen_ganancia), 2)
 
-    # Fase G: desglose por componente (planas solo tienen cara)
+    # ── DESGLOSE POR COMPONENTE ──────────────────────────────────────────
+    # Info estructurada por bloque para que la UI pinte un panel resumen
+    # (Base / Corte / Luz) sin tener que reparsear el desglose humano.
+    bloques_planas: dict = {}
+    if c_corte > 0 or piezas_corte:
+        bloques_planas["corte"] = {
+            "activo":      True,
+            "n_piezas":    len(piezas_corte),
+            "w_cm":        round(corte_w_cm, 1),
+            "h_cm":        round(corte_h_cm, 1),
+            "area_cm2":    round(corte_area_cm2, 1),
+            "material_id": material_id,
+            "material":    mat_corte["nombre"],
+            "modo":        modo_corte,
+            "desperdicio_pct": round(desperdicio_pct, 1),
+            "costo":       round(c_corte, 2),
+        }
+    if c_base > 0:
+        bloques_planas["base"] = {
+            "activo":      True,
+            "n_piezas":    len(piezas_base) if piezas_base else 1,
+            "w_cm":        round(base_w_cm, 1),
+            "h_cm":        round(base_h_cm, 1),
+            "area_cm2":    round(base_area_cm2, 1),
+            "material_id": base_material_id,
+            "material":    mat_base["nombre"] if mat_base else "",
+            "fuente":      base_fuente,   # "svg" | "manual"
+            "modo":        modo_corte if piezas_base else "areas",
+            "desperdicio_pct": round(desperdicio_pct, 1),
+            "costo":       round(c_base, 2),
+        }
+    if c_luz_mat > 0 or piezas_luz:
+        perim_luz_total_cm = sum(p.perimeter_cm for p in piezas_luz)
+        bloques_planas["luz"] = {
+            "activo":      True,
+            "n_piezas":    len(piezas_luz),
+            "w_cm":        round(luz_w_cm, 1),
+            "h_cm":        round(luz_h_cm, 1),
+            "area_cm2":    round(luz_area_cm2, 1),
+            "perimetro_total_cm": round(perim_luz_total_cm, 1),
+            "metros_lineales":    round(perim_luz_total_cm / 100.0, 2),
+            "material_id": luz_material_id,
+            "material":    mat_luz["nombre"] if mat_luz else "",
+            "modo":        modo_corte,
+            "desperdicio_pct": round(desperdicio_pct, 1),
+            "cercha_cm":   round(luz_cercha_cm, 1),
+            "costo_material": round(c_luz_mat, 2),
+            "led": {
+                "nombre":       led_luz.get("nombre", ""),
+                "id":           led_luz.get("id", ""),
+                "modulos":      modulos_luz,
+                "watts_por_modulo": led_luz.get("watts_modulo", 0),
+                "watts_totales":round(watts_luz, 2),
+                "costo":        round(c_luz_leds, 2),
+            },
+            "fuente": {
+                "nombre":       fuente_luz.get("nombre", ""),
+                "capacidad_w":  fuente_luz.get("watts", 0),
+                "costo":        round(c_luz_fuente, 2),
+            },
+            "distanciadores": {
+                "juegos_por_pieza": max(1, luz_juegos_dist_por_pieza),
+                "n_piezas":         len(piezas_luz),
+                "total_juegos":     len(piezas_luz) * max(1, luz_juegos_dist_por_pieza),
+                "precio_juego":     DISTANCIADORES["precio"],
+                "costo":            round(c_luz_dist, 2),
+            },
+            "costo_total":  round(c_luz_mat + c_luz_leds + c_luz_fuente + c_luz_dist, 2),
+        }
+
     desglose_costos_componentes = {
-        "cara":           round(c_mat, 2),
+        "cara":           round(c_corte, 2),
+        "base":           round(c_base, 2),
+        "luz":            round(c_luz_mat, 2),
         "cercha":         0.0,
         "fondo":          0.0,
-        "leds":           0.0,
-        "fuente":         0.0,
+        "leds":           round(c_luz_leds, 2),
+        "fuente":         round(c_luz_fuente, 2),
         "pegamento":      0.0,
-        "distanciadores": 0.0,
+        "distanciadores": round(c_luz_dist, 2),
         "silvatrim":      0.0,
         "vinil_cercha":   0.0,
         "total_material": round(subtotal, 2),
+        # Info estructurada para la UI (solo planas)
+        "bloques":        bloques_planas,
     }
 
-    # Fase H: warnings — planas nunca son iluminadas
+    # ── DESGLOSE LEGIBLE (renglones humanos para PDF) ────────────────────
+    def _dim_txt(w, h, area, n_piezas, modo):
+        if modo == "pieza":
+            return f"{n_piezas} pieza(s) · {area:.0f} cm² sumados"
+        return f"{w:.0f}×{h:.0f} cm ({area:.0f} cm²)"
+
+    desglose_h = []
+    if c_corte > 0:
+        desglose_h.append({
+            "concepto": (f"Corte · {mat_corte['nombre']} · "
+                         f"{_dim_txt(corte_w_cm, corte_h_cm, corte_area_cm2, len(piezas_corte), modo_corte)}"
+                         f" + {desperdicio_pct:.0f}% desperdicio"),
+            "costo": c_corte,
+        })
+    if c_base > 0:
+        n_base = len(piezas_base) if piezas_base else 1
+        modo_base = modo_corte if piezas_base else "areas"
+        desglose_h.append({
+            "concepto": (f"Base · {mat_base['nombre']} · "
+                         f"{_dim_txt(base_w_cm, base_h_cm, base_area_cm2, n_base, modo_base)}"
+                         f" + {desperdicio_pct:.0f}% desperdicio"),
+            "costo": c_base,
+        })
+    if c_luz_mat > 0:
+        desglose_h.append({
+            "concepto": (f"Luz (material) · {mat_luz['nombre']} · "
+                         f"{_dim_txt(luz_w_cm, luz_h_cm, luz_area_cm2, len(piezas_luz), modo_corte)}"
+                         f" + {desperdicio_pct:.0f}% desperdicio"),
+            "costo": c_luz_mat,
+        })
+    if c_luz_leds > 0:
+        desglose_h.append({
+            "concepto": (f"LEDs {led_luz['nombre']} · {modulos_luz} módulos "
+                         f"({watts_luz:.1f} W) para {len(piezas_luz)} pieza(s)"),
+            "costo": c_luz_leds,
+        })
+    if c_luz_fuente > 0:
+        desglose_h.append({
+            "concepto": f"Fuente {fuente_luz['nombre']} ({watts_luz:.1f} W)",
+            "costo": c_luz_fuente,
+        })
+    if c_luz_dist > 0:
+        desglose_h.append({
+            "concepto": (f"Distanciadores · {len(piezas_luz)} pieza(s) "
+                         f"× {max(1, luz_juegos_dist_por_pieza)} juego(s)"),
+            "costo": c_luz_dist,
+        })
+
+    # ── WARNINGS ─────────────────────────────────────────────────────────
     warnings: list[str] = []
-    if "con_luz" in tipo_multiplicador:
-        warnings.append(
-            f"Letras planas con multiplicador '{tipo_multiplicador}' (×{multiplicador}) que implica iluminación. "
-            f"Las letras planas NO se iluminan — usa un multiplicador 'sin luz' (≤2.0)."
-        )
-    if multiplicador > 3.0:
-        warnings.append(
-            f"Multiplicador ×{multiplicador} es alto para letras planas (típico es 1.5-2.5). "
-            f"Verifica que sea intencional."
-        )
     if n_huecos:
         warnings.append(
-            f"{n_huecos} pieza(s) con relleno blanco detectadas como hueco/placa de fondo "
+            f"{n_huecos} pieza(s) con relleno blanco detectadas como hueco/placa "
             f"— excluidas del cobro (no se fabrican)."
         )
+    if incluye_base and not piezas_base and real_height_cm <= 0:
+        warnings.append(
+            "Se activó 'incluye base' sin dar el alto real; se infirió del bbox del diseño. "
+            "Ingresa el alto real (cm) para mayor precisión."
+        )
+    orig_luz = sum(1 for p in piezas if p.capa == "luz")
+    if orig_luz and not incluye_luz:
+        warnings.append(
+            f"El SVG trae {orig_luz} pieza(s) en capa 'luz' pero 'incluye iluminación' "
+            f"está apagado — se cotizan como corte plano."
+        )
+    if not piezas_luz and mult_corte > 3.0:
+        warnings.append(
+            f"Multiplicador ×{mult_corte} es alto para letras planas sin luz (típico 1.5-2.5)."
+        )
+    if piezas_luz and mult_corte >= mult_luz:
+        warnings.append(
+            "El multiplicador 'con luz' no es mayor que el 'sin luz' — revisa la configuración."
+        )
+
+    lam_base = laminas_necesarias(base_w_cm * base_h_cm, base_material_id) if mat_base else 0
 
     return QuoteResult(
         tipo="letras_planas",
         tipo_construccion="plana",
-        paths_count=len(letras),
-        altura_letra_cm=round(max((p.bbox["h"] * svg_data.scale_factor for p in letras), default=0), 1),
-        area_cara_cm2=area_total,
+        paths_count=len(piezas),
+        altura_letra_cm=round(max((p.bbox["h"] * sf for p in piezas), default=0), 1),
+        area_cara_cm2=corte_area_cm2,   # "cara" clásico ≡ corte para compatibilidad
         perimetro_total_cm=perimetro_total,
-        cercha_altura_cm=0,
+        cercha_altura_cm=luz_cercha_cm,
         cercha_area_cm2=0,
-        material_cara=mat,
+        material_cara=mat_corte,
         material_cercha={"nombre": "N/A", "precio": 0},
-        material_fondo={"nombre": "N/A", "precio": 0},
-        laminas_cara=lam,
+        material_fondo=mat_base if mat_base else {"nombre": "N/A", "precio": 0},
+        laminas_cara=lam_corte,
         laminas_cercha=0,
-        laminas_fondo=0,
-        led={"nombre": "Sin iluminación", "precio_modulo": 0, "watts_modulo": 0, "ip": "—", "lumenes": 0},
-        modulos_led=0,
-        watts_total=0.0,
-        fuente={"nombre": "Sin fuente", "precio": 0},
+        laminas_fondo=lam_base,
+        led=led_luz,
+        modulos_led=modulos_luz,
+        watts_total=watts_luz,
+        fuente=fuente_luz,
         pegamento={"nombre": "N/A", "precio_aprox": 0},
-        costo_material_cara=c_mat,
+        costo_material_cara=c_corte,
         costo_material_cercha=0.0,
-        costo_material_fondo=0.0,
-        costo_led=0.0,
-        costo_fuente=0.0,
+        costo_material_fondo=c_base,
+        costo_led=c_luz_leds,
+        costo_fuente=c_luz_fuente,
         costo_pegamento=0.0,
         subtotal=subtotal,
         iva=iva,
@@ -1285,10 +1688,10 @@ def cotizar_planas(
         precio_venta_sugerido=precio_formula_ajustado,
         precio_venta_costo=precio_venta_costo,
         tipo_multiplicador=tipo_multiplicador,
-        multiplicador_valor=multiplicador,
+        multiplicador_valor=mult_corte,
         precio_sin_ajuste=precio_formula_total,
         ajuste_pct=ajuste_pct,
-        desglose=[{"concepto": f"{mat['nombre']} · {area_total:.0f} cm² × ${ppcm2_mat:.4f}/cm² ({lam} lám.)", "costo": c_mat}],
+        desglose=desglose_h if desglose_h else [{"concepto": "Sin costo", "costo": 0.0}],
         desglose_letras=desglose_letras,
         desglose_costos_componentes=desglose_costos_componentes,
         warnings=warnings,

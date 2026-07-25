@@ -355,10 +355,28 @@ async def api_parse_svg(file: UploadFile = File(...)):
             "area_px": round(p.area_px, 2),
             "is_closed": p.is_closed,
             "es_hueco": p.es_hueco,
+            "capa": p.capa,
             "bbox": p.bbox,
         }
         for p in svg_data.paths
     ]
+
+    # Ancho real de la capa 'base' según las unidades del SVG (Illustrator).
+    # Se prefiere sobre artboard_w_cm para auto-rellenar el input "ancho real"
+    # en letras planas: refleja la dimensión física de la base, no el artboard.
+    base_real_w_cm = 0.0
+    base_real_h_cm = 0.0
+    if svg_data.artboard_w_cm > 0 and svg_data.viewbox_w > 0:
+        base_ps = [p for p in svg_data.paths
+                   if p.capa == "base" and p.is_closed and not p.es_hueco]
+        if base_ps:
+            xs_min = min(p.bbox["x"] for p in base_ps)
+            xs_max = max(p.bbox["x"] + p.bbox["w"] for p in base_ps)
+            ys_min = min(p.bbox["y"] for p in base_ps)
+            ys_max = max(p.bbox["y"] + p.bbox["h"] for p in base_ps)
+            unidad_cm = svg_data.artboard_w_cm / svg_data.viewbox_w
+            base_real_w_cm = (xs_max - xs_min) * unidad_cm
+            base_real_h_cm = (ys_max - ys_min) * unidad_cm
 
     return {
         "session_id": sid,
@@ -371,6 +389,9 @@ async def api_parse_svg(file: UploadFile = File(...)):
         # alias retro-compatible para clientes viejos que aún lean el nombre anterior
         "max_letter_height_px": round(svg_data.max_pieza_height_px, 2),
         "artboard_w_cm": round(svg_data.artboard_w_cm, 2),
+        "capas_detectadas": svg_data.capas_detectadas or {"base": 0, "corte": 0, "luz": 0},
+        "base_real_w_cm": round(base_real_w_cm, 2),
+        "base_real_h_cm": round(base_real_h_cm, 2),
     }
 
 
@@ -432,6 +453,18 @@ class PlanasRequest(_InstMixin):
     margen_ganancia: float = 0.35
     tipo_multiplicador: str = "aluminio_sin_luz"
     ajuste_pct: float = 0.0
+    # ── Extensión 3 capas (base/corte/luz) ─────────────────────────────
+    real_height_cm: float = 0.0
+    incluye_base: bool = False
+    base_material_id: str = ""
+    incluye_luz: bool = False
+    luz_material_id: str = ""
+    luz_led_id: str = "auto"
+    luz_cercha_cm: float = 0.0
+    luz_juegos_dist_por_pieza: int = 1
+    luz_tipo_multiplicador: str = "aluminio_con_luz"
+    desperdicio_pct: float = 15.0
+    modo_corte: str = "areas"           # "areas" | "pieza"
     cliente: str = ""
     notas: str = ""
 
@@ -637,6 +670,17 @@ async def api_cotizar_planas(req: PlanasRequest):
             margen_ganancia=req.margen_ganancia,
             tipo_multiplicador=req.tipo_multiplicador,
             ajuste_pct=req.ajuste_pct,
+            real_height_cm=req.real_height_cm,
+            incluye_base=req.incluye_base,
+            base_material_id=req.base_material_id,
+            incluye_luz=req.incluye_luz,
+            luz_material_id=req.luz_material_id,
+            luz_led_id=req.luz_led_id,
+            luz_cercha_cm=req.luz_cercha_cm,
+            luz_juegos_dist_por_pieza=req.luz_juegos_dist_por_pieza,
+            luz_tipo_multiplicador=req.luz_tipo_multiplicador,
+            desperdicio_pct=req.desperdicio_pct,
+            modo_corte=req.modo_corte,
         )
     except Exception as e:
         raise HTTPException(500, f"Error en cálculo: {e}")
