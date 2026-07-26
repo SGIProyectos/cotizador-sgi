@@ -602,7 +602,14 @@ def generar_pdf_ot(result, meta: dict, svg_text: str = "",
     if result.material_fondo and result.material_fondo.get("nombre"):
         lams_f = getattr(result, "laminas_fondo", 0)
         if lams_f:
-            mat_rows.append([f"Láminas {result.material_fondo.get('nombre','—')} (fondo)", f"{lams_f} pza"])
+            # En cajas de luz la placa trasera es "base"; en letras 3D es "fondo" del canal
+            etiqueta_fondo = "base" if result.tipo == "caja_luz" else "fondo"
+            mat_rows.append([f"Láminas {result.material_fondo.get('nombre','—')} ({etiqueta_fondo})", f"{lams_f} pza"])
+    # Bastidor tubular (solo cajas de 2 vistas) — reemplaza al fondo cerrado
+    if getattr(result, "costo_bastidor", 0) > 0 and result.material_bastidor.get("nombre"):
+        m_bast = getattr(result, "metros_bastidor", 0)
+        mat_rows.append([f"Bastidor {result.material_bastidor.get('nombre','—')}",
+                         f"{m_bast:.2f} m"])
     if result.led and result.led.get("nombre"):
         mods = getattr(result, "modulos_led", 0)
         watts = getattr(result, "watts_total", 0)
@@ -976,12 +983,18 @@ def generar_pdf_entrega(result, meta: dict) -> bytes:
     if result.tipo == "caja_luz":
         caja_w, caja_h = _dims_caja(result)
         cuadro = (result.material_cara or {}).get("cuadro_corte")
+        # 1 vista → "Base" (placa alucobond); 2 vistas → "Bastidor tubular" (PTR)
+        estructura_label = ("Bastidor" if getattr(result, "costo_bastidor", 0) > 0
+                            else "Base")
+        estructura_valor = (result.material_bastidor.get("nombre", "—")
+                            if getattr(result, "costo_bastidor", 0) > 0
+                            else result.material_fondo.get("nombre", "—"))
         desc_rows = [
             ["Producto",   tipo_label],
             ["Medidas",    f"{caja_w:.0f} × {caja_h:.0f} cm · profundidad {result.cercha_altura_cm:.0f} cm"],
             ["Cara",       result.material_cara.get("nombre", "—")],
             ["Sercha",     result.material_cercha.get("nombre", "—")],
-            ["Fondo",      result.material_fondo.get("nombre", "—")],
+            [estructura_label, estructura_valor],
         ]
         if cuadro:
             desc_rows.append(["Gráfico", f"Vinil de corte {cuadro['ancho_cm']:.0f} × {cuadro['alto_cm']:.0f} cm ({cuadro.get('vinil_nombre','')})"])

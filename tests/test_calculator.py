@@ -535,11 +535,42 @@ class TestCotizarCaja:
         assert "cuadro_corte" in r.material_cara
         assert r.material_cara["vinil_area_m2"] > 0
 
-    def test_dos_vistas_cambia_fondo(self, caja_svg):
+    def test_dos_vistas_reemplaza_fondo_por_bastidor(self, caja_svg):
+        """Cambio de modelo (jul-2026): 2 vistas NO lleva fondo cerrado — lleva
+        bastidor tubular perimetral porque ambas caras son translúcidas.
+        1 vista sigue con placa alucobond como base."""
         r1 = self._quote(caja_svg, vistas=1)
-        r2 = self._quote(caja_svg, vistas=2)
-        # vistas=1 usa alucobon, vistas=2 usa PVC
-        assert r1.material_fondo["nombre"] != r2.material_fondo["nombre"]
+        r2 = self._quote(caja_svg, vistas=2, tipo_cara="acrilico")
+        # 1 vista → base cerrada alucobond, sin bastidor
+        assert r1.costo_material_fondo > 0
+        assert r1.costo_bastidor == 0.0
+        assert "alucobon" in r1.material_fondo["nombre"].lower()
+        # 2 vistas → sin fondo cerrado, con bastidor tubular
+        assert r2.costo_material_fondo == 0.0
+        assert r2.costo_bastidor > 0
+        assert r2.metros_bastidor > 0
+        assert "PTR" in r2.material_bastidor["nombre"]
+
+    def test_bastidor_metros_desde_perimetro(self, caja_svg):
+        """Fórmula: metros = perímetro/100 × factor 1.25 (refuerzos + desperdicio)."""
+        r = self._quote(caja_svg, vistas=2, tipo_cara="acrilico")
+        esperado = round(r.perimetro_total_cm / 100 * 1.25, 2)
+        assert r.metros_bastidor == pytest.approx(esperado, abs=0.02)
+
+    def test_bastidor_costo_es_metros_por_precio_ml(self, caja_svg):
+        r = self._quote(caja_svg, vistas=2, tipo_cara="acrilico")
+        esperado = round(r.metros_bastidor * r.material_bastidor["precio_ml"], 2)
+        assert r.costo_bastidor == pytest.approx(esperado, abs=0.01)
+
+    def test_bastidor_auto_selecciona_por_tamano(self, caja_svg):
+        """tubular_recomendado: chica≤80 int → cal 18; 80-150 → cal 14; >150 → 2×2."""
+        # Caja mediana exterior: PTR 1×1 cal 14 galvanizado
+        r_med = self._quote(caja_svg, real_width_cm=120, vistas=2, tipo_cara="acrilico", uso="exterior")
+        assert "cal 14" in r_med.material_bastidor["nombre"]
+        assert "1\"×1\"" in r_med.material_bastidor["nombre"]
+        # Caja grande: PTR 2×2 cal 14
+        r_grande = self._quote(caja_svg, real_width_cm=200, vistas=2, tipo_cara="acrilico", uso="exterior")
+        assert "2\"×2\"" in r_grande.material_bastidor["nombre"]
 
     def test_outline_ausente_usa_viewbox(self):
         # SVG sin contorno claro: solo elementos de diseño

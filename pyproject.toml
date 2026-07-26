@@ -28,7 +28,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["B011"]  # asserts en tests
+# B011: `assert True` en tests.
+# SIM300: falso positivo con `x == pytest.approx(y)` — idiom pytest estándar.
+"tests/*" = ["B011", "SIM300"]
 
 [tool.ruff.format]
 quote-style = "double"

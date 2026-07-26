@@ -508,10 +508,15 @@ def _construir_bom(result) -> list[tuple[str, str, str]]:
         bom.append(("Cableado", "Cable LED Radox cal 22 + POT cal 18",
                     f"{metros_led:.1f} m + 5 m"))
 
-    # Fondo
+    # Base / Fondo (1 vista) o Bastidor tubular (2 vistas) — excluyentes en caja
     if result.costo_material_fondo > 0 and (result.material_fondo or {}).get("nombre"):
-        bom.append(("Fondo", result.material_fondo["nombre"],
+        # En cajas → "Base" (placa trasera alucobond); en letras 3D → "Fondo" (placa PVC del canal)
+        etiqueta = "Base" if es_caja else "Fondo"
+        bom.append((etiqueta, result.material_fondo["nombre"],
                     f"{result.area_cara_cm2 / 10000:.2f} m²"))
+    if es_caja and getattr(result, "costo_bastidor", 0) > 0 and (result.material_bastidor or {}).get("nombre"):
+        bom.append(("Bastidor", result.material_bastidor["nombre"],
+                    f"{result.metros_bastidor:.2f} m lineales"))
 
     # Iluminación
     if result.modulos_led > 0:
@@ -1071,12 +1076,19 @@ def _ficha_caja(result, caja_w: float, caja_h: float,
     """Filas (etiqueta, valor) de la ficha de la caja para tabla lateral."""
     prof = result.cercha_altura_cm or 0
     cuadro = (result.material_cara or {}).get("cuadro_corte")
+    # 1 vista → "Base" (placa alucobond); 2 vistas → "Bastidor" (PTR tubular)
+    if getattr(result, "costo_bastidor", 0) > 0:
+        estructura_fila = ("Bastidor",
+                           (result.material_bastidor or {}).get("nombre", "—"))
+    else:
+        estructura_fila = ("Base",
+                           (result.material_fondo or {}).get("nombre", "—"))
     filas = [
         ("Caja",        f"{caja_w:.1f} × {caja_h:.1f} cm"),
         ("Profundidad", f"{prof:.0f} cm"),
         ("Cara",        (result.material_cara or {}).get("nombre", "—")),
         ("Sercha",      (result.material_cercha or {}).get("nombre", "—")),
-        ("Fondo",       (result.material_fondo or {}).get("nombre", "—")),
+        estructura_fila,
     ]
     if cuadro:
         filas.append(("Cuadro corte",

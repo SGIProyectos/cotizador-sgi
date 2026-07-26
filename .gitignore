@@ -67,3 +67,8 @@ PLANAS/
 # Debug / runtime
 server_err.log
 tmp_check.py
+
+# Videos de referencia (WhatsApp, screencasts)
+*.mp4
+*.mov
+*.webm
