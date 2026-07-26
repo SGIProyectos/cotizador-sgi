@@ -22,7 +22,14 @@ from pydantic import BaseModel, ConfigDict
 
 import db
 import nesting
-from calculator import QuoteResult, cotizar_caja, cotizar_letras, cotizar_planas, parse_svg
+from calculator import (
+    QuoteResult,
+    apply_icf_to_result,
+    cotizar_caja,
+    cotizar_letras,
+    cotizar_planas,
+    parse_svg,
+)
 from catalog_data import (
     GRUAS,
     catalog_apply,
@@ -423,6 +430,7 @@ class LetrasRequest(_InstMixin):
     vinil_cercha_id: str = ""
     silvatrim_id: str = "auto"
     led_id: str = "auto"
+    led_color: str = "auto"   # auto|blanco|rojo|verde|azul|rgb
     cliente: str = ""
     notas: str = ""
 
@@ -577,7 +585,10 @@ async def api_cotizar_letras(req: LetrasRequest):
             vinil_cercha_id=req.vinil_cercha_id,
             silvatrim_id=req.silvatrim_id,
             led_id=req.led_id,
+            led_color=req.led_color,
         )
+        apply_icf_to_result(svg_data, result, mo_tarifa=req.mo_tarifa,
+                            material_cara_id=req.tipo_cara if req.tipo_cara != "auto" else "")
     except Exception as e:
         raise HTTPException(500, f"Error en cálculo: {e}")
 
@@ -631,6 +642,8 @@ async def api_cotizar_caja(req: CajaRequest):
             mo_horas=req.mo_horas,
             mo_tarifa=req.mo_tarifa,
         )
+        apply_icf_to_result(svg_data, result, mo_tarifa=req.mo_tarifa,
+                            material_cara_id=req.tipo_cara)
     except Exception as e:
         raise HTTPException(500, f"Error en cálculo: {e}")
 
@@ -682,6 +695,8 @@ async def api_cotizar_planas(req: PlanasRequest):
             desperdicio_pct=req.desperdicio_pct,
             modo_corte=req.modo_corte,
         )
+        apply_icf_to_result(svg_data, result, mo_tarifa=req.mo_tarifa,
+                            material_cara_id=req.material_id)
     except Exception as e:
         raise HTTPException(500, f"Error en cálculo: {e}")
 
@@ -1273,18 +1288,39 @@ def _result_to_dict(r: QuoteResult, qid: str) -> dict:
                 "costo": round(r.costo_material_cercha, 2),
             },
             "fondo": {
+                # Etiqueta UI: en cajas 1 vista → "Base"; en letras 3D → sigue
+                # "Fondo" (placa PVC atrás del canal). El key JSON queda como
+                # "fondo" por compat con clientes viejos; el label sale en la UI.
                 "nombre": r.material_fondo.get("nombre"),
                 "laminas": r.laminas_fondo,
                 "costo": round(r.costo_material_fondo, 2),
+                "label": "Base" if r.tipo == "caja_luz" else "Fondo",
+            },
+            "bastidor": {
+                # Solo aplica a cajas de 2 vistas — reemplaza el fondo cerrado
+                "nombre": r.material_bastidor.get("nombre", ""),
+                "metros": round(r.metros_bastidor, 2),
+                "precio_ml": r.material_bastidor.get("precio_ml", 0),
+                "costo": round(r.costo_bastidor, 2),
             },
         },
         "iluminacion": {
             "led": r.led.get("nombre"),
-            "modulos": r.modulos_led,
+            "led_id": r.led.get("id", ""),
+            "led_tipo": r.led.get("tipo_led", ""),
+            "modulos": r.modulos_led,                # cantidad atómica (módulos o barras)
+            "tiras": r.tiras_led,                     # 0 si no aplica, >0 si se compra por tira
+            "modulos_por_tira": r.led.get("modulos_tira") if r.tiras_led > 0 else None,
+            "precio_modulo": r.led.get("precio_modulo"),
+            # precio de tira: letras canal usa `precio_tira_20`, cajas usa `precio`
+            "precio_tira": (r.led.get("precio_tira_20") or r.led.get("precio"))
+                           if r.tiras_led > 0 else None,
+            "lumenes_por_led": r.led.get("lumenes"),
             "watts_total": round(r.watts_total, 2),
             "fuente": r.fuente.get("nombre"),
             "costo_led": round(r.costo_led, 2),
             "costo_fuente": round(r.costo_fuente, 2),
+            "categoria_caja": r.categoria_caja,   # pequena/mediana/grande/gigante
         },
         "pegamento": {
             "nombre": r.pegamento.get("nombre"),
@@ -1326,6 +1362,17 @@ def _result_to_dict(r: QuoteResult, qid: str) -> dict:
         "desglose_letras": r.desglose_letras,
         "desglose_costos_componentes": r.desglose_costos_componentes,
         "warnings": r.warnings,
+        "icf": {
+            "activo":       bool(r.icf_desglose_min),
+            "calibrado":    r.icf_calibrado,
+            "features":     r.icf_features,
+            "desglose_min": r.icf_desglose_min,
+            "total_min":    round(r.icf_total_min, 2),
+            "total_h":      round(r.icf_total_min / 60.0, 3) if r.icf_total_min else 0.0,
+            "mo_costo":     round(r.mo_costo_icf, 2),
+            "mo_manual":    round(r.mo_total, 2),
+            "delta_costo":  round(r.mo_costo_icf - r.mo_total, 2) if r.mo_costo_icf > 0 else 0.0,
+        },
         "pdf_url": f"/api/pdf/{qid}",
     }
 
@@ -1386,6 +1433,7 @@ class CatalogPayload(BaseModel):
     vinilos_cercha:     list | None = None
     tipos_construccion: dict | None = None
     gruas:              list | None = None
+    icf:                dict | None = None
 
 
 @app.post("/api/catalog")

@@ -358,57 +358,31 @@ LEDS_CANAL = [
 ]
 
 # ─── LEDS PARA CAJAS DE LUZ ─────────────────────────────────────────────────
+# Fuente: catálogo Signalux (jul-2026) — categorías cajas-de-luz-interior y
+# cajas-de-luz-exterior. Cada LED lleva `tamano_caja` (pequena/mediana/grande/
+# gigante) que usa recomendar_led_caja() para priorizar por lado_mayor real.
 LEDS_CAJA = {
     "interior": [
         {
-            "id": "backlite_rgb",
-            "nombre": "Barra LED Backlite RGB",
-            "tipo_led": "backlite",
-            "precio": 93.52,
-            "watts": 6,
-            "lumenes": None,
-            "ip": "IP20",
-            "profundidad_min": 6, "profundidad_max": 18,
+            "id": "sign_edge_01_int",
+            "nombre": "Módulo LED Sign Edge 01",
+            "tipo_led": "perimetral",
+            # `espaciado_cm` = distancia entre CENTROS al instalar en perímetro.
+            # NO es el largo del módulo (4.3 cm). En obra se separan ~15 cm para
+            # cobertura estándar con haz 10°×65° (verificado con instalador real).
+            "espaciado_cm": 15,
+            "largo_modulo_cm": 4.3,
+            "modulos_tira": 20,
+            "max_cara_cm": 60,
+            "precio": 330.60,
+            "precio_modulo": 16.53,
+            "watts": 1.32,
+            "lumenes": 125,
+            "ip": "IP67",
+            "profundidad_min": 8, "profundidad_max": 15,
             "vistas": 1,
-        },
-        {
-            "id": "backlite",
-            "nombre": "Barra LED Backlite",
-            "tipo_led": "backlite",
-            "precio_serie_10": 551.00,
-            "precio": 55.10,
-            "watts": 5,
-            "lumenes": 600,
-            "ip": "IP33",
-            "profundidad_min": 6, "profundidad_max": 20,
-            "vistas": 1,
-        },
-        {
-            "id": "signaflex_cct",
-            "nombre": "Tira LED Signaflex CCT",
-            "tipo_led": "backlite",
-            "precio_tira_5m": 662.36,
-            "precio": 662.36,
-            "watts": 50,
-            "lumenes": 5000,
-            "ip": "IP20",
-            "profundidad_min": 6, "profundidad_max": 20,
-            "vistas": 1,
-            "voltaje": 24,
-            "nota": "Solo interior. Tira 5 m. CCT 2700-13000 K ajustable.",
-        },
-        {
-            "id": "edgelite_42",
-            "nombre": "Barra LED Edgelite Osram 42",
-            "tipo_led": "edgelite",
-            "largo_cm": 42,
-            "max_cara_cm": 120,
-            "precio": 375.93,
-            "watts": 15,
-            "lumenes": 1650,
-            "ip": "IP33",
-            "profundidad_min": 10, "profundidad_max": 40,
-            "vistas": 1,
+            "tamano_caja": "pequena",
+            "voltaje": 12,
         },
         {
             "id": "edgelite_21",
@@ -422,9 +396,121 @@ LEDS_CAJA = {
             "ip": "IP33",
             "profundidad_min": 10, "profundidad_max": 40,
             "vistas": 1,
+            "tamano_caja": "mediana",
+            "voltaje": 24,
+        },
+        {
+            "id": "edgelite_42",
+            "nombre": "Barra LED Edgelite Osram 42",
+            "tipo_led": "edgelite",
+            "largo_cm": 42,
+            "max_cara_cm": 120,
+            "precio": 375.93,
+            "watts": 15,   # el Excel dice 0.15W, imposible físicamente con 1650L
+            "lumenes": 1650,
+            "ip": "IP33",
+            "profundidad_min": 10, "profundidad_max": 40,
+            "vistas": 1,
+            "tamano_caja": "grande",
+            "voltaje": 24,
+        },
+        {
+            "id": "backlite",
+            "nombre": "Barra LED Backlite",
+            "tipo_led": "backlite",
+            "precio_serie_10": 551.00,
+            "precio": 55.10,
+            "watts": 5,
+            "lumenes": 600,
+            "ip": "IP33",
+            "profundidad_min": 6, "profundidad_max": 20,
+            "vistas": 1,
+            "tamano_caja": "mediana",
+            "voltaje": 12,
+            "nota": "Barra de fondo — ideal para lona translúcida (1 vista).",
+        },
+        {
+            "id": "backlite_rgb",
+            "nombre": "Barra LED Backlite RGB",
+            "tipo_led": "backlite",
+            "precio": 93.52,
+            "watts": 6,
+            "lumenes": None,
+            "ip": "IP20",
+            "profundidad_min": 6, "profundidad_max": 18,
+            "vistas": 1,
+            "tamano_caja": "mediana",
+            "voltaje": 12,
+            "nota": "RGB — requiere controlador RGB (accesorio).",
+        },
+        {
+            "id": "signaflex_zigzag",
+            "nombre": "Tira LED Signaflex ZIG-ZAG",
+            "tipo_led": "backlite",
+            "precio_tira_5m": 445.96,
+            "precio": 445.96,
+            "watts": 40,
+            "lumenes": None,
+            "ip": "IP20",
+            "profundidad_min": 6, "profundidad_max": 20,
+            "vistas": 1,
+            "tamano_caja": "gigante",
+            "voltaje": 12,
+            "nota": "Tira flexible zig-zag — cubre áreas grandes/curvas.",
+        },
+        {
+            "id": "signaflex_cct",
+            "nombre": "Tira LED Signaflex CCT",
+            "tipo_led": "backlite",
+            "precio_tira_5m": 662.36,
+            "precio": 662.36,
+            "watts": 50,
+            "lumenes": 5000,
+            "ip": "IP20",
+            "profundidad_min": 6, "profundidad_max": 20,
+            "vistas": 1,
+            "tamano_caja": "gigante",
+            "voltaje": 24,
+            "nota": "Tira 5m — CCT 2700-13000K ajustable.",
         },
     ],
     "exterior": [
+        {
+            "id": "sign_edge_01",
+            "nombre": "Módulo LED Sign Edge 01",
+            "tipo_led": "perimetral",
+            # `espaciado_cm` = distancia entre CENTROS al instalar en perímetro.
+            # NO es el largo del módulo (4.3 cm). En obra se separan ~15 cm para
+            # cobertura estándar con haz 10°×65° (verificado con instalador real).
+            "espaciado_cm": 15,
+            "largo_modulo_cm": 4.3,
+            "modulos_tira": 20,
+            "max_cara_cm": 60,
+            "precio": 330.60,
+            "precio_modulo": 16.53,
+            "watts": 1.32,
+            "lumenes": 125,
+            "ip": "IP67",
+            "profundidad_min": 8, "profundidad_max": 15,
+            "vistas": 1,
+            "tamano_caja": "pequena",
+            "voltaje": 12,
+        },
+        {
+            "id": "eco_edgelite_24",
+            "nombre": "Barra LED Eco Edgelite 24",
+            "tipo_led": "edgelite",
+            "largo_cm": 24,
+            "max_cara_cm": 80,
+            "precio": 196.25,
+            "watts": 6,
+            "lumenes": 540,
+            "ip": "IP65",
+            "profundidad_min": 12, "profundidad_max": 40,
+            "vistas": 2,
+            "tamano_caja": "mediana",
+            "voltaje": 24,
+        },
         {
             "id": "eco_edgelite_56",
             "nombre": "Barra LED Eco Edgelite 56",
@@ -437,54 +523,94 @@ LEDS_CAJA = {
             "ip": "IP65",
             "profundidad_min": 12, "profundidad_max": 40,
             "vistas": 2,
+            "tamano_caja": "grande",
+            "voltaje": 24,
         },
         {
-            "id": "eco_edgelite_24",
-            "nombre": "Barra LED Eco Edgelite 24",
-            "tipo_led": "edgelite",
-            "largo_cm": 24,
-            "max_cara_cm": 80,
-            "precio": 196.25,
-            "watts": 6,
-            "lumenes": 540,
-            "ip": "IP65",
-            "profundidad_min": 12, "profundidad_max": 20,
+            "id": "sign_03_pro",
+            "nombre": "Módulo LED Sign 03 PRO (grid)",
+            "tipo_led": "modulo_panel",
+            "densidad_modulos_m2": 25,
+            "precio": 214.60,     # precio tira 20 módulos
+            "precio_modulo": 10.73,
+            "watts": 0.72,
+            "lumenes": 100,
+            "ip": "IP66",
+            "profundidad_min": 8, "profundidad_max": 15,
             "vistas": 1,
+            "tamano_caja": "gigante",
+            "voltaje": 12,
+            "nota": "Solo para cajas gigantes (>200 cm) donde barra no alcanza.",
         },
         {
-            "id": "sign_edge_01",
-            "nombre": "Módulo LED Sign Edge 01",
-            "tipo_led": "perimetral",
-            "espaciado_cm": 4.3,
-            "largo_modulo_cm": 4.3,
-            "modulos_tira": 20,
-            "max_cara_cm": 60,
-            "precio": 330.60,
-            "precio_modulo": 16.53,
-            "watts": 1.32,
-            "lumenes": 125,
+            "id": "sign_02_high",
+            "nombre": "Módulo LED Sign 02 HIGH (grid)",
+            "tipo_led": "modulo_panel",
+            "densidad_modulos_m2": 25,
+            "precio": 290.93,
+            "precio_modulo": 14.55,
+            "watts": 0.72,
+            "lumenes": 110,
             "ip": "IP67",
             "profundidad_min": 8, "profundidad_max": 15,
             "vistas": 1,
+            "tamano_caja": "gigante",
+            "voltaje": 12,
+            "nota": "Solo para cajas gigantes con requerimiento alto IP.",
         },
         {
-            "id": "sign_03_high_panel",
-            "nombre": "Módulo LED Sign 03 HIGH (grid panel)",
+            "id": "sign_03_high",
+            "nombre": "Módulo LED Sign 03 HIGH (grid)",
             "tipo_led": "modulo_panel",
-            # 25 módulos por m² = grid 20×20 cm, calibrado para interior
-            # ultra blanco (alucobon blanco brillante reduce ~25% el número de
-            # módulos necesarios vs el grid 15×15 estándar).
             "densidad_modulos_m2": 25,
-            "precio": 5.95,
+            "precio": 370.04,
+            "precio_modulo": 18.50,
             "watts": 1.08,
             "lumenes": 165,
             "ip": "IP66",
             "profundidad_min": 8, "profundidad_max": 15,
             "vistas": 1,
-            "nota": "Default para cajas medianas/grandes con interior ultra blanco.",
+            "tamano_caja": "gigante",
+            "voltaje": 12,
+            "nota": "Solo para cajas gigantes (>200 cm) — grid 20x20 cm.",
+        },
+        {
+            "id": "sign_03_ac",
+            "nombre": "Módulo LED Sign 03 AC (110V directo)",
+            "tipo_led": "modulo_panel",
+            "densidad_modulos_m2": 25,
+            "precio": 713.40,
+            "precio_modulo": 35.67,
+            "watts": 1.2,
+            "lumenes": 165,
+            "ip": "IP66",
+            "profundidad_min": 8, "profundidad_max": 15,
+            "vistas": 1,
+            "tamano_caja": "gigante",
+            "voltaje": 110,
+            "nota": "110V directo — sin fuente externa. Solo cajas gigantes.",
         },
     ],
 }
+
+# ─── ACCESORIOS DE CAJAS DE LUZ (no LEDs, se cotizan aparte si aplica) ─────
+ACCESORIOS_CAJA = [
+    {
+        "id": "controlador_rgb_inalambrico",
+        "nombre": "Controlador LED RGB Inalámbrico + Amplificador",
+        "precio": 0,          # "Consultar precio" en Signalux
+        "aplicacion": "backlite_rgb",
+        "nota": "Requerido para cualquier LED RGB.",
+    },
+    {
+        "id": "accesorios_barras_osram",
+        "nombre": "Accesorios Barras LED Osram 21-42",
+        "precio": 8.70,
+        "precio_max": 22.04,
+        "aplicacion": "edgelite_21,edgelite_42",
+        "nota": "Fijaciones y conectores para barras Edgelite Osram.",
+    },
+]
 
 # ─── NEÓN SEGUNDA GENERACIÓN ─────────────────────────────────────────────────
 NEON_FLEX = {
@@ -783,6 +909,33 @@ GRUAS = [
 
 
 # ─── LED RECOMENDADO PARA CAJA DE LUZ ────────────────────────────────────────
+def categoria_caja(ancho_cm: float, alto_cm: float) -> str:
+    """Clasifica la caja por lado mayor según práctica de rotulación Signalux."""
+    lado_mayor = max(ancho_cm or 0, alto_cm or 0)
+    if lado_mayor <= 0:
+        return "mediana"
+    if lado_mayor <= 60:
+        return "pequena"
+    if lado_mayor <= 120:
+        return "mediana"
+    if lado_mayor <= 200:
+        return "grande"
+    return "gigante"
+
+
+# Preferencia por tamaño real de caja (basada en catálogo Signalux, jul-2026):
+#   pequeña ≤ 60 cm    → perimetral > backlite > edgelite > modulo_panel
+#   mediana 60-120     → edgelite > perimetral > backlite > modulo_panel
+#   grande 120-200     → edgelite > modulo_panel > backlite > perimetral
+#   gigante > 200      → modulo_panel > edgelite > backlite > perimetral
+_PREF_POR_TAMANO = {
+    "pequena": ["perimetral", "backlite", "edgelite", "modulo_panel"],
+    "mediana": ["edgelite", "perimetral", "backlite", "modulo_panel"],
+    "grande":  ["edgelite", "modulo_panel", "backlite", "perimetral"],
+    "gigante": ["modulo_panel", "edgelite", "backlite", "perimetral"],
+}
+
+
 def recomendar_led_caja(
     ancho_cm: float,
     alto_cm: float,
@@ -791,49 +944,54 @@ def recomendar_led_caja(
     profundidad_cm: float = 15,
 ) -> list:
     """
-    Devuelve lista de LEDs recomendados para caja de luz, ordenados por idoneidad.
+    Devuelve lista de LEDs recomendados para caja de luz, ordenada por idoneidad.
 
-    Prioridad (taller SGI, ajustado con NotebookLM):
-    1. modulo_panel — default para cajas medianas/grandes con interior ultra blanco
-       (Sign 03 HIGH grid 20×20 cm, 25 mod/m²). Más económico que edgelite.
-    2. edgelite — barras perimetrales (cuando el cliente las prefiere o la caja
-       es delgada y se necesita proyección hacia adelante).
-    3. perimetral — módulos discretos en el perímetro (Sign Edge 01).
-    4. backlite — barras de fondo (cajas con tela, 1 vista interior).
+    Basado en el catálogo Signalux (jul-2026) — priorización por tamaño real
+    de la caja (lado mayor):
 
-    Para doble vista filtra solo LEDs con vistas >= 2.
+    - **pequeña** (≤60 cm): perimetral (Sign Edge 01) — cabe hasta 60cm, económico.
+    - **mediana** (60-120 cm): edgelite (barras Osram 21 / Eco Edgelite 24) — mejor
+      distribución de luz para tamaños medios sin sobreiluminar.
+    - **grande** (120-200 cm): edgelite (Osram 42 / Eco Edgelite 56) — más barras.
+    - **gigante** (>200 cm): modulo_panel (Sign 03 HIGH grid) — grid disperso
+      llena cara enorme donde una barra no alcanza al centro.
+
+    Filtra por profundidad, `max_cara_cm` (para edgelite y perimetral) y para
+    doble vista sólo LEDs con `vistas >= 2`.
     """
     pool = LEDS_CAJA.get(uso, LEDS_CAJA["exterior"])
-
-    if doble_vista:
-        candidatos = [l for l in pool if l.get("vistas", 1) >= 2]
-        return candidatos or pool
-
+    cat = categoria_caja(ancho_cm, alto_cm)
     lado_corto = min(ancho_cm, alto_cm) if ancho_cm > 0 and alto_cm > 0 else 9999
 
-    # Filtrar por profundidad compatible
-    compatibles = [
-        l for l in pool
-        if l.get("profundidad_min", 0) <= profundidad_cm <= l.get("profundidad_max", 999)
-    ]
+    # 1) Filtro base: profundidad compatible + vistas requeridas
+    def _compatible(l: dict) -> bool:
+        if not (l.get("profundidad_min", 0) <= profundidad_cm <= l.get("profundidad_max", 999)):
+            return False
+        if doble_vista and l.get("vistas", 1) < 2:
+            return False
+        # Edgelite y perimetral tienen `max_cara_cm` (la barra tiene que caber
+        # en el lado corto de la caja). Modulo_panel y backlite no tienen tope.
+        max_cara = l.get("max_cara_cm")
+        return not (max_cara and lado_corto > max_cara)
 
-    modulo_panel = [l for l in compatibles if l.get("tipo_led") == "modulo_panel"]
-    edgelite = sorted(
-        [l for l in compatibles if l.get("tipo_led") == "edgelite" and lado_corto <= l.get("max_cara_cm", 0)],
-        key=lambda x: x.get("lumenes") or 0,
-        reverse=True,
-    )
-    perimetral = [l for l in compatibles if l.get("tipo_led") == "perimetral"]
-    backlite   = [l for l in compatibles if l.get("tipo_led") == "backlite"]
+    compatibles = [l for l in pool if _compatible(l)]
+    if not compatibles:
+        return []
 
-    # Orden de preferencia: modulo_panel > edgelite > perimetral > backlite
-    if modulo_panel:
-        return modulo_panel + edgelite + perimetral + backlite
-    if edgelite:
-        return edgelite + perimetral + backlite
-    if perimetral:
-        return perimetral + backlite
-    return backlite or compatibles
+    # 2) Ordenar por (a) preferencia de tipo según tamaño, (b) coincidencia de
+    #    `tamano_caja` con la categoría real, (c) lúmenes descendente.
+    orden_tipo = _PREF_POR_TAMANO.get(cat, _PREF_POR_TAMANO["mediana"])
+
+    def _key(l: dict) -> tuple:
+        try:
+            idx_tipo = orden_tipo.index(l.get("tipo_led", ""))
+        except ValueError:
+            idx_tipo = 99
+        match_tamano = 0 if l.get("tamano_caja") == cat else 1
+        lum = -(l.get("lumenes") or 0)     # más lúmenes primero
+        return (idx_tipo, match_tamano, lum)
+
+    return sorted(compatibles, key=_key)
 
 
 # ─── CERCHA RECOMENDADA SEGÚN ALTURA DE LETRA ────────────────────────────────
@@ -866,20 +1024,64 @@ def cercha_recomendada_cm(altura_letra_cm: float) -> float:
     return cercha_rango_cm(altura_letra_cm)["recomendado"]
 
 # ─── LED RECOMENDADO SEGÚN PROFUNDIDAD DE CERCHA ─────────────────────────────
-def led_recomendado(profundidad_cm: float, uso: str = "exterior") -> dict:
+def categoria_letra(altura_letra_cm: float) -> str:
+    """Clasifica letra 3D por altura para elegir LED de intensidad apropiada.
+
+    Rangos calibrados con Signalux (los módulos de cada tamaño están optimizados
+    para letras dentro del rango — poner un Sign 03 HIGH en letra de 15 cm es
+    exceso de luz + gasto innecesario)."""
+    if altura_letra_cm <= 0:
+        return "mediana"
+    if altura_letra_cm <= 15:
+        return "pequena"
+    if altura_letra_cm <= 40:
+        return "mediana"
+    if altura_letra_cm <= 100:
+        return "grande"
+    return "gigante"
+
+
+def led_recomendado(profundidad_cm: float, uso: str = "exterior",
+                    altura_letra_cm: float = 0,
+                    led_color: str = "auto") -> dict:
+    """Recomienda LED para letra 3D según cercha, uso, altura y color.
+
+    Prioridad:
+    1. Compatible con profundidad de cercha (obligatorio).
+    2. IP >= 65 si uso exterior.
+    3. 12V sobre 110V (110V solo si no hay alternativa).
+    4. Filtro por `led_color`:
+       - `"auto"` / `"blanco"`: excluye LEDs de color específico y RGB.
+       - `"rojo"` / `"verde"` / `"azul"`: solo LEDs con `color` match.
+       - `"rgb"`: solo LEDs RGB.
+    5. Match con `tamano` del LED igual a `categoria_letra(altura)`.
+    6. Empate → más lúmenes gana.
+    """
     candidatos = [l for l in LEDS_CANAL
                   if l["profundidad_min"] <= profundidad_cm <= l["profundidad_max"]]
     if not candidatos:
-        candidatos = LEDS_CANAL
-    # Preferir exterior IP65+
+        candidatos = list(LEDS_CANAL)
     if uso == "exterior":
         candidatos = [l for l in candidatos if int(l["ip"].replace("IP","")) >= 65] or candidatos
-    # Preferir 12V (estándar) sobre 110V — el 110V requiere instalación eléctrica
-    # especial y solo gana si NO hay alternativa de 12V para el rango de profundidad.
-    candidatos_12v = [l for l in candidatos if l.get("voltaje", 12) == 12]
-    candidatos = candidatos_12v or candidatos
-    # Mayor lúmenes
-    return sorted(candidatos, key=lambda x: x["lumenes"], reverse=True)[0]
+
+    color = (led_color or "auto").lower().strip()
+    if color in ("auto", "blanco"):
+        # Solo blancos — excluir color específico y RGB. Preferir 12V sobre 110V.
+        candidatos = [l for l in candidatos
+                      if (l.get("color") or "").lower() in ("", "blanco", "puro", "frio", "calido")]
+        c12 = [l for l in candidatos if l.get("voltaje", 12) == 12]
+        candidatos = c12 or candidatos
+    elif color == "rgb":
+        candidatos = [l for l in candidatos if (l.get("color") or "").lower() == "rgb"] or candidatos
+    else:
+        # rojo / verde / azul / amarillo / etc.
+        candidatos = [l for l in candidatos if (l.get("color") or "").lower() == color] or candidatos
+
+    cat = categoria_letra(altura_letra_cm)
+    def _key(l):
+        match_tam = 0 if l.get("tamano") == cat else 1
+        return (match_tam, -(l.get("lumenes") or 0))
+    return sorted(candidatos, key=_key)[0]
 
 # ─── MATERIAL DE CERCHA SEGÚN ALTURA ─────────────────────────────────────────
 def material_cercha(altura_letra_cm: float) -> str:
@@ -908,6 +1110,70 @@ def vinil_por_id(vinil_id: str) -> dict:
         if v["id"] == vinil_id:
             return v
     return VINILOS[0]
+
+
+# ─── TUBULARES (PTR) — bastidor de cajas de luz de 2 vistas ──────────────────
+# Precios de partida (jul-2026) tomados del rango de mercado nacional
+# (CostoNet, Sodimac, MercadoLibre, Surtiaceros — PTR de acero). El propietario
+# debe ajustarlos con su proveedor local de Parral cuando cotice.
+#
+# ¿Por qué acero y no aluminio? La industria mexicana de cajas de luz (Alumex,
+# Neon Universal) usa PTR de acero galvanizado como bastidor interno; el
+# aluminio se reserva para cajas muy grandes de azotea donde el peso importa.
+# El bastidor va dentro — no se ve — así que el material es 100% estructural.
+TUBULARES = {
+    "ptr_acero_1x1_cal18_pintado": {
+        "id":          "ptr_acero_1x1_cal18_pintado",
+        "nombre":      "PTR acero pintado 1\"×1\" cal 18",
+        "seccion":     "1\" × 1\"",
+        "calibre":     18,
+        "espesor_mm":  1.20,
+        "peso_kg_m":   0.90,
+        "precio_ml":   55.0,       # $/m lineal
+        "uso_sugerido": "cajas chicas de interior (≤ 80 cm)",
+    },
+    "ptr_acero_1x1_cal14_galvanizado": {
+        "id":          "ptr_acero_1x1_cal14_galvanizado",
+        "nombre":      "PTR acero galvanizado 1\"×1\" cal 14",
+        "seccion":     "1\" × 1\"",
+        "calibre":     14,
+        "espesor_mm":  1.90,
+        "peso_kg_m":   1.41,
+        "precio_ml":   85.0,
+        "uso_sugerido": "estándar (cajas 80–150 cm, interior o exterior)",
+    },
+    "ptr_acero_2x2_cal14_galvanizado": {
+        "id":          "ptr_acero_2x2_cal14_galvanizado",
+        "nombre":      "PTR acero galvanizado 2\"×2\" cal 14",
+        "seccion":     "2\" × 2\"",
+        "calibre":     14,
+        "espesor_mm":  1.90,
+        "peso_kg_m":   2.97,
+        "precio_ml":   175.0,
+        "uso_sugerido": "cajas grandes (>150 cm) o azotea",
+    },
+}
+
+
+def tubular_recomendado(caja_w_cm: float, caja_h_cm: float,
+                        uso: str = "exterior") -> dict:
+    """Auto-selecciona el PTR del bastidor según tamaño y uso.
+
+    Regla derivada de práctica industrial (Alumex, Neon Universal, LightboxShop):
+      · lado_mayor > 150 cm o azotea → PTR 2×2 cal 14 (soporta viento)
+      · lado_mayor ≤ 80 cm y uso interior → PTR 1×1 cal 18 (económico)
+      · resto (80–150 cm) → PTR 1×1 cal 14 (caballo de batalla)"""
+    lado_mayor = max(caja_w_cm, caja_h_cm)
+    if lado_mayor > 150 or uso == "azotea":
+        return TUBULARES["ptr_acero_2x2_cal14_galvanizado"]
+    if lado_mayor <= 80 and uso == "interior":
+        return TUBULARES["ptr_acero_1x1_cal18_pintado"]
+    return TUBULARES["ptr_acero_1x1_cal14_galvanizado"]
+
+
+def tubular_por_id(tubular_id: str) -> dict:
+    """Devuelve el tubular con ese id; fallback al 1×1 cal 14 estándar."""
+    return TUBULARES.get(tubular_id, TUBULARES["ptr_acero_1x1_cal14_galvanizado"])
 
 
 # ─── MATERIAL DE CARA SEGÚN ALTURA ───────────────────────────────────────────
@@ -942,6 +1208,79 @@ EMPRESA = {
 }
 
 
+# ─── ÍNDICE DE COMPLEJIDAD DE FABRICACIÓN (ICF) ──────────────────────────────
+# Auditoría de mano de obra basada en geometría del SVG. NO cambia el precio
+# de venta — es una segunda opinión sobre cuánto TIEMPO real toma fabricar la
+# pieza, contrastada con la MO manual del cotizador.
+#
+# Modelo por proceso (calculator.compute_icf):
+#   T_corte    = L/v_c + N_esquinas·t_dwell + α·κ_total + N_piezas·t_pierce
+#   T_doblado  = P/v_b + N_esquinas·t_bend
+#   T_sellado  = P_sellable/v_s + N_piezas·t_setup_pistola
+#   T_cableado = N_modulos·t_mod
+#   T_armado   = N_piezas·t_base + N_huecos·t_hueco
+#   T_manip    = N_piezas·t_handling + masa_kg·t_carga_kg
+#
+# Constantes: "typical industry" (Groover ch.22, catálogos Signalux/CAM). NO
+# son las de tu taller. Se calibran con 3-5 piezas cronometradas resolviendo
+# por mínimos cuadrados; hasta entonces `calibrado_taller=False` marca el
+# resultado como referencia, no verdad.
+ICF_CONFIG = {
+    "activo": True,           # False = no calcular ni mostrar
+    "calibrado_taller": False, # False = defaults industria; True cuando cronometres
+    "constantes": {
+        # Corte (láser / router / CNC)
+        "v_c_mm_s":         8.0,   # feed rate de corte (mm/s) — típico láser CO₂ 60W
+        "t_dwell_s":        0.5,   # dwell por esquina (s) — parada + reaceleración
+        "alpha_s_rad":      0.3,   # penalización por curvatura acumulada (s/rad)
+        "t_pierce_s":       0.5,   # perforación inicial por contorno (s) — solo láser
+        # Doblado de sercha
+        "v_b_mm_s":         33.3,  # velocidad dobladora (mm/s ≈ 2 m/min)
+        "t_bend_s":         5.0,   # tiempo por doblez (s)
+        # Sellado / pegado
+        "v_s_mm_s":         50.0,  # velocidad de aplicación (mm/s ≈ 3 m/min)
+        "t_setup_pistola_s": 60.0, # cambio/recarga de cartucho por pieza (s)
+        # Cableado LED
+        "t_mod_s":          60.0,  # instalar + conectar un módulo (s)
+        # Armado
+        "t_base_min":       5.0,   # armado base por pieza (min)
+        "t_hueco_min":      2.0,   # penalización por hueco/contador (min)
+        # Manipulación
+        "t_handling_min":   2.0,   # movimiento por pieza (min)
+        "t_carga_s_kg":     30.0,  # carga adicional por kg (s)
+    },
+    "umbrales": {
+        "flatten_epsilon_mm": 0.1,  # tolerancia cuerda al aplanar Béziers
+        "corner_theta_deg":   15.0, # ángulo mínimo para contar como esquina dura
+        "densidad_kg_m2": {         # kg/m² por material (para estimar masa)
+            "aluminio":  2.7,       # cal 22 (0.76mm) ≈ 2.05 kg/m² · usamos 2.7 promedio
+            "acrilico":  3.6,       # 3 mm ≈ 3.6 kg/m²
+            "pvc":       0.5,       # PVC espumado 3 mm ≈ 0.5 kg/m²
+            "alucobon":  4.5,       # Alucobond 3 mm ≈ 4.5 kg/m²
+            "lona":      0.5,       # lona translúcida ~0.5 kg/m²
+        },
+    },
+    # Pieza canónica para ICF normalizado: letra O de 30 cm, cercha 6 cm,
+    # cajón de luz, aluminio cal 22. Su T_ref se cronometra una sola vez;
+    # hasta entonces se usa el valor derivado del modelo con estas features.
+    "canonica": {
+        "descripcion": "Letra 'O' de 30 cm, cercha 6 cm, cajón de luz, aluminio cal 22",
+        "L_mm":         942.5,   # perímetro exterior de O de 30 cm (π·30·10 aprox)
+        "P_mm":         942.5,   # cerrado = L
+        "A_mm2":        70685.0, # área bbox 30×30 ≈ 90000, menos hueco
+        "N_piezas":     1,
+        "N_huecos":     1,       # el contador interior de la O
+        "N_esquinas":   0,       # circular
+        "kappa_total_rad": 12.566, # 2 vueltas: exterior + interior = 4π
+        "P_sellable_mm": 1885.0, # 2P (cara-cercha + cercha-fondo)
+        "N_modulos_led": 6,
+        "masa_kg":       0.19,   # área ≈ 0.07 m² × 2.7 kg/m²
+        # T_ref se calcula si es 0.0 (no cronometrada aún)
+        "T_ref_min":     0.0,
+    },
+}
+
+
 # ─── PERSISTENCIA DEL CATÁLOGO ───────────────────────────────────────────────
 
 def catalog_to_dict() -> dict:
@@ -963,6 +1302,18 @@ def catalog_to_dict() -> dict:
         "vinilos_cercha": VINILOS_CERCHA,
         "tipos_construccion": TIPOS_CONSTRUCCION,
         "gruas": GRUAS,
+        "tubulares": dict(TUBULARES),
+        "icf": {
+            "activo": ICF_CONFIG["activo"],
+            "calibrado_taller": ICF_CONFIG["calibrado_taller"],
+            "constantes": dict(ICF_CONFIG["constantes"]),
+            "umbrales": {
+                "flatten_epsilon_mm": ICF_CONFIG["umbrales"]["flatten_epsilon_mm"],
+                "corner_theta_deg":   ICF_CONFIG["umbrales"]["corner_theta_deg"],
+                "densidad_kg_m2":     dict(ICF_CONFIG["umbrales"]["densidad_kg_m2"]),
+            },
+            "canonica": dict(ICF_CONFIG["canonica"]),
+        },
     }
 
 
@@ -1028,6 +1379,54 @@ def catalog_apply(raw: dict):
     if "gruas" in raw:
         GRUAS.clear()
         GRUAS.extend(raw["gruas"])
+    if "tubulares" in raw and isinstance(raw["tubulares"], dict):
+        TUBULARES.clear()
+        TUBULARES.update(raw["tubulares"])
+    if "icf" in raw:
+        _apply_icf(raw["icf"])
+
+
+def _apply_icf(raw: dict) -> None:
+    """Aplica una sección `icf` del catálogo a ICF_CONFIG in-place.
+    Valida tipos y descarta claves desconocidas para evitar corrupción."""
+    if not isinstance(raw, dict):
+        return
+    if "activo" in raw:
+        ICF_CONFIG["activo"] = bool(raw["activo"])
+    if "calibrado_taller" in raw:
+        ICF_CONFIG["calibrado_taller"] = bool(raw["calibrado_taller"])
+    if isinstance(raw.get("constantes"), dict):
+        for k, v in raw["constantes"].items():
+            if k in ICF_CONFIG["constantes"]:
+                try:
+                    ICF_CONFIG["constantes"][k] = float(v)
+                except (TypeError, ValueError):
+                    log.warning("ICF constante %s: valor inválido %r ignorado", k, v)
+    if isinstance(raw.get("umbrales"), dict):
+        u = raw["umbrales"]
+        for k in ("flatten_epsilon_mm", "corner_theta_deg"):
+            if k in u:
+                try:
+                    ICF_CONFIG["umbrales"][k] = float(u[k])
+                except (TypeError, ValueError):
+                    pass
+        if isinstance(u.get("densidad_kg_m2"), dict):
+            for mat, dens in u["densidad_kg_m2"].items():
+                try:
+                    ICF_CONFIG["umbrales"]["densidad_kg_m2"][mat] = float(dens)
+                except (TypeError, ValueError):
+                    pass
+    if isinstance(raw.get("canonica"), dict):
+        for k, v in raw["canonica"].items():
+            if k in ICF_CONFIG["canonica"]:
+                # descripcion es str, todo lo demás es numérico
+                if k == "descripcion":
+                    ICF_CONFIG["canonica"][k] = str(v)
+                else:
+                    try:
+                        ICF_CONFIG["canonica"][k] = float(v) if isinstance(ICF_CONFIG["canonica"][k], float) else int(v)
+                    except (TypeError, ValueError):
+                        pass
 
 
 def _catalog_merge(raw: dict):
@@ -1131,6 +1530,14 @@ def _catalog_merge(raw: dict):
         for grua in raw["gruas"]:
             if grua.get("id") not in existing_ids:
                 GRUAS.append(grua)
+    if isinstance(raw.get("tubulares"), dict):
+        for tid, tdata in raw["tubulares"].items():
+            if tid in TUBULARES:
+                TUBULARES[tid].update(tdata)   # merge — preserva peso_kg_m etc.
+            else:
+                TUBULARES[tid] = tdata
+    if "icf" in raw:
+        _apply_icf(raw["icf"])
 
 
 def catalog_load():

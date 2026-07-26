@@ -4,11 +4,12 @@ import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
-from svgpathtools import parse_path
+from svgpathtools import Line, parse_path
 
 from catalog_data import (
     CABLES,
     DISTANCIADORES,
+    ICF_CONFIG,
     LAMINAS,
     LEDS_CAJA,
     LEDS_CANAL,
@@ -18,6 +19,7 @@ from catalog_data import (
     SILVATRIM,
     TIPOS_CONSTRUCCION,
     VINILOS_CERCHA,
+    categoria_caja,
     cercha_rango_cm,
     fuente_optima,
     led_recomendado,
@@ -26,8 +28,15 @@ from catalog_data import (
     material_sercha_caja,
     recomendar_led_caja,
     silvatrim_recomendado,
+    tubular_recomendado,
     vinil_por_id,
 )
+
+# Factor de bastidor tubular: perímetro × este factor = metros a cortar.
+# El 1.25 cubre en un solo número: refuerzos internos (barra central + diagonales
+# si aplican), retazos, soldadura y bridas. Empírico industria; ajustable si
+# el propietario mide desperdicio real de su taller.
+_BASTIDOR_FACTOR = 1.25
 
 log = logging.getLogger("cotizador.calculator")
 
@@ -46,6 +55,11 @@ class PathInfo:
     fill: str = ""      # fill resuelto (attr, style o clase CSS)
     es_hueco: bool = False   # contador de letra o placa de fondo (fill blanco)
     capa: str = ""      # capa nombrada del SVG: "" | "base" | "corte" | "luz"
+    # Polilínea aplanada del path, con transforms aplicados, en unidades SVG.
+    # Lista de subpaths (uno por M...Z). Usada por el motor ICF para contar
+    # esquinas duras y curvatura acumulada — features que requieren la
+    # secuencia de puntos, no solo perímetro/área agregados.
+    polyline_px: list = field(default_factory=list)
 
 @dataclass
 class SVGData:
@@ -82,7 +96,7 @@ class QuoteResult:
 
     # Iluminación
     led: dict
-    modulos_led: int
+    modulos_led: int      # cantidad atómica (módulos o barras según tipo_led)
     watts_total: float
     fuente: dict
 
@@ -119,6 +133,14 @@ class QuoteResult:
     silvatrim: dict = field(default_factory=dict)
     metros_silvatrim: float = 0.0
     costo_silvatrim: float = 0.0
+    # Bastidor tubular (cajas de 2 vistas — reemplaza el fondo cerrado)
+    material_bastidor: dict = field(default_factory=dict)   # entrada de TUBULARES
+    metros_bastidor: float = 0.0                             # metros lineales de PTR
+    costo_bastidor: float = 0.0
+    # Categoría de caja según lado mayor: "pequena"|"mediana"|"grande"|"gigante"
+    categoria_caja: str = ""
+    # Tiras compradas si el LED viene en tira (>0 aplica; 0 = se cobra por unidad)
+    tiras_led: int = 0
     # Vinil en cercha
     vinil_cercha: dict = field(default_factory=dict)
     metros_vinil_cercha: float = 0.0
@@ -137,6 +159,17 @@ class QuoteResult:
     # Fase G — Desglose interno (interno al dueño, no se imprime al cliente)
     desglose_costos_componentes: dict = field(default_factory=dict)  # {cara, cercha, leds, fuente, pegamento, dist, fondo, extras}
     warnings: list[str] = field(default_factory=list)                # avisos de inconsistencia (ej. "con luz + 0 LEDs")
+
+    # ── ICF (Índice de Complejidad de Fabricación) — auditoría de MO ────────
+    # Sale del análisis geométrico del SVG (calculator.compute_icf). NO afecta
+    # el precio de venta: es una segunda opinión sobre cuánto TIEMPO real
+    # toma fabricar la pieza. Los tiempos vienen en minutos. `mo_costo_icf`
+    # = T_total × mo_tarifa/60 — sirve para contrastar contra `mo_total` (manual).
+    icf_features:     dict = field(default_factory=dict)    # L_mm, P_mm, A_mm2, N_*, kappa, masa_kg, ...
+    icf_desglose_min: dict = field(default_factory=dict)    # {T_corte, T_doblado, T_sellado, T_cableado, T_armado, T_manip, T_total_min, ...}
+    icf_total_min:    float = 0.0                            # minutos totales de MO estimados
+    mo_costo_icf:     float = 0.0                            # costo MO estimado = T_total_h × mo_tarifa
+    icf_calibrado:    bool  = False                          # False = defaults industria; True cuando el taller cronometró
 
 
 # ─── PARSEO DE SVG ───────────────────────────────────────────────────────────
@@ -469,6 +502,55 @@ def _bbox_perim_area(path_obj, matrix: tuple, is_closed: bool, samples: int = 24
     return bbox, perimeter, area
 
 
+# ─── FLATTENING PARA ICF ─────────────────────────────────────────────────────
+
+# Muestras por segmento curvo (Bézier / Arc) al aplanar a polilínea.
+# 40 puntos por curva es densidad suficiente para detectar esquinas duras y
+# calcular curvatura acumulada; independiente del tamaño real del SVG porque
+# la métrica de curvatura es angular (invariante a escala).
+_ICF_CURVE_SAMPLES = 40
+
+
+def _flatten_path_obj(path_obj, matrix: tuple,
+                      curve_samples: int = _ICF_CURVE_SAMPLES) -> list:
+    """Aplana un Path svgpathtools a lista de subpaths — cada subpath es
+    lista de (x, y) en unidades SVG con transform aplicado. Un nuevo `M`
+    inicia un subpath nuevo. Los segmentos de línea se conservan como 2
+    puntos (start ya incluido en el subpath anterior); los curvos se
+    subdividen en `curve_samples` pasos uniformes en el parámetro t."""
+    if not path_obj:
+        return []
+    a, b, c, d, e, f = matrix
+    is_identity = matrix == _IDENTITY_MATRIX
+
+    def _tf(x: float, y: float) -> tuple:
+        if is_identity:
+            return (x, y)
+        return (a * x + c * y + e, b * x + d * y + f)
+
+    subpaths: list = []
+    current: list = []
+    prev_end = None
+    for seg in path_obj:
+        if prev_end is None or abs(seg.start - prev_end) > 1e-6:
+            if current:
+                subpaths.append(current)
+                current = []
+            current.append(_tf(seg.start.real, seg.start.imag))
+        n = 1 if isinstance(seg, Line) else max(2, curve_samples)
+        for i in range(1, n + 1):
+            t = i / n
+            try:
+                pt = seg.point(t)
+                current.append(_tf(pt.real, pt.imag))
+            except Exception:
+                break
+        prev_end = seg.end
+    if current:
+        subpaths.append(current)
+    return subpaths
+
+
 # ─── PARSEO DE SVG ───────────────────────────────────────────────────────────
 
 _SVG_PRIMITIVES = ("path", "rect", "circle", "ellipse", "polygon", "polyline", "line")
@@ -648,6 +730,7 @@ def parse_svg(svg_bytes: bytes) -> SVGData:
             continue
 
         bbox, perimeter, area = _bbox_perim_area(path_obj, info["matrix"], is_closed)
+        polyline = _flatten_path_obj(path_obj, info["matrix"])
 
         orig_id = info["elem"].get("id", f"path_{i}")
         path_infos.append(PathInfo(
@@ -659,6 +742,7 @@ def parse_svg(svg_bytes: bytes) -> SVGData:
             svg_id=orig_id,
             fill=info["fill"],
             capa=info.get("capa", ""),
+            polyline_px=polyline,
         ))
 
     _marcar_huecos(path_infos)
@@ -743,6 +827,40 @@ def precio_cm2(mat: dict) -> float:
 # Un módulo cada ~15 cm sobre el perímetro da un resplandor uniforme contra la pared.
 _ESPACIADO_HALO_CM = 15.0
 
+# Lumen density objetivo — piso mínimo para garantizar que la letra "prenda" bien.
+# Si la geometría (espaciado × cobertura) da menos módulos que estos targets, se
+# usa el piso por lúmenes. Valores calibrados con Signalux + práctica de rotulista.
+_LUMEN_M2_CARA = 800.0    # lm/m² de cara translúcida blanca estándar
+_LUMEN_ML_HALO = 400.0    # lm/m lineal de perímetro para halo contra pared
+
+
+def _n_modulos_pieza(p, sf: float, cercha_cm: float, espaciado_led_cm: float,
+                     modo_ilum: str, lumen_por_led: float) -> int:
+    """Módulos LED para UNA pieza (letra o placa) según modo de iluminación.
+
+    Modo `cara`: distribuye por ÁREA REAL de la pieza (no bbox — un
+      contorno "abierto" como C, S, O tiene mucho aire y cobrarlo por bbox
+      inflaba módulos). cobertura ≈ cercha × espaciado × 2 (apertura 160°).
+    Modo `halo`: una corrida perimetral, un módulo cada `_ESPACIADO_HALO_CM`.
+
+    Ambos aplican piso por lumen density y mínimo 3 módulos/pieza (uniformidad
+    en letras chicas). El piso por lúmenes evita el caso "geometría dice 3
+    pero la letra queda oscura" al reforzar contra un target de lm/m² real.
+    """
+    lumen_por_led = max(1.0, lumen_por_led)
+    if modo_ilum == "halo":
+        n_geom  = max(3, math.ceil(p.perimeter_cm / _ESPACIADO_HALO_CM))
+        lumen_req = (p.perimeter_cm / 100.0) * _LUMEN_ML_HALO
+        n_lumen = max(1, math.ceil(lumen_req / lumen_por_led))
+    else:
+        cobertura_modulo = max(1.0, cercha_cm * espaciado_led_cm * 2)
+        # Área real en cm² (contorno cerrado, no rectángulo envolvente)
+        area_real_cm2 = max(0.0, p.area_px * sf * sf)
+        n_geom  = max(3, math.ceil(area_real_cm2 / cobertura_modulo))
+        lumen_req = (area_real_cm2 / 10000.0) * _LUMEN_M2_CARA
+        n_lumen = max(1, math.ceil(lumen_req / lumen_por_led))
+    return max(n_geom, n_lumen)
+
 
 def cotizar_letras(
     svg_data: SVGData,
@@ -760,6 +878,7 @@ def cotizar_letras(
     vinil_cercha_id: str = "",
     silvatrim_id: str = "auto",
     led_id: str = "auto",
+    led_color: str = "auto",
 ) -> QuoteResult:
 
     # Si el usuario conoce la altura, escalar desde ella (ignora márgenes del artboard).
@@ -886,31 +1005,33 @@ def cotizar_letras(
     # Mínimo 3 módulos por pieza para garantizar uniformidad en letras chicas.
     modo_ilum = config.get("modo_iluminacion", "cara")
     if config["leds"]:
-        led     = None
+        led = None
         if led_id and led_id != "auto":
             led = next((l for l in LEDS_CANAL if l.get("id") == led_id), None)
         if led is None:
-            led = led_recomendado(cercha_cm, uso)
-        if modo_ilum == "halo":
-            modulos = sum(
-                max(3, math.ceil(p.perimeter_cm / _ESPACIADO_HALO_CM))
-                for p in letras
-            )
-        else:
-            cobertura_modulo = max(1.0, cercha_cm * espaciado_led_cm * 2)
-            modulos = sum(
-                max(3, math.ceil((p.bbox["h"] * sf) * (p.bbox["w"] * sf) / cobertura_modulo))
-                for p in letras
-            )
+            led = led_recomendado(cercha_cm, uso, altura_letra_cm, led_color)
+        lumen_por_led = led.get("lumenes") or 50
+        modulos = sum(
+            _n_modulos_pieza(p, sf, cercha_cm, espaciado_led_cm, modo_ilum, lumen_por_led)
+            for p in letras
+        )
+        # Cobrar por módulo suelto (no por tira completa) — los sobrantes de
+        # tira se reusan en trabajos futuros, cobrar la tira entera duplicaría
+        # el gasto. `tiras_led` se calcula igual como INFORMACIÓN de compra
+        # (para que el usuario vea "24 mod = 2 tiras" en el desglose).
+        modulos_por_tira = led.get("modulos_tira", 20)
+        precio_modulo    = led.get("precio_modulo")
+        n_tiras_letras   = max(0, math.ceil(modulos / max(modulos_por_tira, 1))) if modulos else 0
+        c_led = round(modulos * (precio_modulo or 0), 2)
         watts   = modulos * led["watts_modulo"]
         fuente  = fuente_optima(watts, uso)
-        c_led   = modulos * led["precio_modulo"]
         # Fuente: costo proporcional a los watts consumidos vs capacidad de la fuente.
         # Mínimo 20% del precio para cubrir el desgaste y la instalación del equipo.
         fraccion_fuente = max(0.20, watts / fuente["watts"]) if fuente["watts"] > 0 else 1.0
         c_fuente = round(fuente["precio"] * fraccion_fuente, 2)
     else:
         modulos  = 0
+        n_tiras_letras = 0
         led      = {"nombre": "Sin iluminación", "precio_modulo": 0, "watts_modulo": 0,
                     "ip": "—", "lumenes": 0}
         watts    = 0.0
@@ -1038,10 +1159,12 @@ def cotizar_letras(
         costo_cercha_letra = round(cercha_area_letra * ppcm2_cercha, 2)
         costo_fondo_letra  = round(area_bbox * ppcm2_fondo, 2)
 
-        # Leds por pieza: ceil(perim/espaciado) si lleva luz
+        # Leds por pieza: mismo helper que el global (evita inconsistencia entre
+        # cantidad cobrada y cantidad mostrada por pieza).
         if config["leds"]:
-            esp_pz = _ESPACIADO_HALO_CM if modo_ilum == "halo" else espaciado_led_cm
-            n_modulos_pz = max(3, math.ceil(perim_pz / esp_pz))
+            lumen_por_led = led.get("lumenes") or 50
+            n_modulos_pz = _n_modulos_pieza(p, sf, cercha_cm, espaciado_led_cm,
+                                             modo_ilum, lumen_por_led)
             watts_pz     = n_modulos_pz * led["watts_modulo"]
             costo_leds_pz = round(n_modulos_pz * led["precio_modulo"], 2)
         else:
@@ -1161,6 +1284,7 @@ def cotizar_letras(
         laminas_fondo=lam_fondo,
         led=led,
         modulos_led=modulos,
+        tiras_led=n_tiras_letras,
         watts_total=watts,
         fuente=fuente,
         pegamento=pegamento,
@@ -1357,6 +1481,7 @@ def cotizar_planas(
     luz_area_cm2 = 0.0
     c_luz_mat = c_luz_leds = c_luz_fuente = c_luz_dist = 0.0
     modulos_luz = 0
+    n_tiras_luz = 0
     watts_luz   = 0.0
     led_luz    = {"nombre": "Sin iluminación", "precio_modulo": 0,
                   "watts_modulo": 0, "ip": "—", "lumenes": 0}
@@ -1379,14 +1504,25 @@ def cotizar_planas(
             led_sel = next((l for l in LEDS_CANAL if l.get("id") == luz_led_id), None)
         if led_sel is None:
             # Sin cercha declarada → tamaño de canal "shallow" (~3 cm equivalente)
-            led_sel = led_recomendado(max(luz_cercha_cm, 3.0), "interior")
+            # Altura promedio de las piezas de luz para elegir LED de tamaño apropiado
+            altura_prom_luz = (sum(p.bbox["h"] * sf for p in piezas_luz)
+                               / max(1, len(piezas_luz)))
+            led_sel = led_recomendado(max(luz_cercha_cm, 3.0), "interior", altura_prom_luz)
         led_luz = led_sel
+        lumen_por_led_luz = led_luz.get("lumenes") or 50
+        # Planas capa "luz" = halo detrás de placa (una corrida perimetral) con
+        # cercha propia. Usa el mismo helper de letras 3D en modo halo.
         modulos_luz = sum(
-            max(3, math.ceil(p.perimeter_cm / _ESPACIADO_HALO_CM))
+            _n_modulos_pieza(p, sf, max(luz_cercha_cm, 3.0), 6.0, "halo", lumen_por_led_luz)
             for p in piezas_luz
         )
         watts_luz  = modulos_luz * led_luz["watts_modulo"]
-        c_luz_leds = round(modulos_luz * led_luz["precio_modulo"], 2)
+        # Cobrar por módulo suelto (los sobrantes de tira se reusan). tiras_led
+        # se muestra como info: "N mod = M tiras" en la UI.
+        modulos_por_tira_luz = led_luz.get("modulos_tira", 20)
+        precio_mod_luz       = led_luz.get("precio_modulo")
+        n_tiras_luz = max(0, math.ceil(modulos_luz / max(modulos_por_tira_luz, 1))) if modulos_luz else 0
+        c_luz_leds  = round(modulos_luz * (precio_mod_luz or 0), 2)
 
         fuente_luz = fuente_optima(watts_luz, "interior")
         frac_f = max(0.20, watts_luz / fuente_luz["watts"]) if fuente_luz.get("watts", 0) > 0 else 1.0
@@ -1422,7 +1558,9 @@ def cotizar_planas(
             mult_pz    = mult_luz
             capa_pz    = "luz"
             ppcm2_pz   = precio_cm2(mat_luz or mat_corte)
-            n_mod_pz   = max(3, math.ceil(p.perimeter_cm / _ESPACIADO_HALO_CM))
+            lumen_por_led_pz = led_luz.get("lumenes") or 50
+            n_mod_pz   = _n_modulos_pieza(p, sf, max(luz_cercha_cm, 3.0), 6.0,
+                                           "halo", lumen_por_led_pz)
             watts_pz   = n_mod_pz * (led_luz.get("watts_modulo") or 0)
         elif p in piezas_base:
             mat_id_pz  = base_material_id or material_id
@@ -1673,6 +1811,7 @@ def cotizar_planas(
         laminas_fondo=lam_base,
         led=led_luz,
         modulos_led=modulos_luz,
+        tiras_led=n_tiras_luz,
         watts_total=watts_luz,
         fuente=fuente_luz,
         pegamento={"nombre": "N/A", "precio_aprox": 0},
@@ -1902,14 +2041,29 @@ def cotizar_caja(
     lam_sercha  = laminas_necesarias(area_sercha, "aluminio_cal18")  # informativo
     c_sercha    = round(area_sercha * precio_cm2(mat_sercha), 2)
 
-    # Fondo — Alucobon 3mm para 1 vista (rigidez), PVC para 2 vistas (peso)
+    # Base / Bastidor — el fondo depende del número de vistas:
+    #   1 vista → BASE cerrada (alucobond 3 mm) — placa rígida al muro; en el
+    #             desglose se etiqueta como "Base" (más descriptivo que "Fondo")
+    #   2 vistas → BASTIDOR TUBULAR perimetral (PTR de acero) — la caja no
+    #             lleva placa cerrada porque ambas caras son translúcidas;
+    #             la estructura interna es tubular, seleccionada auto por tamaño
+    mat_bastidor: dict = {}
+    metros_bastidor  = 0.0
+    c_bastidor       = 0.0
     if vistas == 1:
+        # Base cerrada (1 vista) — alucobond 3mm standard de calidad SGI
         fondo_id  = "alucobon_3mm"
+        mat_fondo = LAMINAS[fondo_id]
+        lam_fondo = laminas_necesarias(caja_area_cm2, fondo_id)
+        c_fondo   = lam_fondo * mat_fondo["precio"]
     else:
-        fondo_id  = "pvc_6mm" if uso == "exterior" else "pvc_3mm"
-    mat_fondo = LAMINAS[fondo_id]
-    lam_fondo = laminas_necesarias(caja_area_cm2, fondo_id)
-    c_fondo   = lam_fondo * mat_fondo["precio"]
+        # Bastidor tubular (2 vistas) — reemplaza el fondo cerrado
+        mat_fondo  = {"nombre": "Sin base cerrada (caja 2 vistas)", "precio": 0}
+        lam_fondo  = 0
+        c_fondo    = 0.0
+        mat_bastidor    = tubular_recomendado(caja_w_cm, caja_h_cm, uso)
+        metros_bastidor = round(perimetro / 100 * _BASTIDOR_FACTOR, 2)
+        c_bastidor      = round(metros_bastidor * mat_bastidor["precio_ml"], 2)
 
     # LEDs — selección automática o manual
     all_leds = LEDS_CAJA["interior"] + LEDS_CAJA["exterior"]
@@ -1922,41 +2076,68 @@ def cotizar_caja(
         led  = recs[0] if recs else (LEDS_CAJA[uso][0] if LEDS_CAJA[uso] else all_leds[0])
 
     tipo_led = led.get("tipo_led", "backlite")
-    if tipo_led == "modulo_panel":
-        # Módulos discretos en grid sobre el alucobon, asumiendo interior
-        # ultra blanco. Densidad por defecto 25 mod/m² (grid 20×20 cm).
-        # Para vistas==2 se duplica la densidad (ambas caras).
-        densidad_m2 = led.get("densidad_modulos_m2", 25)
-        if vistas == 2:
-            densidad_m2 *= 2
-        tiras = max(1, math.ceil(area_m2 * densidad_m2))
-        c_led = round(tiras * led["precio"], 2)
-    elif tipo_led == "edgelite":
-        # Barras paralelas montadas en los lados largos del interior, espaciado
-        # típico 40 cm entre centros (calibrado para interior ultra blanco con
-        # buena reflexión, ~20-30% menos LEDs que el espaciado nominal de 30 cm).
-        # Para vistas==2 se iluminan ambas caras → 4 filas en lugar de 2.
-        espaciado_cm   = led.get("espaciado_barras_cm", 40)
-        lado_largo_cm  = max(caja_w_cm, caja_h_cm)
-        lados          = 4 if vistas == 2 else 2
-        barras_por_lado = max(1, math.ceil(lado_largo_cm / espaciado_cm))
-        tiras          = barras_por_lado * lados
-        c_led          = round(tiras * led["precio"], 2)
-    elif tipo_led == "perimetral":
-        espaciado_cm = led.get("espaciado_cm", 4.3)
-        tiras        = max(1, math.ceil(perimetro / espaciado_cm))
-        c_led        = round(tiras * led.get("precio_modulo", led["precio"]), 2)
-    else:  # backlite — filas horizontales paralelas a lo ancho de la caja
-        # Filas espaciadas cada 25 cm a lo largo del lado vertical (eje corto).
-        # Asume interior ultra blanco para extender el alcance vs el viejo
-        # "1 fila cada 18 cm de profundidad" que era contraintuitivo.
-        espaciado_filas_cm = led.get("espaciado_filas_cm", 25)
-        lado_corto_cm      = min(caja_w_cm, caja_h_cm)
-        filas_led          = max(1, math.ceil(lado_corto_cm / espaciado_filas_cm))
-        tiras              = filas_led
-        c_led              = round(tiras * led["precio"], 2)
+    modulos_por_tira = led.get("modulos_tira", 20)   # Signalux vende tiras de 20
+    lado_corto_cm    = min(caja_w_cm, caja_h_cm)
+    lado_largo_cm    = max(caja_w_cm, caja_h_cm)
+    # Objetivo de iluminación (lumen density) — Signalux industry standard:
+    # exterior visible día/noche = 2000 lm/m², interior comercial = 1200 lm/m².
+    lumen_target_m2  = 2000 if uso == "exterior" else 1200
+    lumen_por_led    = led.get("lumenes") or 500
+    factor_vistas    = 2 if vistas == 2 else 1
+    lumen_total_req  = lumen_target_m2 * area_m2 * factor_vistas
 
-    watts     = round(tiras * led["watts"], 2)
+    if tipo_led == "modulo_panel":
+        # Grid disperso sobre el fondo. Densidad módulos/m² del catálogo
+        # (típ. 25/m² = grid 20×20 cm), validada contra lumen density mínima.
+        densidad_m2      = led.get("densidad_modulos_m2", 25)
+        n_por_densidad   = max(1, math.ceil(area_m2 * densidad_m2 * factor_vistas))
+        n_por_lumen      = max(1, math.ceil(lumen_total_req / lumen_por_led))
+        n_modulos        = max(n_por_densidad, n_por_lumen)
+    elif tipo_led == "perimetral":
+        # Módulos discretos pegados al perímetro interior, espaciados a
+        # `espaciado_cm` del catálogo (Sign Edge 01: 4.3 cm entre centros).
+        # Para 2 vistas duplicamos (perímetro efectivo doble).
+        espaciado_cm = led.get("espaciado_cm", 4.3)
+        n_modulos    = max(1, math.ceil(perimetro / espaciado_cm)) * factor_vistas
+    elif tipo_led == "edgelite":
+        # Barras rígidas montadas alrededor del perímetro interior de la
+        # sercha, apuntando hacia el centro. Cantidad es el MAX entre:
+        # (a) cobertura geométrica: barras end-to-end alrededor del perímetro
+        #     (largo_cm por barra), (b) lumen density objetivo.
+        largo_barra_cm  = led.get("largo_cm", 24)
+        n_por_geom      = max(2, math.ceil(perimetro / max(largo_barra_cm, 1)))
+        n_por_lumen     = max(1, math.ceil(lumen_total_req / lumen_por_led))
+        n_modulos       = max(n_por_geom, n_por_lumen) * factor_vistas
+    else:  # backlite — barras al fondo, distribución en grilla
+        espaciado_filas_cm = led.get("espaciado_filas_cm", 25)
+        largo_barra_cm     = led.get("largo_cm") or lado_largo_cm  # tira 5m normal
+        filas              = max(1, math.ceil(lado_corto_cm / espaciado_filas_cm))
+        barras_por_fila    = max(1, math.ceil(lado_largo_cm / max(largo_barra_cm, 1)))
+        n_por_geom         = filas * barras_por_fila
+        n_por_lumen        = max(1, math.ceil(lumen_total_req / lumen_por_led))
+        n_modulos          = max(n_por_geom, n_por_lumen) * factor_vistas
+
+    # Precio: si el producto se vende por MÓDULO (precio_modulo existe), cobrar
+    # por módulo. Si solo hay `precio` (barra/tira individual), cobrar por
+    # unidad. Además si el módulo viene en tira de N, redondear hacia arriba
+    # a tira completa (así es como SGI compra en Signalux: por tira de 20).
+    precio_modulo = led.get("precio_modulo")
+    precio_tira   = led.get("precio")
+    if precio_modulo and precio_tira and tipo_led in ("perimetral", "modulo_panel"):
+        # Vendido por tira de N — comprar tiras completas
+        n_tiras = max(1, math.ceil(n_modulos / max(modulos_por_tira, 1)))
+        # Recalcular n_modulos al total efectivamente comprado (tiras completas)
+        n_modulos_comprados = n_tiras * modulos_por_tira
+        c_led   = round(n_tiras * precio_tira, 2)
+    else:
+        # Cada unidad se vende individual (barra o tira suelta)
+        n_tiras = 0     # no aplica agrupación en tiras
+        n_modulos_comprados = n_modulos
+        c_led = round(n_modulos * (precio_tira or precio_modulo or 0), 2)
+
+    # modulos_led = cantidad ATÓMICA instalable (módulos o barras según tipo).
+    # Es lo que se usa para watts y para display "n módulos" o "n barras".
+    watts = round(n_modulos * led.get("watts", 0), 2)
     fuente    = fuente_optima(watts, uso)
     fraccion_caja = max(0.20, watts / fuente["watts"]) if fuente["watts"] > 0 else 1.0
     c_fuente  = round(fuente["precio"] * fraccion_caja, 2)
@@ -1990,8 +2171,10 @@ def cotizar_caja(
     # Costo real con IVA (precios del catálogo ya incluyen IVA del proveedor).
     # Se descompone en subtotal sin IVA + IVA para mostrar la factura,
     # pero el margen se aplica SOBRE el costo c/IVA (no se acumula doble).
-    costo_con_iva = (c_cara + c_sercha + c_fondo + c_led + c_fuente + c_peg
-                     + c_cable + c_mo + c_maquila + c_flete)
+    # Nota: c_fondo y c_bastidor son excluyentes por diseño (1 vista → fondo;
+    # 2 vistas → bastidor). Sumar ambos es seguro porque el ausente es 0.
+    costo_con_iva = (c_cara + c_sercha + c_fondo + c_bastidor + c_led + c_fuente
+                     + c_peg + c_cable + c_mo + c_maquila + c_flete)
     subtotal = round(costo_con_iva / 1.16, 2)
     iva      = round(costo_con_iva - subtotal, 2)
     total    = round(costo_con_iva, 2)
@@ -2020,10 +2203,32 @@ def cotizar_caja(
             "costo": c_grafico,
         })
 
+    desglose.append(
+        {"concepto": f"Sercha cajón ({mat_sercha['nombre']}) × {lam_sercha} lám.",
+         "costo": c_sercha}
+    )
+    # Base (1 vista) vs Bastidor tubular (2 vistas) — solo aparece uno
+    if c_bastidor > 0:
+        desglose.append({
+            "concepto": (f"Bastidor tubular ({mat_bastidor.get('nombre','—')}) · "
+                         f"{metros_bastidor:.2f} m × ${mat_bastidor.get('precio_ml',0):.2f}/m"),
+            "costo": c_bastidor,
+        })
+    elif c_fondo > 0:
+        desglose.append({
+            "concepto": f"Base ({mat_fondo['nombre']}) × {lam_fondo} lám.",
+            "costo": c_fondo,
+        })
+    # Etiqueta con desglose real de compra: si viene en tira usamos "N tiras
+    # (M módulos)", sino "N módulos" o "N barras" según el tipo.
+    if n_tiras > 0:
+        _led_qty_label = f"{n_tiras} tiras de {modulos_por_tira} ({n_modulos} módulos)"
+    elif tipo_led == "edgelite":
+        _led_qty_label = f"{n_modulos} barras"
+    else:
+        _led_qty_label = f"{n_modulos} módulos"
     desglose += [
-        {"concepto": f"Sercha cajón ({mat_sercha['nombre']}) × {lam_sercha} lám.", "costo": c_sercha},
-        {"concepto": f"Fondo ({mat_fondo['nombre']}) × {lam_fondo} lám.", "costo": c_fondo},
-        {"concepto": f"{led['nombre']} × {tiras} {'barras' if tipo_led=='edgelite' else 'módulos' if tipo_led in ('perimetral','modulo_panel') else 'tiras'}", "costo": c_led},
+        {"concepto": f"{led['nombre']} — {_led_qty_label}", "costo": c_led},
         {"concepto": fuente["nombre"], "costo": c_fuente},
         {"concepto": f"Pegamento: {pegamento['nombre']}", "costo": c_peg},
         {"concepto": f"Cable LED Radox cal 22 · {metros_cable_led:.1f} m", "costo": c_cable_led},
@@ -2061,13 +2266,14 @@ def cotizar_caja(
         mat_cara_info["vinil_filas"]   = [cuadro_corte]
         mat_cara_info["vinil_area_m2"] = vinil_total_area_m2
 
-    # Fase G: desglose por componente para caja (cara, estructura, fondo, leds,
-    # fuente, pegamento). La "caja" se trata como UNA pieza (la caja en sí); las
-    # vinil_filas son sub-elementos de la cara, ya van dentro de c_cara.
+    # Fase G: desglose por componente para caja. La "caja" se trata como UNA
+    # pieza; las vinil_filas son sub-elementos de la cara, ya van dentro de c_cara.
+    # Base (1 vista) y bastidor (2 vistas) son excluyentes — solo uno tiene costo.
     desglose_costos_componentes = {
         "cara":           round(c_cara, 2),
         "sercha":         round(c_sercha, 2),
-        "fondo":          round(c_fondo, 2),
+        "base":           round(c_fondo, 2),          # renombrado: era "fondo"
+        "bastidor":       round(c_bastidor, 2),
         "leds":           round(c_led, 2),
         "fuente":         round(c_fuente, 2),
         "pegamento":      round(c_peg, 2),
@@ -2105,7 +2311,8 @@ def cotizar_caja(
         laminas_cercha=lam_sercha,
         laminas_fondo=lam_fondo,
         led=led,
-        modulos_led=tiras,
+        modulos_led=n_modulos,   # atómico: módulos (perim/panel) o barras (edge/back)
+        tiras_led=n_tiras,        # >0 si se compran en tira completa
         watts_total=watts,
         fuente=fuente,
         pegamento=pegamento,
@@ -2122,4 +2329,313 @@ def cotizar_caja(
         desglose=desglose,
         desglose_costos_componentes=desglose_costos_componentes,
         warnings=warnings,
+        material_bastidor=mat_bastidor,
+        metros_bastidor=metros_bastidor,
+        costo_bastidor=c_bastidor,
+        categoria_caja=categoria_caja(caja_w_cm, caja_h_cm),
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  ICF — ÍNDICE DE COMPLEJIDAD DE FABRICACIÓN
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Modelo por proceso (Groover, "Fundamentals of Modern Manufacturing", cap. 22):
+#   T_corte    = L/v_c + N_esquinas·t_dwell + α·κ_total + N_piezas·t_pierce
+#   T_doblado  = P/v_b + N_esquinas·t_bend
+#   T_sellado  = P_sellable/v_s + N_piezas·t_setup_pistola
+#   T_cableado = N_modulos·t_mod
+#   T_armado   = N_piezas·t_base + N_huecos·t_hueco
+#   T_manip    = N_piezas·t_handling + masa_kg·t_carga_kg
+#
+# Todas las L/P se miden en mm; los tiempos en segundos internamente y se
+# convierten a minutos al agregar. La curvatura acumulada κ_total se estima
+# como suma de |ángulos| entre segmentos consecutivos de la polilínea aplanada
+# — equivalente numérico de ∫|κ|ds y correctamente invariante a escala.
+#
+# Las constantes viven en catalog_data.ICF_CONFIG y son editables por catálogo.
+
+@dataclass
+class ICFFeatures:
+    L_mm: float             # longitud total de todos los contornos (incluidos abiertos)
+    P_mm: float             # perímetro cerrado (solo piezas reales, no huecos)
+    A_mm2: float            # área total de piezas reales
+    N_piezas: int           # piezas cerradas no-hueco (unidades de fabricación)
+    N_huecos: int           # huecos/contadores detectados
+    N_esquinas: int         # esquinas duras (ángulo ≥ corner_theta_deg)
+    kappa_total_rad: float  # curvatura acumulada — suma de |ángulos| en radianes
+    N_nodos: int            # nodos aplanados totales (referencia; no entra al modelo)
+    P_sellable_mm: float    # perímetro a sellar (depende del tipo de construcción)
+    N_modulos_led: int
+    masa_kg: float
+    tipo: str               # letras_3d | letras_planas | caja_luz
+
+
+def _polyline_metrics(subpaths: list, closed: bool,
+                      corner_theta_rad: float,
+                      scale: float = 1.0) -> tuple:
+    """Métricas por polilínea aplanada: (L, N_esquinas, kappa_rad, N_nodos).
+    `scale` convierte unidades SVG a la unidad final (mm). El cierre solo
+    se aplica cuando `closed=True` — subpaths de un path cerrado (con `Z`)
+    reciben el ángulo de cierre entre último y primer vector."""
+    L = 0.0
+    N_c = 0
+    kappa = 0.0
+    N_n = 0
+    for pl in subpaths:
+        if len(pl) < 2:
+            continue
+        N_n += len(pl)
+        vecs: list = []
+        for i in range(len(pl) - 1):
+            dx = (pl[i + 1][0] - pl[i][0]) * scale
+            dy = (pl[i + 1][1] - pl[i][1]) * scale
+            length = math.hypot(dx, dy)
+            if length > 0:
+                L += length
+                vecs.append((dx / length, dy / length))
+        # Ángulos interiores entre tramos consecutivos
+        for i in range(len(vecs) - 1):
+            ux, uy = vecs[i]
+            vx, vy = vecs[i + 1]
+            dot = max(-1.0, min(1.0, ux * vx + uy * vy))
+            ang = math.acos(dot)
+            kappa += ang
+            if ang >= corner_theta_rad:
+                N_c += 1
+        # Ángulo de cierre para subpath cerrado
+        if closed and len(vecs) >= 2:
+            ux, uy = vecs[-1]
+            vx, vy = vecs[0]
+            dot = max(-1.0, min(1.0, ux * vx + uy * vy))
+            ang = math.acos(dot)
+            kappa += ang
+            if ang >= corner_theta_rad:
+                N_c += 1
+    return L, N_c, kappa, N_n
+
+
+def _material_key_for_density(mat_id: str) -> str:
+    """Mapea un id de LAMINAS al key de densidad_kg_m2 del ICF."""
+    if not mat_id:
+        return "aluminio"
+    mid = mat_id.lower()
+    if "acrilico" in mid:
+        return "acrilico"
+    if "pvc" in mid:
+        return "pvc"
+    if "alucobon" in mid:
+        return "alucobon"
+    if "lona" in mid:
+        return "lona"
+    return "aluminio"
+
+
+def extract_icf_features(svg_data: SVGData,
+                          tipo: str,
+                          tipo_construccion: str = "cajon_luz",
+                          n_modulos_led: int = 0,
+                          material_cara_id: str = "",
+                          umbrales: dict | None = None) -> ICFFeatures:
+    """Extrae features geométricos del SVG parseado para alimentar compute_icf.
+
+    En letras 3D / planas: N_piezas = cerradas no-hueco. En caja: se colapsa a
+    N_piezas=1 (la caja es UNA pieza) y P_mm = perímetro de la caja detectada
+    — L_mm y esquinas incluyen los contornos de diseño (corte del gráfico)."""
+    if umbrales is None:
+        umbrales = ICF_CONFIG["umbrales"]
+    corner_theta_rad = math.radians(umbrales.get("corner_theta_deg", 15.0))
+    # scale_factor va de svg_unit a cm; ×10 lleva a mm. Curvatura es invariante.
+    scale = svg_data.scale_factor * 10.0
+
+    piezas_reales = [p for p in svg_data.paths if p.is_closed and not p.es_hueco]
+    huecos = [p for p in svg_data.paths if p.is_closed and p.es_hueco]
+
+    L_mm = 0.0
+    for p in svg_data.paths:
+        L_i, _, _, _ = _polyline_metrics(p.polyline_px, p.is_closed, corner_theta_rad, scale)
+        L_mm += L_i
+
+    P_mm = 0.0
+    A_mm2 = 0.0
+    N_c = 0
+    kappa = 0.0
+    N_n = 0
+    for p in piezas_reales:
+        P_i, Nc_i, kap_i, Nn_i = _polyline_metrics(p.polyline_px, True, corner_theta_rad, scale)
+        P_mm += P_i
+        A_mm2 += p.area_cm2 * 100.0    # cm² → mm²
+        N_c += Nc_i
+        kappa += kap_i
+        N_n += Nn_i
+
+    # Ajuste caja_luz: si detectamos el outline, N_piezas=1 y P_mm = outline
+    n_piezas = len(piezas_reales)
+    n_huecos = len(huecos)
+    if tipo == "caja_luz" and piezas_reales:
+        outline = _find_caja_outline(piezas_reales)
+        if outline is not None:
+            P_i_out, _, _, _ = _polyline_metrics(outline.polyline_px, True, corner_theta_rad, scale)
+            P_mm = P_i_out
+        n_piezas = 1
+        n_huecos = 0     # huecos en cajas no son contadores de letra
+
+    # P_sellable — depende de cuántas juntas se sellan
+    if tipo == "letras_3d":
+        cfg = TIPOS_CONSTRUCCION.get(tipo_construccion, {})
+        juntas = (1 if cfg.get("cara") != "ninguna" else 0) + (1 if cfg.get("fondo_pvc") else 0)
+        P_sellable_mm = P_mm * max(1, juntas)
+    elif tipo == "caja_luz":
+        P_sellable_mm = P_mm * 2   # cara-sercha + sercha-fondo
+    else:
+        P_sellable_mm = 0.0        # planas: sin cordón
+
+    # Masa: A × densidad del material principal
+    dens_map = umbrales.get("densidad_kg_m2", {})
+    dens = dens_map.get(_material_key_for_density(material_cara_id), 2.0)
+    masa_kg = (A_mm2 / 1_000_000.0) * dens
+
+    return ICFFeatures(
+        L_mm=round(L_mm, 2),
+        P_mm=round(P_mm, 2),
+        A_mm2=round(A_mm2, 2),
+        N_piezas=n_piezas,
+        N_huecos=n_huecos,
+        N_esquinas=N_c,
+        kappa_total_rad=round(kappa, 3),
+        N_nodos=N_n,
+        P_sellable_mm=round(P_sellable_mm, 2),
+        N_modulos_led=n_modulos_led,
+        masa_kg=round(masa_kg, 3),
+        tipo=tipo,
+    )
+
+
+def _tref_from_canonica(canonica: dict, k: dict) -> float:
+    """Deriva T_ref (minutos) desde las features de la pieza canónica usando
+    las constantes actuales. Si el usuario cronometra y guarda T_ref_min > 0,
+    ese valor manda (calibración real vs. calibración por defecto)."""
+    L = float(canonica.get("L_mm", 0))
+    P = float(canonica.get("P_mm", 0))
+    N_p = int(canonica.get("N_piezas", 1))
+    N_h = int(canonica.get("N_huecos", 0))
+    N_c = int(canonica.get("N_esquinas", 0))
+    kap = float(canonica.get("kappa_total_rad", 0))
+    P_seal = float(canonica.get("P_sellable_mm", 0))
+    N_mod = int(canonica.get("N_modulos_led", 0))
+    masa = float(canonica.get("masa_kg", 0))
+    T_corte_s = (L / max(1e-6, k["v_c_mm_s"])
+                 + N_c * k["t_dwell_s"]
+                 + k["alpha_s_rad"] * kap
+                 + N_p * k["t_pierce_s"])
+    T_doblado_s = P / max(1e-6, k["v_b_mm_s"]) + N_c * k["t_bend_s"]
+    T_sellado_s = (P_seal / max(1e-6, k["v_s_mm_s"])
+                   + N_p * k["t_setup_pistola_s"]) if P_seal > 0 else 0.0
+    T_cableado_s = N_mod * k["t_mod_s"]
+    return ((T_corte_s + T_doblado_s + T_sellado_s + T_cableado_s) / 60.0
+            + N_p * k["t_base_min"] + N_h * k["t_hueco_min"]
+            + N_p * k["t_handling_min"] + masa * (k["t_carga_s_kg"] / 60.0))
+
+
+def compute_icf(features: ICFFeatures,
+                constantes: dict | None = None,
+                canonica: dict | None = None) -> dict:
+    """Aplica el modelo de tiempos por proceso a las features geométricas.
+    Devuelve dict con T_* por proceso (minutos), T_total_min y ICF_norm."""
+    if constantes is None:
+        constantes = ICF_CONFIG["constantes"]
+    if canonica is None:
+        canonica = ICF_CONFIG["canonica"]
+    k = constantes
+    f = features
+
+    T_corte_s = (
+        f.L_mm / max(1e-6, k["v_c_mm_s"])
+        + f.N_esquinas * k["t_dwell_s"]
+        + k["alpha_s_rad"] * f.kappa_total_rad
+        + f.N_piezas * k["t_pierce_s"]
+    )
+    T_corte = T_corte_s / 60.0
+
+    if f.tipo == "letras_3d":
+        T_doblado_s = f.P_mm / max(1e-6, k["v_b_mm_s"]) + f.N_esquinas * k["t_bend_s"]
+    elif f.tipo == "caja_luz":
+        # 4 dobleces rectos (caja rectangular estándar); no dependen del gráfico
+        T_doblado_s = f.P_mm / max(1e-6, k["v_b_mm_s"]) + 4 * k["t_bend_s"]
+    else:
+        T_doblado_s = 0.0
+    T_doblado = T_doblado_s / 60.0
+
+    if f.P_sellable_mm > 0:
+        T_sellado_s = (f.P_sellable_mm / max(1e-6, k["v_s_mm_s"])
+                       + f.N_piezas * k["t_setup_pistola_s"])
+    else:
+        T_sellado_s = 0.0
+    T_sellado = T_sellado_s / 60.0
+
+    T_cableado = f.N_modulos_led * k["t_mod_s"] / 60.0
+    T_armado   = f.N_piezas * k["t_base_min"] + f.N_huecos * k["t_hueco_min"]
+    T_manip    = f.N_piezas * k["t_handling_min"] + f.masa_kg * (k["t_carga_s_kg"] / 60.0)
+
+    T_total = T_corte + T_doblado + T_sellado + T_cableado + T_armado + T_manip
+
+    T_ref = float(canonica.get("T_ref_min", 0.0)) or _tref_from_canonica(canonica, k)
+    icf_norm = T_total / T_ref if T_ref > 0 else 0.0
+
+    return {
+        "T_corte_min":    round(T_corte, 2),
+        "T_doblado_min":  round(T_doblado, 2),
+        "T_sellado_min":  round(T_sellado, 2),
+        "T_cableado_min": round(T_cableado, 2),
+        "T_armado_min":   round(T_armado, 2),
+        "T_manip_min":    round(T_manip, 2),
+        "T_total_min":    round(T_total, 2),
+        "T_total_h":      round(T_total / 60.0, 3),
+        "icf_norm":       round(icf_norm, 3),
+        "T_ref_min":      round(T_ref, 2),
+    }
+
+
+def _icf_features_to_dict(f: ICFFeatures) -> dict:
+    return {
+        "L_mm": f.L_mm, "P_mm": f.P_mm, "A_mm2": f.A_mm2,
+        "N_piezas": f.N_piezas, "N_huecos": f.N_huecos,
+        "N_esquinas": f.N_esquinas,
+        "kappa_total_rad": f.kappa_total_rad,
+        "N_nodos": f.N_nodos,
+        "P_sellable_mm": f.P_sellable_mm,
+        "N_modulos_led": f.N_modulos_led,
+        "masa_kg": f.masa_kg,
+        "tipo": f.tipo,
+    }
+
+
+def apply_icf_to_result(svg_data: SVGData, result: QuoteResult,
+                        mo_tarifa: float = 0.0,
+                        material_cara_id: str = "") -> QuoteResult:
+    """Wrapper: extrae features + computa ICF + puebla los campos icf_* de
+    QuoteResult. Silencioso si ICF_CONFIG['activo'] es False. Nunca lanza —
+    si algo falla, deja los campos en su default. `mo_tarifa` se usa solo
+    para derivar `mo_costo_icf` (comparativa contra `mo_total` manual)."""
+    if not ICF_CONFIG.get("activo", True):
+        return result
+    try:
+        features = extract_icf_features(
+            svg_data=svg_data,
+            tipo=result.tipo,
+            tipo_construccion=result.tipo_construccion,
+            n_modulos_led=result.modulos_led,
+            material_cara_id=material_cara_id,
+        )
+        desglose_min = compute_icf(features)
+    except Exception:
+        log.exception("ICF: fallo al computar — se deja vacío")
+        return result
+
+    result.icf_features     = _icf_features_to_dict(features)
+    result.icf_desglose_min = desglose_min
+    result.icf_total_min    = float(desglose_min.get("T_total_min", 0.0))
+    if mo_tarifa > 0:
+        result.mo_costo_icf = round(desglose_min.get("T_total_h", 0.0) * mo_tarifa, 2)
+    result.icf_calibrado    = bool(ICF_CONFIG.get("calibrado_taller", False))
+    return result

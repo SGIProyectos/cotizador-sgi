@@ -1228,6 +1228,15 @@ svg g.pieza-labels                 { pointer-events: none; }
         <div id="led-fields-group">
           <label>Espaciado LED (cm)</label>
           <input type="number" id="espaciado-led" value="6" min="3" max="15" step="1">
+          <label>Color LED</label>
+          <select id="led-color">
+            <option value="auto">Auto (blanco)</option>
+            <option value="blanco">Blanco</option>
+            <option value="rojo">Rojo</option>
+            <option value="verde">Verde</option>
+            <option value="azul">Azul</option>
+            <option value="rgb">RGB (con controlador)</option>
+          </select>
         </div>
         <!-- Vinil cercha: oculto, se llena desde el modal de configuración -->
         <select id="vinil-cercha-id" style="display:none">
@@ -2497,26 +2506,76 @@ function onCfgSilvatrimSelChange() {
   info.textContent = `${s.ancho_pulg}" (${s.ancho_mm}mm) · rollo ${s.metros_rollo}m${colores ? " — " + colores : ""}`;
 }
 
+// Espejo de catalog_data.categoria_caja() — debe mantenerse sincronizado con
+// backend. Categoriza por LADO MAYOR de la caja según catálogo Signalux.
+function _categoriaCaja(w, h) {
+  const lm = Math.max(w || 0, h || 0);
+  if (lm <= 0)  return "mediana";
+  if (lm <= 60)  return "pequena";
+  if (lm <= 120) return "mediana";
+  if (lm <= 200) return "grande";
+  return "gigante";
+}
+
+// Espejo de catalog_data._PREF_POR_TAMANO
+const _PREF_LED_CAJA_POR_TAMANO = {
+  pequena: ["perimetral", "backlite", "edgelite", "modulo_panel"],
+  mediana: ["edgelite", "perimetral", "backlite", "modulo_panel"],
+  grande:  ["edgelite", "modulo_panel", "backlite", "perimetral"],
+  gigante: ["modulo_panel", "edgelite", "backlite", "perimetral"],
+};
+
 function sugerirLedCaja() {
   const hint = document.getElementById("led-caja-hint");
   const sel  = document.getElementById("led-caja");
   if (!hint || !sel || !catalog?.leds_caja) return;
   if (sel.value !== "auto") { hint.textContent = ""; return; }
-  const uso   = document.getElementById("uso")?.value || "exterior";
-  const prof  = parseFloat(document.getElementById("profundidad")?.value) || 15;
+  const uso    = document.getElementById("uso")?.value || "exterior";
+  const prof   = parseFloat(document.getElementById("profundidad")?.value) || 15;
   const vistas = parseInt(document.getElementById("vistas")?.value) || 1;
-  const pool  = uso === "interior"
+  const anchoReal = parseFloat(document.getElementById("ancho-real")?.value) || 0;
+  // Alto real: si el SVG trae bbox se estima proporcional, sino asumimos ancho
+  // (una caja "cuadrada" es el caso más común cuando no se conoce el alto).
+  const altoReal = svgViewboxH && svgViewboxW
+    ? anchoReal * (svgViewboxH / svgViewboxW)
+    : anchoReal;
+
+  const pool = uso === "interior"
     ? (catalog.leds_caja.interior || [])
     : (catalog.leds_caja.exterior || []);
-  const compatibles = pool.filter(l =>
-    (l.profundidad_min ?? 0) <= prof && prof <= (l.profundidad_max ?? 999)
-  );
-  if (!compatibles.length) { hint.textContent = "Sin LED compatible con esa profundidad"; return; }
-  let rec = vistas >= 2
-    ? (compatibles.find(l => (l.vistas ?? 1) >= 2) || compatibles[0])
-    : compatibles[0];
-  const tag = rec.tipo_led === "edgelite" ? "barra rígida" : rec.tipo_led === "perimetral" ? "módulo perimetral" : "backlite";
-  hint.textContent = `Sugerido: ${rec.nombre} · ${tag} · IP${rec.ip || ""}`;
+
+  const ladoCorto = anchoReal > 0 && altoReal > 0
+    ? Math.min(anchoReal, altoReal)
+    : 9999;
+
+  const compatibles = pool.filter(l => {
+    if (!((l.profundidad_min ?? 0) <= prof && prof <= (l.profundidad_max ?? 999))) return false;
+    if (vistas >= 2 && (l.vistas ?? 1) < 2) return false;
+    if (l.max_cara_cm && ladoCorto > l.max_cara_cm) return false;
+    return true;
+  });
+  if (!compatibles.length) { hint.textContent = "Sin LED compatible con esa profundidad / tamaño"; return; }
+
+  const cat = _categoriaCaja(anchoReal, altoReal);
+  const ordenTipo = _PREF_LED_CAJA_POR_TAMANO[cat] || _PREF_LED_CAJA_POR_TAMANO.mediana;
+
+  const ordenados = compatibles.slice().sort((a, b) => {
+    const ia = ordenTipo.indexOf(a.tipo_led ?? ""); const iaN = ia < 0 ? 99 : ia;
+    const ib = ordenTipo.indexOf(b.tipo_led ?? ""); const ibN = ib < 0 ? 99 : ib;
+    if (iaN !== ibN) return iaN - ibN;
+    const ma = a.tamano_caja === cat ? 0 : 1;
+    const mb = b.tamano_caja === cat ? 0 : 1;
+    if (ma !== mb) return ma - mb;
+    return (b.lumenes ?? 0) - (a.lumenes ?? 0);
+  });
+
+  const rec = ordenados[0];
+  const catLbl = { pequena: "pequeña", mediana: "mediana", grande: "grande", gigante: "gigante" }[cat] || cat;
+  const tag = rec.tipo_led === "edgelite" ? "barra rígida"
+            : rec.tipo_led === "perimetral" ? "módulo perimetral"
+            : rec.tipo_led === "modulo_panel" ? "grid modular"
+            : "barra de fondo";
+  hint.textContent = `Caja ${catLbl} → ${rec.nombre} · ${tag} · IP${rec.ip || ""}`;
 }
 
 // ─── TIPO DE CONSTRUCCIÓN ────────────────────────────────────────────────────
@@ -3799,6 +3858,7 @@ async function calcular() {
                               return el ? el.value : "auto";   // "" es válido (sin silvatrim)
                             })(),
         led_id:             document.getElementById("led-letras-id")?.value || "auto",
+        led_color:          document.getElementById("led-color")?.value || "auto",
         cliente,
         ..._instBody(),
       };
@@ -3977,6 +4037,148 @@ function _renderBloquesPlanasHtml(bloques) {
         ${cards}
       </div>
     </div>`;
+}
+
+// Panel de auditoría ICF (Índice de Complejidad de Fabricación)
+// NO cambia el precio de venta — es una segunda opinión sobre cuánto tiempo real
+// toma fabricar la pieza, contrastado con la MO manual del cotizador.
+function _renderICFHtml(icf) {
+  if (!icf || !icf.activo || !icf.desglose_min) return "";
+  const $  = n => (n||0).toLocaleString('es-MX',{minimumFractionDigits:2});
+  const $0 = n => (n||0).toLocaleString('es-MX',{maximumFractionDigits:0});
+  const d  = icf.desglose_min;
+  const f  = icf.features || {};
+
+  // Colores por proceso (paleta armónica con el resto de la UI)
+  const procesos = [
+    {k:'T_corte_min',    label:'Corte',    color:'#F58B80', icon:'✂️'},
+    {k:'T_doblado_min',  label:'Doblado',  color:'#F5C93B', icon:'📐'},
+    {k:'T_sellado_min',  label:'Sellado',  color:'#4FDB95', icon:'💧'},
+    {k:'T_cableado_min', label:'Cableado', color:'#2CC5EC', icon:'🔌'},
+    {k:'T_armado_min',   label:'Armado',   color:'#B78CE8', icon:'🔧'},
+    {k:'T_manip_min',    label:'Manipul.', color:'#9FB0CB', icon:'📦'},
+  ];
+  const totalMin = d.T_total_min || 0;
+  if (totalMin <= 0) return "";
+
+  const barSegs = procesos.map(p => {
+    const min = d[p.k] || 0;
+    const pct = totalMin > 0 ? (min / totalMin * 100) : 0;
+    return { ...p, min, pct };
+  }).filter(p => p.min > 0);
+
+  // Barra apilada
+  const barra = barSegs.map(s => `
+    <div title="${s.label}: ${s.min.toFixed(2)} min (${s.pct.toFixed(1)}%)"
+         style="background:${s.color};width:${s.pct}%;height:100%;"></div>
+  `).join("");
+
+  // Filas por proceso
+  const filas = barSegs.map(s => `
+    <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;padding:2px 0">
+      <span style="width:9px;height:9px;background:${s.color};border-radius:2px;flex-shrink:0"></span>
+      <span style="color:var(--txt2);flex:1">${s.icon} ${s.label}</span>
+      <span style="color:var(--txt);font-family:var(--mono);font-variant-numeric:tabular-nums">${s.min.toFixed(2)} min</span>
+      <span style="color:var(--txt3);font-size:10px;width:36px;text-align:right">${s.pct.toFixed(0)}%</span>
+    </div>
+  `).join("");
+
+  // Comparativa MO ICF vs MO manual
+  const moIcf    = icf.mo_costo || 0;
+  const moManual = icf.mo_manual || 0;
+  const delta    = icf.delta_costo || 0;
+  const comparaHtml = moManual > 0 ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--k4)">
+      <div>
+        <div style="font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px">MO manual</div>
+        <div style="font-family:var(--mono);color:var(--txt);font-weight:600">$${$(moManual)}</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px">MO por ICF</div>
+        <div style="font-family:var(--mono);color:var(--c-soft);font-weight:600">$${$(moIcf)}</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px">Diferencia</div>
+        <div style="font-family:var(--mono);color:${delta > 0 ? '#4FDB95' : delta < 0 ? '#F58B80' : 'var(--txt3)'};font-weight:600">
+          ${delta > 0 ? '+' : ''}$${$(delta)}
+        </div>
+      </div>
+    </div>
+    <div style="font-size:10.5px;color:var(--txt3);margin-top:6px">
+      ${delta > 0
+        ? `Podrías estar subcotizando la MO en $${$0(delta)} (el ICF estima más tiempo del que capturaste)`
+        : delta < 0
+          ? `Estás cobrando MO por encima del ICF en $${$0(-delta)} (revisa si la complejidad justifica el extra)`
+          : 'MO manual y ICF coinciden'}
+    </div>
+  ` : `
+    <div style="font-size:11px;color:var(--txt3);margin-top:8px;padding-top:8px;border-top:1px solid var(--k4)">
+      💡 Si capturas <b>MO horas</b> y <b>MO tarifa</b> en el formulario, aquí verás la comparativa contra ${moIcf > 0 ? `<b>$${$(moIcf)}</b> (${(d.T_total_h||0).toFixed(2)} h × tarifa)` : 'la MO ICF'}.
+    </div>
+  `;
+
+  // Ficha de features (para taller / auditoría)
+  const ficha = `
+    <details style="margin-top:10px;font-size:11px">
+      <summary style="cursor:pointer;color:var(--txt2);user-select:none">📊 Features geométricos (auditoría)</summary>
+      <div style="margin-top:6px;padding:8px;background:var(--k1);border-radius:6px;font-family:var(--mono);color:var(--txt2)">
+        L total: ${$0(f.L_mm)} mm · P: ${$0(f.P_mm)} mm · A: ${$0(f.A_mm2)} mm²<br>
+        Piezas: ${f.N_piezas||0} · Huecos: ${f.N_huecos||0} · Esquinas: ${f.N_esquinas||0}<br>
+        Curvatura acumulada: ${(f.kappa_total_rad||0).toFixed(2)} rad · Nodos: ${f.N_nodos||0}<br>
+        Sellado: ${$0(f.P_sellable_mm)} mm · Módulos LED: ${f.N_modulos_led||0} · Masa: ${(f.masa_kg||0).toFixed(2)} kg
+      </div>
+    </details>
+  `;
+
+  const norm = d.icf_norm || 0;
+  const normHtml = norm > 0 ? `
+    <span style="font-size:10px;color:var(--txt3);margin-left:8px">
+      ICF ${norm.toFixed(2)}× vs. pieza canónica
+    </span>
+  ` : "";
+
+  const bannerCalibrado = icf.calibrado ? `
+    <div style="font-size:10px;color:#4FDB95;margin-top:4px">
+      ✓ Constantes calibradas al taller
+    </div>
+  ` : `
+    <div class="alerta-y" style="margin:8px 0 0;font-size:11px;padding:6px 10px">
+      <span style="font-size:12px">ℹ️</span>
+      <span>Constantes no calibradas al taller — valores <em>industria</em>. Editables en Catálogo → ICF cuando puedas cronometrar 3 piezas.</span>
+    </div>
+  `;
+
+  return `
+    <details open style="margin:14px 0;background:var(--k2);border:1px solid var(--k4);border-radius:10px;padding:12px 14px">
+      <summary style="cursor:pointer;user-select:none;list-style:none">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+          <h3 style="color:var(--c-soft);font-size:13px;margin:0">
+            🕒 Auditoría MO — ICF
+            <span style="color:var(--txt3);font-weight:400;font-size:11px">
+              tiempo real de fabricación estimado desde la geometría
+            </span>
+          </h3>
+          <div style="text-align:right">
+            <div style="color:var(--c-soft);font-weight:700;font-size:14px;font-family:var(--mono)">
+              ${totalMin.toFixed(1)} min <span style="color:var(--txt3);font-weight:400">(${(d.T_total_h||0).toFixed(2)} h)</span>
+            </div>
+            ${normHtml}
+          </div>
+        </div>
+      </summary>
+      ${bannerCalibrado}
+      <div style="margin-top:10px">
+        <div style="height:14px;border-radius:99px;overflow:hidden;background:var(--k1);display:flex;box-shadow:inset 0 1px 2px rgba(0,0,0,.4)">
+          ${barra}
+        </div>
+        <div style="margin-top:8px;display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:6px 16px">
+          ${filas}
+        </div>
+      </div>
+      ${comparaHtml}
+      ${ficha}
+    </details>
+  `;
 }
 
 function renderResult(d) {
@@ -4167,13 +4369,28 @@ function renderResult(d) {
             estructura: 'Sercha',  // legacy: cotizaciones viejas usaban "estructura"
           };
           // Nombres de material por componente (cuando los devuelve el backend).
+          // Para LEDs añadimos el desglose "n módulos (m tiras de N)" o "n barras"
+          // según cómo se vende el producto — así el usuario ve la ingeniería.
+          const _ledLabel = (il) => {
+            if (!il?.led) return "";
+            const n = il.modulos || 0;      // cantidad atómica (módulos o barras)
+            const t = il.tiras || 0;         // tiras compradas (>0 si aplica)
+            const mpt = il.modulos_por_tira;
+            if (t > 0 && mpt) {
+              return `${il.led} — ${t} tira${t===1?'':'s'} de ${mpt} (${n} módulos)`;
+            }
+            if (il.precio_modulo) {
+              return `${il.led} — ${n} módulos`;
+            }
+            return `${il.led} — ${n} barra${n===1?'':'s'}`;
+          };
           const matNames = {
             cara: d.materiales?.cara?.nombre,
             cercha: d.materiales?.cercha?.nombre,
             sercha: d.materiales?.cercha?.nombre,       // mismo material que cercha
             estructura: d.materiales?.cercha?.nombre,   // legacy
             fondo: d.materiales?.fondo?.nombre,
-            leds: d.iluminacion?.led,
+            leds: _ledLabel(d.iluminacion),
             fuente: d.iluminacion?.fuente,
             pegamento: d.pegamento?.nombre,
             silvatrim: d.silvatrim?.nombre,
@@ -4233,6 +4450,8 @@ function renderResult(d) {
         })()}
       </div>
     </div>
+
+    ${_renderICFHtml(d.icf)}
 
     ${(esLetras || esPlanas) && d.desglose_letras && d.desglose_letras.length ? `
     <!-- ── COTIZACIÓN POR PIEZA (fórmula Excel) ── -->
@@ -4306,7 +4525,19 @@ function renderResult(d) {
       ${m.cercha_altura_cm > 0
           ? stat("Cercha total", (m.perimetro_total_cm/100).toFixed(2)+" m", "prof. "+m.cercha_altura_cm+" cm")
           : stat("Perímetro total", (m.perimetro_total_cm/100).toFixed(2)+" m", "sin cercha")}
-      ${stat("Módulos LED", il.modulos+" uds", il.led)}
+      ${(() => {
+        const n = il.modulos || 0;
+        const t = il.tiras || 0;
+        let val;
+        if (t > 0) {
+          val = `${t} tira${t===1?'':'s'} · ${n} módulos`;
+        } else if (il.precio_modulo) {
+          val = `${n} módulos`;
+        } else {
+          val = `${n} barra${n===1?'':'s'}`;
+        }
+        return stat("LEDs", val, il.led);
+      })()}
       ${stat("Watts", il.watts_total+" W", il.fuente)}
       ${stat("Material cara", mats.cara.nombre, mats.cara.laminas+" lám.")}
       ${stat("Material cercha", mats.cercha.nombre, mats.cercha.laminas+" lám.")}
@@ -5345,8 +5576,25 @@ function getScaleFactor() {
 }
 
 function actualizarAsesor(autoFillAltura = false) {
+  // El panel de asesor de cercha aplica solo a letras canal. Se oculta en
+  // caja/planas para no mostrar "letra mediana" donde no aplica, pero SEGUIMOS
+  // calculando escala y refrescando cards para que las medidas en cm aparezcan.
+  const panel = document.getElementById("panel-asesor");
+  const soloCards = (tipoActual === "caja" || tipoActual === "planas");
+  if (soloCards && panel) panel.style.display = "none";
+
   const anchoReal    = parseFloat(document.getElementById("ancho-real").value) || 0;
-  const cerchaManual = parseFloat(document.getElementById("cercha-manual").value) || 0;
+  const cerchaManual = parseFloat(document.getElementById("cercha-manual")?.value) || 0;
+
+  // En caja/planas: solo actualizar escala y cards, saltarse todo lo específico
+  // de letras canal (cerchaHint, tipo_construccion recomendado, panel asesor).
+  if (soloCards) {
+    const sf = getScaleFactor();
+    lastScaleFactor  = sf;
+    lastCerchaAltura = 0;
+    if (svgPathsRaw.length > 0) renderPathCards(svgPathsRaw, sf, 0);
+    return;
+  }
 
   // ── 1. Auto-detectar altura inicial (solo cuando SVG recién se carga) ──────
   if (autoFillAltura && svgMaxHeightPx > 0 && svgViewboxW > 0 && anchoReal > 0) {
@@ -5495,7 +5743,7 @@ document.addEventListener("DOMContentLoaded", () => {
   _actualizarCerchaHint();
   document.getElementById("mat-cara")?.addEventListener("change", () => { if (previewMode === "3d") render3D(); });
   document.getElementById("tipo-construccion")?.addEventListener("change", () => { if (previewMode === "3d") render3D(); });
-  document.getElementById("ancho-real").addEventListener("input",    () => { actualizarAsesor(); _updateFormulaPreview(); renderWallPreview(); });
+  document.getElementById("ancho-real").addEventListener("input",    () => { actualizarAsesor(); _updateFormulaPreview(); renderWallPreview(); if (tipoActual === "caja") sugerirLedCaja(); });
   document.getElementById("tipo-multiplicador").addEventListener("change", _updateFormulaPreview);
   // Mostrar ajuste-section para el tipo por defecto (letras)
   const ajusteSection = document.getElementById("ajuste-section");
@@ -7259,7 +7507,7 @@ document.addEventListener("click", e => {
 function _v3dAutoRender(data) {
   if (!window._v3dReady || !window.v3d_render || !currentSvgText) return;
   try {
-    window.v3d_render({
+    const args = {
       svgText:          currentSvgText,
       depthCm:          data.medidas?.cercha_altura_cm || 15,
       tipo:             tipoActual,
@@ -7270,7 +7518,22 @@ function _v3dAutoRender(data) {
       alturaLetraCm:    data.medidas?.altura_letra_cm || 0,
       maxLetterHeightPx: svgMaxHeightPx,
       artboardWCm:      svgArtboardWCm,
-    });
+    };
+    if (tipoActual === "planas") {
+      const tipoAnun = document.getElementById("planas-tipo-anuncio")?.value || "solo_corte";
+      args.capaMaterials = {
+        corte: document.getElementById("mat-plana")?.value || "",
+        base:  document.getElementById("planas-base-material")?.value || "",
+        luz:   document.getElementById("planas-luz-material")?.value || "",
+      };
+      args.incluyeBase = tipoAnun !== "solo_corte";
+      args.incluyeLuz  = tipoAnun === "corte_base_luz";
+      // Capa por posición en el SVG — el backend ya la detectó, la usamos como
+      // fuente de verdad porque el walk del DOM de SVGLoader puede fallar
+      // (Illustrator a veces no pone el id/label en el <g> visible al loader).
+      args.capasOrden = (svgPathsRaw || []).map(p => p.capa || "");
+    }
+    window.v3d_render(args);
   } catch(e) { console.warn("Vista 3D:", e); }
 }
 </script>
@@ -7284,6 +7547,7 @@ import { SVGLoader }     from 'three/addons/loaders/SVGLoader.js';
 // ─── estado de escena ───────────────────────────────────────────────────────
 let S, CAM, REN, CTR, AID;
 let _explodeGroups = null;   // { frontGrp, depthSvg, exploded }
+let _cajaLedRefs = [];       // [{ mat, mBack, light, wattsFactor }] LEDs de caja para animar
 const LDR = new SVGLoader();
 
 function initScene(canvas) {
@@ -7361,6 +7625,7 @@ function clearMeshes() {
     });
   });
   _explodeGroups = null;
+  _cajaLedRefs = [];
   const btn = document.getElementById('btn-explode');
   if (btn) { btn.style.display = 'none'; btn.textContent = '💥 Explotar cara'; }
 }
@@ -7375,7 +7640,8 @@ window._v3dReady = true;
 
 window.v3d_render = function({ svgText, depthCm, tipo, tipoConstruccion,
                                realWidthCm, viewboxW, viewboxH,
-                               alturaLetraCm, maxLetterHeightPx, artboardWCm }) {
+                               alturaLetraCm, maxLetterHeightPx, artboardWCm,
+                               capaMaterials, incluyeBase, incluyeLuz, capasOrden }) {
   const canvas = document.getElementById('visor3d-canvas');
   const empty  = document.getElementById('visor3d-empty');
   if (!canvas) return;
@@ -7399,9 +7665,13 @@ window.v3d_render = function({ svgText, depthCm, tipo, tipoConstruccion,
 
   let grp;
   try {
-    grp = (tipo === 'caja')
-      ? _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm)
-      : _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion);
+    if (tipo === 'caja') {
+      grp = _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm);
+    } else if (tipo === 'planas') {
+      grp = _buildPlanas(svgText, sf, capaMaterials || {}, incluyeBase !== false, !!incluyeLuz, capasOrden || []);
+    } else {
+      grp = _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion);
+    }
   } catch (e) {
     console.warn('3D build error:', e);
   }
@@ -7576,6 +7846,304 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
   return grp;
 }
 
+// ─── construir letras planas (placa base + piezas de corte + piezas con luz) ─
+function _buildPlanas(svgText, sf, capaMaterials, incluyeBase, incluyeLuz, _capasOrdenIgnorada) {
+  const { paths } = LDR.parse(svgText);
+  if (!paths.length) return null;
+
+  // Detección de capa en DOM order — LDR.parse recorre el XML en DOM order, así
+  // que aquí replicamos ese recorrido con DOMParser y armamos un array paralelo
+  // capaDom[i] = capa del i-ésimo primitivo. capasOrden que llega del backend
+  // NO sirve porque Python re-ordena las piezas por X en calculator.py.
+  const _PRIM = new Set(['path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'line']);
+  const _matchCapa = (raw) => {
+    const s = String(raw || '').toLowerCase();
+    if (!s) return '';
+    if (/(?:^|[^a-z])(base|fondo|soporte)(?:[^a-z]|$)/.test(s))               return 'base';
+    if (/(?:^|[^a-z])(corte|cut)(?:[^a-z]|$)/.test(s))                        return 'corte';
+    if (/(?:^|[^a-z])(luz|halo|retro|iluminad[ao])(?:[^a-z]|$)/.test(s))      return 'luz';
+    return '';
+  };
+  const capaDom = [];
+  try {
+    const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+    const walk = (node, currentCapa) => {
+      if (!node || node.nodeType !== 1) return;
+      let capa = currentCapa;
+      const tag = (node.nodeName || '').toLowerCase().replace(/^svg:/, '');
+      if (tag === 'g') {
+        // El backend sólo mira id / inkscape:label; replicamos exacto.
+        const raw = node.getAttribute('id') || node.getAttribute('inkscape:label') || '';
+        const m = _matchCapa(raw);
+        if (m) capa = m;
+      }
+      if (_PRIM.has(tag)) capaDom.push(capa);
+      for (const child of node.childNodes) walk(child, capa);
+    };
+    walk(doc.documentElement, '');
+  } catch (_) { /* fallback silencioso */ }
+
+  const _capaAt = (i, node) => {
+    if (capaDom.length === paths.length) return capaDom[i] || '';
+    // Fallback: caminar el DOM del propio nodo SVGLoader
+    let cur = node;
+    while (cur && typeof cur.getAttribute === 'function') {
+      const raw = (cur.getAttribute('id') || '') + ' ' + (cur.getAttribute('inkscape:label') || '');
+      const m = _matchCapa(raw);
+      if (m) return m;
+      cur = cur.parentNode;
+    }
+    return '';
+  };
+
+  // Traducir id de material del catálogo a color/acabado aproximado
+  const _matColor = (matId, fallback) => {
+    const id = String(matId || '').toLowerCase();
+    if (!id) return fallback;
+    if (id.includes('espejo'))            return { color: 0xcdd5e0, shin: 140 };
+    if (id.includes('translucido'))       return { color: 0xe8f4ff, trans: true, opac: 0.75, shin: 100 };
+    if (id.includes('acrilico_blanco'))   return { color: 0xf0f4fa, shin: 80 };
+    if (id.includes('acrilico_negro'))    return { color: 0x22262c, shin: 80 };
+    if (id.includes('acrilico_rojo'))     return { color: 0xcc2a2a, shin: 90 };
+    if (id.includes('acrilico_azul'))     return { color: 0x2a6acc, shin: 90 };
+    if (id.includes('acrilico_amar'))     return { color: 0xe9c31c, shin: 90 };
+    if (id.includes('acrilico_verde'))    return { color: 0x2ea34d, shin: 90 };
+    if (id.includes('acrilico_naranja'))  return { color: 0xf07a1c, shin: 90 };
+    if (id.includes('acrilico_colores'))  return { color: 0xf5a623, shin: 90 };
+    if (id.includes('acrilico'))          return { color: 0xf0f4ff, shin: 80 };
+    if (id.includes('aluminio'))          return { color: 0xc9d1d9, shin: 90 };
+    if (id.includes('alucobon'))          return { color: 0x8d959e, shin: 60 };
+    if (id.includes('pvc'))               return { color: 0xdadfe4, shin: 40 };
+    if (id.includes('vinil'))             return { color: 0xe87c2a, shin: 30 };
+    if (id.includes('lona'))              return { color: 0xf4ecd8, shin: 20 };
+    return fallback;
+  };
+
+  const grp = new THREE.Group();
+
+  // Espesores (cm → svg-space). En letras planas los materiales son muy
+  // delgados (~3-5 mm), pero para lectura visual en el visor 3D se
+  // exageran: relieve claro sin dejar de verse "plano".
+  const zBase  = Math.max(0.001, 1.5 / sf);   // ~1.5 cm visuales de placa base
+  const zCorte = Math.max(0.001, 1.0 / sf);   // ~1.0 cm visuales de relieve
+  const zLuz   = Math.max(0.001, 1.5 / sf);   // ~1.5 cm visuales para piezas con luz
+
+  const _extrude = (shapes, depthSvg, matSpec, zOffset, emissive, dx, dy) => {
+    if (!shapes.length) return;
+    const spec = matSpec || { color: 0xb0bccb, shin: 60 };
+    const opts = {
+      color: spec.color,
+      specular: 0x444444,
+      shininess: spec.shin || 60,
+      side: THREE.DoubleSide,
+    };
+    if (spec.trans) { opts.transparent = true; opts.opacity = spec.opac ?? 0.75; }
+    if (emissive) {
+      opts.emissive = new THREE.Color(spec.color).multiplyScalar(0.45);
+      opts.emissiveIntensity = 0.85;
+    }
+    const mat = new THREE.MeshPhongMaterial(opts);
+    for (const shape of shapes) {
+      const geom = new THREE.ExtrudeGeometry(shape, { depth: depthSvg, bevelEnabled: false });
+      geom.translate(dx || 0, dy || 0, zOffset || 0);
+      geom.computeVertexNormals();
+      const m = new THREE.Mesh(geom, mat);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      grp.add(m);
+    }
+  };
+
+  // BBox conjunto de una lista de shapes
+  const _bboxOf = (shapes) => {
+    let mnX=Infinity, mnY=Infinity, mxX=-Infinity, mxY=-Infinity;
+    for (const sh of shapes) {
+      const bb = _shapeBbox(sh);
+      if (!bb) continue;
+      if (bb.x0        < mnX) mnX = bb.x0;
+      if (bb.y0        < mnY) mnY = bb.y0;
+      if (bb.x0 + bb.w > mxX) mxX = bb.x0 + bb.w;
+      if (bb.y0 + bb.h > mxY) mxY = bb.y0 + bb.h;
+    }
+    if (!isFinite(mnX) || mxX <= mnX || mxY <= mnY) return null;
+    return { x0: mnX, y0: mnY, w: mxX-mnX, h: mxY-mnY, cx: (mnX+mxX)/2, cy: (mnY+mxY)/2 };
+  };
+
+  // Agrupar shapes por capa
+  const buckets = { base: [], corte: [], luz: [], '': [] };
+  for (let i = 0; i < paths.length; i++) {
+    const svgPath = paths[i];
+    const capa = _capaAt(i, svgPath.userData?.node);
+    for (const shape of SVGLoader.createShapes(svgPath)) {
+      (buckets[capa] || buckets['']).push(shape);
+    }
+  }
+
+  const hayBase  = buckets.base.length  > 0;
+  const hayCorte = buckets.corte.length > 0;
+  const hayLuz   = buckets.luz.length   > 0;
+  const haySuelto = buckets[''].length  > 0;
+
+  // Si el SVG no trae ninguna capa nombrada, tratar todo como corte plano (sin base sintética).
+  if (!hayBase && !hayCorte && !hayLuz && haySuelto) {
+    _extrude(buckets[''], zCorte, _matColor(capaMaterials.corte, { color: 0xb0bccb, shin: 60 }), 0, false);
+    if (!grp.children.length) return null;
+    grp.scale.set(sf, -sf, sf);
+    return grp;
+  }
+
+  // ── Colores por capa ─────────────────────────────────────────────────────
+  // Base: color del material (gris aluminio / blanco acrílico / etc.)
+  // Corte: AZUL fijo (identifica la capa "corte" en la preview)
+  // Luz:   AMARILLO fijo con emissive (identifica la capa "luz" backlit)
+  // Son colores representativos de la preview, no del material real.
+  const specBase  = _matColor(capaMaterials.base, { color: 0xc9d1d9, shin: 90 });
+  const specCorte = { color: 0x2f7fd6, shin: 70 };   // azul
+  const specLuz   = { color: 0xf5c518, shin: 80 };   // amarillo
+
+  const bbBase   = hayBase   ? _bboxOf(buckets.base)   : null;
+  const bbDiseño = _bboxOf([...buckets.corte, ...buckets.luz, ...buckets['']]);
+
+  let baseRect = null;   // se usa para calcular alineación aunque la base sea sintética
+  if (incluyeBase && hayBase) {
+    _extrude(buckets.base, zBase, specBase, 0, false);
+    baseRect = bbBase;
+  } else if (incluyeBase && bbDiseño) {
+    // Base sintética: rectángulo que envuelve el diseño con un pequeño margen
+    const pad = Math.min(bbDiseño.w, bbDiseño.h) * 0.08;
+    const rect = new THREE.Shape([
+      new THREE.Vector2(bbDiseño.x0 - pad,           bbDiseño.y0 - pad),
+      new THREE.Vector2(bbDiseño.x0 + bbDiseño.w + pad, bbDiseño.y0 - pad),
+      new THREE.Vector2(bbDiseño.x0 + bbDiseño.w + pad, bbDiseño.y0 + bbDiseño.h + pad),
+      new THREE.Vector2(bbDiseño.x0 - pad,           bbDiseño.y0 + bbDiseño.h + pad),
+    ]);
+    _extrude([rect], zBase, specBase, 0, false);
+    baseRect = { x0: bbDiseño.x0-pad, y0: bbDiseño.y0-pad,
+                 w: bbDiseño.w + 2*pad, h: bbDiseño.h + 2*pad,
+                 cx: bbDiseño.cx,       cy: bbDiseño.cy };
+  }
+
+  const baseZ = grp.children.length ? zBase : 0;
+
+  // ── Alineación corte/luz sobre la base ────────────────────────────────────
+  // Muchos SVGs de rotulistas tienen la placa y las letras dibujadas en
+  // partes distintas del artboard (referencia visual, no montaje). Si el
+  // diseño NO cae dentro de la base, lo re-centramos sobre la base.
+  let dx = 0, dy = 0;
+  if (baseRect && bbDiseño) {
+    const dentro =
+      bbDiseño.x0 >= baseRect.x0 - baseRect.w * 0.05 &&
+      bbDiseño.y0 >= baseRect.y0 - baseRect.h * 0.05 &&
+      bbDiseño.x0 + bbDiseño.w <= baseRect.x0 + baseRect.w * 1.05 &&
+      bbDiseño.y0 + bbDiseño.h <= baseRect.y0 + baseRect.h * 1.05;
+    if (!dentro) {
+      dx = baseRect.cx - bbDiseño.cx;
+      dy = baseRect.cy - bbDiseño.cy;
+    }
+  }
+
+  // ── CORTE + LUZ dentro de frontGrp (para animar el explode) ──────────────
+  // Van elevadas de la base ~1 cm porque van montadas con separadores
+  // (silicón espesor / distanciadores metálicos). Cilindros pequeños entre
+  // base y pieza refuerzan visualmente el montaje.
+  const zGap    = Math.max(0.001, 1.0 / sf);   // ~1 cm de aire para los separadores
+  const frontGrp = new THREE.Group();
+  const frontZ  = baseZ + zGap;
+
+  // Sub-extrude reutilizable pero apuntando a frontGrp en lugar de grp
+  const _extrudeInto = (target, shapes, depthSvg, matSpec, zOffset, emissive) => {
+    if (!shapes.length) return;
+    const spec = matSpec || { color: 0xb0bccb, shin: 60 };
+    const opts = {
+      color: spec.color,
+      specular: 0x444444,
+      shininess: spec.shin || 60,
+      side: THREE.DoubleSide,
+    };
+    if (spec.trans) { opts.transparent = true; opts.opacity = spec.opac ?? 0.75; }
+    if (emissive) {
+      opts.emissive = new THREE.Color(spec.color).multiplyScalar(0.45);
+      opts.emissiveIntensity = 0.85;
+    }
+    const mat = new THREE.MeshPhongMaterial(opts);
+    for (const shape of shapes) {
+      const geom = new THREE.ExtrudeGeometry(shape, { depth: depthSvg, bevelEnabled: false });
+      geom.translate(dx || 0, dy || 0, zOffset || 0);
+      geom.computeVertexNormals();
+      const m = new THREE.Mesh(geom, mat);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      target.add(m);
+    }
+  };
+
+  // Cilindros separadores: 1-2 por pieza según ancho, con la altura del gap
+  const spacerMat = new THREE.MeshPhongMaterial({
+    color: 0x9aa3ad, specular: 0x333333, shininess: 90, side: THREE.DoubleSide
+  });
+  const _addSpacers = (shapes) => {
+    const rSvg = Math.max(0.001, 0.4 / sf);   // 4 mm de radio visual
+    for (const sh of shapes) {
+      const bb = _shapeBbox(sh);
+      if (!bb) continue;
+      const anchoCm = bb.w * sf;
+      // 1 separador central para piezas pequeñas, 2 para piezas anchas
+      const cxs = anchoCm > 8
+        ? [bb.x0 + bb.w * 0.30, bb.x0 + bb.w * 0.70]
+        : [bb.x0 + bb.w * 0.50];
+      const cy = bb.y0 + bb.h * 0.50;
+      for (const cx of cxs) {
+        const cyl = new THREE.Mesh(
+          new THREE.CylinderGeometry(rSvg, rSvg, zGap, 14),
+          spacerMat
+        );
+        // El eje del cilindro por default es Y; girar para que quede en Z
+        cyl.rotation.x = Math.PI / 2;
+        cyl.position.set(cx + (dx||0), cy + (dy||0), baseZ + zGap * 0.5);
+        cyl.castShadow = true;
+        frontGrp.add(cyl);
+      }
+    }
+  };
+
+  // CORTE
+  if (hayCorte) {
+    _extrudeInto(frontGrp, buckets.corte, zCorte, specCorte, frontZ, false);
+    _addSpacers(buckets.corte);
+  }
+  if (haySuelto) {
+    _extrudeInto(frontGrp, buckets[''], zCorte, specCorte, frontZ, false);
+    _addSpacers(buckets['']);
+  }
+
+  // LUZ (emissive para simular backlit — los separadores son parte del sistema
+  // real, así que también se muestran aquí)
+  if (hayLuz) {
+    if (incluyeLuz) {
+      _extrudeInto(frontGrp, buckets.luz, zLuz, specLuz, frontZ, true);
+    } else {
+      // Si el tipo de anuncio no incluye luz pero el SVG sí trae capa,
+      // mostrarlas como corte (azul, sin emissive)
+      _extrudeInto(frontGrp, buckets.luz, zCorte, specCorte, frontZ, false);
+    }
+    _addSpacers(buckets.luz);
+  }
+
+  if (frontGrp.children.length) grp.add(frontGrp);
+
+  if (!grp.children.length) return null;
+  grp.scale.set(sf, -sf, sf);
+
+  // Habilitar el botón "Explotar" para separar visualmente las capas
+  if (frontGrp.children.length) {
+    _explodeGroups = { frontGrp, depthSvg: Math.max(4.0 / sf, zLuz + zGap * 4), exploded: false };
+    const btn = document.getElementById('btn-explode');
+    if (btn) { btn.style.display = ''; btn.textContent = '💥 Separar capas'; }
+  }
+
+  return grp;
+}
+
 // ─── construir caja de luz hueca (con soporte para vista explosionada) ───────
 function _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm) {
   const { paths } = LDR.parse(svgText);
@@ -7711,9 +8279,76 @@ function _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm) {
     backGeom.computeVertexNormals();
     bodyGrp.add(new THREE.Mesh(backGeom, mBack));
 
+    // ── LEDs perimetrales pegados por DENTRO a la sercha ─────────────────
+    // Cada LED es un pequeño rectángulo (BoxGeometry) con el largo a lo
+    // largo del perímetro interior, pegado al muro (cara del muro dentro de
+    // la caja) y extendiéndose apenas hacia el centro. Espaciados ~7 cm.
+    const ledMat = new THREE.MeshPhongMaterial({
+      color: new THREE.Color(0xfff8d0),
+      emissive: new THREE.Color(0xffcc55),
+      emissiveIntensity: 1.3,
+      specular: new THREE.Color(0x111100),
+      shininess: 40,
+    });
+    const ledLenSvg   = Math.max(3.0 / sf, wallSvg * 0.9);   // 3 cm largo del módulo
+    const ledThickSvg = Math.max(0.6 / sf, wallSvg * 0.3);   // 6 mm hacia el centro
+    const ledTallSvg  = Math.max(0.8 / sf, wallSvg * 0.35);  // 8 mm de alto en Z
+    const ledGeom     = new THREE.BoxGeometry(ledLenSvg, ledThickSvg, ledTallSvg);
+    const ledZ        = depthSvg * 0.5;   // a media profundidad del muro
+    // Perímetro interior — para calcular espaciado uniforme
+    let periInner = 0;
+    for (let i = 0; i < innerPts.length; i++) {
+      const j = (i + 1) % innerPts.length;
+      periInner += Math.hypot(innerPts[j].x - innerPts[i].x, innerPts[j].y - innerPts[i].y);
+    }
+    const espacioLedSvg = Math.max(7.0 / sf, periInner / 48);  // ~7cm entre módulos
+    let acumulado = 0;
+    let siguienteLed = espacioLedSvg * 0.5;
+    for (let i = 0; i < innerPts.length; i++) {
+      const j = (i + 1) % innerPts.length;
+      const dxSeg = innerPts[j].x - innerPts[i].x;
+      const dySeg = innerPts[j].y - innerPts[i].y;
+      const seg   = Math.hypot(dxSeg, dySeg);
+      if (seg <= 0) continue;
+      const tanX = dxSeg / seg, tanY = dySeg / seg;
+      // Dirección inward por vértice: (innerPts - outerPts) es POR CONSTRUCCIÓN
+      // la dirección al centroide desde cada punto del muro. Interpolando entre
+      // vértices adyacentes obtenemos la normal correcta para cada LED sin depender
+      // del centroide global (que en contornos no convexos apuntaba mal en algunas
+      // aristas y por eso los LEDs salían del otro lado del muro).
+      const inwardIx = innerPts[i].x - outerPts[i].x;
+      const inwardIy = innerPts[i].y - outerPts[i].y;
+      const inwardJx = innerPts[j].x - outerPts[j].x;
+      const inwardJy = innerPts[j].y - outerPts[j].y;
+      while (acumulado + seg >= siguienteLed) {
+        const t = (siguienteLed - acumulado) / seg;
+        // Punto sobre el muro interior (innerPts = cara interior de la sercha)
+        const wallX = innerPts[i].x + t * dxSeg;
+        const wallY = innerPts[i].y + t * dySeg;
+        // Normal inward interpolada
+        const inX = inwardIx + t * (inwardJx - inwardIx);
+        const inY = inwardIy + t * (inwardJy - inwardIy);
+        const nLen = Math.hypot(inX, inY) || 1;
+        const nx = inX / nLen, ny = inY / nLen;
+        // Posición: centro del módulo tocando el muro + medio grosor hacia adentro
+        const lx = wallX + nx * ledThickSvg * 0.5;
+        const ly = wallY + ny * ledThickSvg * 0.5;
+        const led = new THREE.Mesh(ledGeom, ledMat);
+        led.position.set(lx, ly, ledZ);
+        // Alinear el largo del box con la tangente del muro
+        led.rotation.z = Math.atan2(tanY, tanX);
+        bodyGrp.add(led);
+        siguienteLed += espacioLedSvg;
+      }
+      acumulado += seg;
+    }
+    // Guardar refs para animar el "encendido" al explotar
+    _cajaLedRefs.push({ mat: ledMat, mBack, wattsFactor: depthCm });
+
     const iLight = new THREE.PointLight(0xffdd88, 18, depthCm * 5);
     iLight.position.set(cx, cy, depthSvg * 0.4);
     grp.add(iLight);
+    _cajaLedRefs[_cajaLedRefs.length - 1].light = iLight;
 
     const faceGeom = new THREE.ShapeGeometry(sh);
     faceGeom.computeVertexNormals();
@@ -7843,6 +8478,19 @@ window.v3d_explode = function() {
   _explodeGroups.exploded = !_explodeGroups.exploded;
   if (btn) btn.textContent = _explodeGroups.exploded ? '🔗 Juntar' : '💥 Explotar cara';
 
+  // Al explotar la caja, "encender" los LEDs: subir emissive de la placa de
+  // fondo (mBack) y los propios cilindros LED + boost del PointLight interno.
+  // Al colapsar, volver al estado neutro. Sólo aplica si hay LEDs de caja.
+  const encender = _explodeGroups.exploded;
+  const ledStart = _cajaLedRefs.map(ref => ({
+    matE:  ref.mat.emissiveIntensity,
+    backE: ref.mBack.emissiveIntensity,
+    lightI: ref.light ? ref.light.intensity : 0,
+  }));
+  const ledTarget = _cajaLedRefs.map(ref => encender
+    ? { matE: 2.4, backE: 1.6, lightI: (ref.wattsFactor || 15) * 3.5 }
+    : { matE: 1.3, backE: 0.82, lightI: (ref.wattsFactor || 15) * 1.2 });
+
   const dur = 580;
   let t0 = null;
   (function anim(ts) {
@@ -7850,6 +8498,13 @@ window.v3d_explode = function() {
     const p = Math.min((ts - t0) / dur, 1);
     const e = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p; // ease-in-out quad
     frontGrp.position.z = from + (to - from) * e;
+    for (let i = 0; i < _cajaLedRefs.length; i++) {
+      const ref = _cajaLedRefs[i];
+      const s = ledStart[i], t = ledTarget[i];
+      ref.mat.emissiveIntensity   = s.matE  + (t.matE  - s.matE)  * e;
+      ref.mBack.emissiveIntensity = s.backE + (t.backE - s.backE) * e;
+      if (ref.light) ref.light.intensity = s.lightI + (t.lightI - s.lightI) * e;
+    }
     if (p < 1) requestAnimationFrame(anim);
   })(performance.now());
 };
