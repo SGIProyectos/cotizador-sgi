@@ -7770,17 +7770,31 @@ function _pointInShape(x, y, shape) {
   }
   return true;
 }
-// n puntos DENTRO del shape distribuidos por cuadrantes (4) o mitades (2).
-// Muestreo por grilla + selección del más lejano al centro por región.
-function _puntosDentroShape(shape, bb, n) {
+// Verifica que un círculo (centro + 8 puntos en la circunferencia) quepa
+// entero dentro del shape. Evita tornillos que se salen por bordes diagonales
+// (letra "A", "V", etc.) donde el centro está dentro pero el borde no.
+function _cilindroCabe(shape, cx, cy, radio) {
+  if (!_pointInShape(cx, cy, shape)) return false;
+  const N = 8;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    if (!_pointInShape(cx + radio * Math.cos(a), cy + radio * Math.sin(a), shape))
+      return false;
+  }
+  return true;
+}
+// n puntos DENTRO del shape (con radio de seguridad) distribuidos por
+// cuadrantes (4) o mitades (2). Muestreo por grilla + selección del más lejano
+// al centro por región.
+function _puntosDentroShape(shape, bb, n, radioSeg) {
   const cx = bb.x0 + bb.w / 2, cy = bb.y0 + bb.h / 2;
-  const nCells = 9;
+  const nCells = 14;
   const cand = [];
   for (let iy = 0; iy < nCells; iy++) {
     for (let ix = 0; ix < nCells; ix++) {
       const x = bb.x0 + ((ix + 0.5) / nCells) * bb.w;
       const y = bb.y0 + ((iy + 0.5) / nCells) * bb.h;
-      if (_pointInShape(x, y, shape)) {
+      if (_cilindroCabe(shape, x, y, radioSeg)) {
         const q = (y < cy ? 0 : 2) + (x < cx ? 0 : 1);
         cand.push({ x, y, q, d: Math.hypot(x - cx, y - cy) });
       }
@@ -7793,10 +7807,10 @@ function _puntosDentroShape(shape, bb, n) {
       if (opts.length) pts.push([opts[0].x, opts[0].y]);
     }
   } else {
-    const izq = cand.filter(c => c.x <  cx).sort((a, b) => (cx - a.x) - (cx - b.x));
-    const der = cand.filter(c => c.x >= cx).sort((a, b) => (a.x - cx) - (b.x - cx));
-    if (izq.length) pts.push([izq[izq.length - 1].x, izq[izq.length - 1].y]);
-    if (der.length) pts.push([der[der.length - 1].x, der[der.length - 1].y]);
+    const izq = cand.filter(c => c.x <  cx).sort((a, b) => (cx - b.x) - (cx - a.x));
+    const der = cand.filter(c => c.x >= cx).sort((a, b) => (b.x - cx) - (a.x - cx));
+    if (izq.length) pts.push([izq[0].x, izq[0].y]);
+    if (der.length) pts.push([der[0].x, der[0].y]);
   }
   return pts;
 }
@@ -7984,7 +7998,8 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
         const { shape, bbox: bb } = info;
         const hCm = bb.h * sf;
         const nPats = hCm >= 8 ? 4 : 2;
-        for (const [px, py] of _puntosDentroShape(shape, bb, nPats)) {
+        const radioSeg = (bodyDia / 2) * 1.6;   // 60% de margen sobre el radio real
+        for (const [px, py] of _puntosDentroShape(shape, bb, nPats, radioSeg)) {
           const g = new THREE.CylinderGeometry(bodyDia/2, bodyDia/2, bodyLen, 10);
           const m = new THREE.Mesh(g, patMat);
           m.rotation.x = Math.PI / 2;
