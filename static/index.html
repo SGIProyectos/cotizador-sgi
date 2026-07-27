@@ -7804,6 +7804,14 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
 
   const extCfg = { depth: depthSvg, bevelEnabled: false };
   const grp = new THREE.Group();
+  const frontGrp = new THREE.Group();   // cuerpo de las letras
+  const mountGrp = new THREE.Group();   // placa PVC o patitas separadoras
+  grp.add(frontGrp);
+  grp.add(mountGrp);
+
+  // bbox global para placa PVC + bbox por letra para patas
+  let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+  const bboxPorLetra = [];
 
   for (const svgPath of paths) {
     const shapes = SVGLoader.createShapes(svgPath);
@@ -7825,6 +7833,7 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       sideMat = mFace || mCercha;
     }
 
+    let biggestBb = null;
     for (const shape of shapes) {
       // Omitir paths de fondo: solo si cubren ≥90% del diseño COMPLETO
       // y hay más de una forma (una letra sola nunca es "fondo")
@@ -7832,17 +7841,84 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
         const bb = _shapeBbox(shape);
         if (bb && bb.area > totalArea * 0.90) continue;
       }
+      const bb = _shapeBbox(shape);
+      if (bb) {
+        if (!biggestBb || bb.area > biggestBb.area) biggestBb = bb;
+        if (bb.x0 < mnX) mnX = bb.x0;
+        if (bb.y0 < mnY) mnY = bb.y0;
+        if (bb.x0 + bb.w > mxX) mxX = bb.x0 + bb.w;
+        if (bb.y0 + bb.h > mxY) mxY = bb.y0 + bb.h;
+      }
       const geom = new THREE.ExtrudeGeometry(shape, extCfg);
       geom.computeVertexNormals();
       const mesh = new THREE.Mesh(geom, [sideMat, faceMat]);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      grp.add(mesh);
+      frontGrp.add(mesh);
+    }
+    if (biggestBb) bboxPorLetra.push(biggestBb);
+  }
+
+  if (!frontGrp.children.length) return null;
+
+  // ── sistema de montaje según tipo de construcción ──
+  // Cara luminosa (acrílico/abierta) → placa PVC 5 mm para atornillar.
+  // Cara opaca (halo/sin luz) → patitas separadoras de pared.
+  const tc = tipoConstruccion || 'cajon_luz';
+  const usaBase  = (tc === 'cajon_luz' || tc === 'abierta_luz');
+  const usaPatas = (tc === 'retro_halo' || tc === 'sin_luz');
+
+  if (!isPlana && !useRealColors && mxX > mnX && (usaBase || usaPatas)) {
+    if (usaBase) {
+      const padSvg   = 2.0 / sf;   // 2 cm de padding alrededor del diseño
+      const thickSvg = 0.5 / sf;   // 5 mm PVC
+      const w  = (mxX - mnX) + 2 * padSvg;
+      const h  = (mxY - mnY) + 2 * padSvg;
+      const cx = (mnX + mxX) / 2;
+      const cy = (mnY + mxY) / 2;
+      const pvcMat = mkMat(0xdadde3, { spec: 0x555555, shin: 20 });
+      const geom = new THREE.BoxGeometry(w, h, thickSvg);
+      const mesh = new THREE.Mesh(geom, pvcMat);
+      mesh.position.set(cx, cy, -thickSvg / 2);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mountGrp.add(mesh);
+    } else {
+      const patDia = 1.5 / sf;
+      const patLen = 2.5 / sf;
+      const patMat = mkMat(0x9aa0a6, { spec: 0x444444, shin: 60 });
+      const inset  = 0.20;
+      for (const bb of bboxPorLetra) {
+        const hCm = bb.h * sf;
+        const nPats = hCm >= 8 ? 4 : 2;
+        const xs = [bb.x0 + bb.w * inset, bb.x0 + bb.w * (1 - inset)];
+        const ys = nPats === 4
+          ? [bb.y0 + bb.h * inset, bb.y0 + bb.h * (1 - inset)]
+          : [bb.y0 + bb.h * 0.5];
+        for (const px of xs) {
+          for (const py of ys) {
+            const g = new THREE.CylinderGeometry(patDia / 2, patDia / 2, patLen, 12);
+            const m = new THREE.Mesh(g, patMat);
+            m.rotation.x = Math.PI / 2;
+            m.position.set(px, py, -patLen / 2);
+            m.castShadow = true;
+            m.receiveShadow = true;
+            mountGrp.add(m);
+          }
+        }
+      }
     }
   }
 
-  if (!grp.children.length) return null;
   grp.scale.set(sf, -sf, sf);
+
+  if (mountGrp.children.length > 0) {
+    const zSep = Math.max(depthSvg, 5.0 / sf);
+    _explodeGroups = { frontGrp, depthSvg: zSep, exploded: false, label: '💥 Separar montaje' };
+    const btn = document.getElementById('btn-explode');
+    if (btn) { btn.style.display = ''; btn.textContent = '💥 Separar montaje'; }
+  }
+
   return grp;
 }
 
@@ -8476,7 +8552,7 @@ window.v3d_explode = function() {
   // Explotar: alejar la cara 80% de la profundidad extra; colapsar: volver a 0
   const to = _explodeGroups.exploded ? 0 : depthSvg * 0.85;
   _explodeGroups.exploded = !_explodeGroups.exploded;
-  if (btn) btn.textContent = _explodeGroups.exploded ? '🔗 Juntar' : '💥 Explotar cara';
+  if (btn) btn.textContent = _explodeGroups.exploded ? '🔗 Juntar' : (_explodeGroups.label || '💥 Explotar cara');
 
   // Al explotar la caja, "encender" los LEDs: subir emissive de la placa de
   // fondo (mBack) y los propios cilindros LED + boost del PointLight interno.
