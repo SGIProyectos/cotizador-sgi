@@ -7946,32 +7946,53 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
         }
       }
     } else {
-      // tornillo delgado: cabeza corta + cuerpo largo
-      const bodyDia = 0.4 / sf;                          // Ø 4 mm
-      const headDia = 0.9 / sf;                          // Ø 9 mm
-      const headLen = 0.4 / sf;                          // 4 mm
-      const patLen  = (depthCm + 2.5) / sf;              // cercha + 2.5 cm
-      const bodyLen = Math.max(0.5 / sf, patLen - headLen);
-      const patMat  = mkMat(0x9aa0a6, { spec: 0x666666, shin: 90 });
+      // Tornillo/esparrago largo que atraviesa: cercha (oculto en la letra) +
+      // 2.5 cm visibles (gap letra ↔ pared) + entra 3 cm en la pared simulada.
+      const bodyDia   = 0.4 / sf;                     // Ø 4 mm
+      const gapSvg    = 2.5 / sf;                     // separación letra ↔ pared
+      const wallEmb   = 3.0 / sf;                     // parte dentro del muro
+      const wallThick = 4.0 / sf;                     // grosor visible del muro
+      const bodyLen   = depthSvg + gapSvg + wallEmb;  // largo total del espárrago
+      const patMat    = mkMat(0x9aa0a6, { spec: 0x666666, shin: 90 });
+      const wallMat   = mkMat(0xece5d3, { spec: 0x222222, shin: 5 });
+
+      // Pared: BoxGeometry envolviendo el bbox global con margen visual
+      let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+      for (const info of infoPorLetra) {
+        const bb = info.bbox;
+        if (bb.x0 < mnX) mnX = bb.x0;
+        if (bb.y0 < mnY) mnY = bb.y0;
+        if (bb.x0 + bb.w > mxX) mxX = bb.x0 + bb.w;
+        if (bb.y0 + bb.h > mxY) mxY = bb.y0 + bb.h;
+      }
+      if (mxX > mnX) {
+        const padSvg = 12.0 / sf;
+        const wW  = (mxX - mnX) + 2 * padSvg;
+        const wH  = (mxY - mnY) + 2 * padSvg;
+        const cxW = (mnX + mxX) / 2;
+        const cyW = (mnY + mxY) / 2;
+        const wallGeom = new THREE.BoxGeometry(wW, wH, wallThick);
+        const wallMesh = new THREE.Mesh(wallGeom, wallMat);
+        wallMesh.position.set(cxW, cyW, -gapSvg - wallThick / 2);
+        wallMesh.receiveShadow = true;
+        mountGrp.add(wallMesh);
+      }
+
+      // Tornillos: van en frontGrp para moverse CON la letra al hacer explode
+      // (así se ve cómo se despegan del muro, dejando los "taquetes" atrás).
       for (const info of infoPorLetra) {
         const { shape, bbox: bb } = info;
         const hCm = bb.h * sf;
         const nPats = hCm >= 8 ? 4 : 2;
         for (const [px, py] of _puntosDentroShape(shape, bb, nPats)) {
-          // Cabeza pegada a la cara trasera de la letra (Z=0 → -headLen)
-          const g1 = new THREE.CylinderGeometry(headDia/2, headDia/2, headLen, 14);
-          const m1 = new THREE.Mesh(g1, patMat);
-          m1.rotation.x = Math.PI / 2;
-          m1.position.set(px, py, -headLen / 2);
-          m1.castShadow = true; m1.receiveShadow = true;
-          mountGrp.add(m1);
-          // Cuerpo largo hacia la pared (Z=-headLen → -patLen)
-          const g2 = new THREE.CylinderGeometry(bodyDia/2, bodyDia/2, bodyLen, 10);
-          const m2 = new THREE.Mesh(g2, patMat);
-          m2.rotation.x = Math.PI / 2;
-          m2.position.set(px, py, -(headLen + bodyLen / 2));
-          m2.castShadow = true; m2.receiveShadow = true;
-          mountGrp.add(m2);
+          const g = new THREE.CylinderGeometry(bodyDia/2, bodyDia/2, bodyLen, 10);
+          const m = new THREE.Mesh(g, patMat);
+          m.rotation.x = Math.PI / 2;
+          // Centro Z entre +depthSvg (cara frontal) y -gapSvg-wallEmb (dentro pared)
+          m.position.set(px, py, (depthSvg - gapSvg - wallEmb) / 2);
+          m.castShadow = true;
+          m.receiveShadow = true;
+          frontGrp.add(m);
         }
       }
     }
