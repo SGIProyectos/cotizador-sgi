@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador</h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.1.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7815,6 +7815,87 @@ function _puntosDentroShape(shape, bb, n, radioSeg) {
   return pts;
 }
 
+// ─── textura de granito procedural (pared donde monta el anuncio) ───────────
+let _wallTexCache = null;
+function _wallTexture() {
+  if (_wallTexCache) return _wallTexCache;
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#7d8085';
+  ctx.fillRect(0, 0, 512, 512);
+  // Grano fino (speckle)
+  for (let i = 0; i < 7000; i++) {
+    const g = 40 + Math.random() * 110;
+    ctx.fillStyle = `rgba(${g|0},${g|0},${g|0},0.75)`;
+    ctx.fillRect(Math.random()*512, Math.random()*512, 1 + Math.random()*1.8, 1 + Math.random()*1.8);
+  }
+  // Manchas medianas
+  for (let i = 0; i < 250; i++) {
+    const g = 70 + Math.random() * 70;
+    ctx.fillStyle = `rgba(${g|0},${g|0},${g|0},0.32)`;
+    ctx.beginPath();
+    ctx.arc(Math.random()*512, Math.random()*512, 2 + Math.random()*7, 0, Math.PI*2);
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  _wallTexCache = tex;
+  return tex;
+}
+
+// bbSvg = { mnX, mnY, mxX, mxY } bbox del anuncio en SVG-space
+function _buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg) {
+  const padSvg = 12.0 / sf;
+  const wW  = (bbSvg.mxX - bbSvg.mnX) + 2 * padSvg;
+  const wH  = (bbSvg.mxY - bbSvg.mnY) + 2 * padSvg;
+  const cxW = (bbSvg.mnX + bbSvg.mxX) / 2;
+  const cyW = (bbSvg.mnY + bbSvg.mxY) / 2;
+  const tex = _wallTexture().clone();
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(Math.max(1, (wW * sf) / 35), Math.max(1, (wH * sf) / 35));
+  tex.needsUpdate = true;
+  const mat = new THREE.MeshPhongMaterial({
+    map: tex, specular: 0x111111, shininess: 4,
+  });
+  const geom = new THREE.BoxGeometry(wW, wH, wallThickSvg);
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(cxW, cyW, wallZ);
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+// Tornillo/perno: cabeza (cilindro corto y ancho) + cuerpo (cilindro largo y fino).
+// zHead = plano Z donde queda la CARA VISIBLE de la cabeza. El cuerpo se hunde hacia -Z.
+function _buildScrew(x, y, zHead, radiusSvg, lenSvg) {
+  const grp = new THREE.Group();
+  const headThick = radiusSvg * 1.2;
+  const headR = radiusSvg * 2.0;
+  const headMat = new THREE.MeshPhongMaterial({
+    color: 0x3d4048, specular: 0xcccccc, shininess: 140,
+  });
+  const bodyMat = new THREE.MeshPhongMaterial({
+    color: 0x7a7d85, specular: 0x888888, shininess: 90,
+  });
+  const head = new THREE.Mesh(
+    new THREE.CylinderGeometry(headR, headR, headThick, 14),
+    headMat
+  );
+  head.rotation.x = Math.PI / 2;
+  head.position.set(x, y, zHead - headThick / 2);
+  head.castShadow = true;
+  grp.add(head);
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(radiusSvg, radiusSvg, lenSvg, 10),
+    bodyMat
+  );
+  body.rotation.x = Math.PI / 2;
+  body.position.set(x, y, zHead - headThick - lenSvg / 2);
+  body.castShadow = true;
+  grp.add(body);
+  return grp;
+}
+
 function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
   const { paths } = LDR.parse(svgText);
   if (!paths.length) return null;
@@ -7843,9 +7924,19 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
   };
   const cfg = paleta[isPlana ? 'plana' : (tipoConstruccion || 'cajon_luz')] || paleta.cajon_luz;
   const mCercha = mkMat(cfg.cercha, { spec: 0x667788, shin: 55 });
-  const mFace   = cfg.face != null
+  const mFacePal = cfg.face != null
     ? mkMat(cfg.face, { trans: cfg.fTrans, opac: cfg.fOpac, spec: 0xaaaacc, shin: 90 })
     : null;
+  // Material INVISIBLE para la cara frontal de letras abiertas (dejan ver los LEDs).
+  // Uso transparent+opacity:0+colorWrite:false para no depender del `visible:false`
+  // que en r165 puede o no honrar el multi-material según el driver.
+  const mFaceInvisible = new THREE.MeshBasicMaterial({
+    transparent: true, opacity: 0, depthWrite: false, colorWrite: false,
+    side: THREE.DoubleSide, visible: false,
+  });
+  const _tc = tipoConstruccion || 'cajon_luz';
+  const isAbierta = (_tc === 'abierta_luz') && !isPlana;
+  console.log('[v3d] _buildLetras tipo=', tipo, 'tipoConstruccion=', tipoConstruccion, '_tc=', _tc, 'isAbierta=', isAbierta);
 
   // Para SVGs de vtracer: bbox GLOBAL del diseño para filtrar el path de fondo.
   // Se compara contra el área conjunta de todo el diseño — comparar contra la
@@ -7882,21 +7973,24 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
     const shapes = SVGLoader.createShapes(svgPath);
     if (!shapes.length) continue;
 
-    let faceMat, sideMat;
-    if (useRealColors) {
+    // Convención Three.js ExtrudeGeometry: [material 0 = sides (canal), material 1 = lids (tapa front+back)]
+    // Cercha (canal) = SIEMPRE aluminio del palette.
+    // Cara (tapa) = color del SVG si useRealColors, invisible si abierta, sino palette.
+    let faceMat;
+    if (isAbierta) {
+      faceMat = mFaceInvisible;
+    } else if (useRealColors) {
       const fill = svgPath.userData?.style?.fill;
       const col  = (fill && fill !== 'none') ? new THREE.Color(fill) : new THREE.Color(0x888888);
-      const emissiveCol = col.clone().multiplyScalar(0.35);
       faceMat = new THREE.MeshPhongMaterial({
-        color: col, emissive: emissiveCol,
+        color: col,
         specular: new THREE.Color(0x444444), shininess: 40,
         side: THREE.DoubleSide,
       });
-      sideMat = faceMat;
     } else {
-      faceMat = mCercha;
-      sideMat = mFace || mCercha;
+      faceMat = mFacePal || mCercha;
     }
+    const sideMat = mCercha;
 
     const shapesOk = [];
     let biggestBb = null, biggestShape = null;
@@ -7914,7 +8008,14 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       shapesOk.push(shape);
       const geom = new THREE.ExtrudeGeometry(shape, extCfg);
       geom.computeVertexNormals();
-      const mesh = new THREE.Mesh(geom, [sideMat, faceMat]);
+      // ExtrudeGeometry addGroup: index 0 = lids (tapas front/back), index 1 = sides (canal)
+      // Para abierta_luz: filtrar el grupo de tapas del geometry — más robusto que
+      // depender de `visible:false` en el material del array.
+      if (isAbierta && Array.isArray(geom.groups)) {
+        const g = geom.groups.filter(gr => gr.materialIndex !== 0);
+        if (g.length > 0) geom.groups = g;   // safety: si el filtro deja vacío, mantenemos original
+      }
+      const mesh = new THREE.Mesh(geom, [faceMat, sideMat]);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       frontGrp.add(mesh);
@@ -7925,20 +8026,45 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
 
   if (!frontGrp.children.length) return null;
 
-  // ── sistema de montaje según tipo de construcción ──
-  // Cara luminosa (acrílico/abierta) → placa PVC 5 mm con forma de la letra
-  //   (2 mm menos por lado para embonar dentro de la cercha).
-  // Cara opaca (halo/sin luz) → tornillos separadores DENTRO de la letra,
-  //   largo = cercha + 2.5 cm para dejar el gap de pared para el halo.
+  // ── sistema de montaje según tipo de construcción ────────────────────────
+  // cajon_luz / sin_luz / abierta_luz → placa PVC 5 mm (fondo cerrado del canal)
+  //   · cajon_luz + abierta_luz: PVC emissive (LEDs adentro iluminando)
+  //   · sin_luz: PVC neutro opaco (no hay LEDs)
+  //   · abierta_luz: además pequeños módulos LED visibles sobre el PVC
+  // retro_halo → tornillos separadores (letra despegada 2.5 cm de la pared),
+  //   con halo emissive sobre el muro detrás de cada letra.
   const tc = tipoConstruccion || 'cajon_luz';
-  const usaBase  = (tc === 'cajon_luz' || tc === 'abierta_luz');
-  const usaPatas = (tc === 'retro_halo' || tc === 'sin_luz');
+  const usaBase  = (tc === 'cajon_luz' || tc === 'sin_luz' || tc === 'abierta_luz');
+  const usaPatas = (tc === 'retro_halo');
 
-  if (!isPlana && !useRealColors && (usaBase || usaPatas)) {
+  // bbox global del anuncio (siempre calculado, aunque no montemos base/patas)
+  let gMnX = Infinity, gMnY = Infinity, gMxX = -Infinity, gMxY = -Infinity;
+  for (const info of infoPorLetra) {
+    const bb = info.bbox;
+    if (bb.x0 < gMnX) gMnX = bb.x0;
+    if (bb.y0 < gMnY) gMnY = bb.y0;
+    if (bb.x0 + bb.w > gMxX) gMxX = bb.x0 + bb.w;
+    if (bb.y0 + bb.h > gMxY) gMxY = bb.y0 + bb.h;
+  }
+  const bbSvg = { mnX: gMnX, mnY: gMnY, mxX: gMxX, mxY: gMxY };
+
+  if (!isPlana && (usaBase || usaPatas) && isFinite(gMnX)) {
+    const wallThickSvg = 4.0 / sf;
+
     if (usaBase) {
       const thickSvg = 0.5 / sf;              // 5 mm PVC
       const shrink   = 0.2 / sf;              // 2 mm por lado
-      const pvcMat = mkMat(0xdadde3, { spec: 0x555555, shin: 20 });
+      // cajon_luz + abierta_luz: PVC iluminado (emissive). sin_luz: PVC neutro.
+      const pvcEmissive = (tc === 'cajon_luz' || tc === 'abierta_luz');
+      const pvcMat = pvcEmissive
+        ? new THREE.MeshPhongMaterial({
+            color: 0xfff6d8,
+            emissive: new THREE.Color(0xffdc70),
+            emissiveIntensity: 0.85,
+            specular: 0x221100, shininess: 12,
+            side: THREE.DoubleSide,
+          })
+        : mkMat(0xdadde3, { spec: 0x555555, shin: 20 });
       const pvcExt = { depth: thickSvg, bevelEnabled: false };
       for (const shapes of shapesLetra) {
         for (const shape of shapes) {
@@ -7951,7 +8077,6 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
           const geom = new THREE.ExtrudeGeometry(shape, pvcExt);
           geom.computeVertexNormals();
           const mesh = new THREE.Mesh(geom, pvcMat);
-          // scale desde el centroide del bbox + shift para preservarlo
           mesh.scale.set(sx, sy, 1);
           mesh.position.set(cx * (1 - sx), cy * (1 - sy), -thickSvg);
           mesh.castShadow = true;
@@ -7959,51 +8084,97 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
           mountGrp.add(mesh);
         }
       }
-    } else {
-      // Tornillo/esparrago largo que atraviesa: cercha (oculto en la letra) +
-      // 2.5 cm visibles (gap letra ↔ pared) + entra 3 cm en la pared simulada.
-      const bodyDia   = 0.4 / sf;                     // Ø 4 mm
-      const gapSvg    = 2.5 / sf;                     // separación letra ↔ pared
-      const wallEmb   = 3.0 / sf;                     // parte dentro del muro
-      const wallThick = 4.0 / sf;                     // grosor visible del muro
-      const bodyLen   = depthSvg + gapSvg + wallEmb;  // largo total del espárrago
-      const patMat    = mkMat(0x9aa0a6, { spec: 0x666666, shin: 90 });
-      const wallMat   = mkMat(0xece5d3, { spec: 0x222222, shin: 5 });
 
-      // Pared: BoxGeometry envolviendo el bbox global con margen visual
-      let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+      // abierta_luz: módulos LED visibles sobre el PVC (la cara está abierta)
+      if (tc === 'abierta_luz') {
+        const ledMat = new THREE.MeshPhongMaterial({
+          color: 0xffffff,
+          emissive: new THREE.Color(0xffee80),
+          emissiveIntensity: 1.7,
+          specular: 0x333311, shininess: 40,
+        });
+        const ledSize = Math.max(1.2 / sf, depthSvg * 0.30);
+        const ledZ    = -0.001 - ledSize * 0.5;  // asoman justo delante del PVC (Z=0 es la cara trasera de la letra)
+        for (const info of infoPorLetra) {
+          const { shape, bbox: bb } = info;
+          const hCm = bb.h * sf;
+          const nLeds = hCm >= 15 ? 4 : (hCm >= 8 ? 3 : 2);
+          const radioSeg = ledSize * 0.7;
+          for (const [px, py] of _puntosDentroShape(shape, bb, nLeds, radioSeg)) {
+            const geom = new THREE.BoxGeometry(ledSize, ledSize, ledSize);
+            const m = new THREE.Mesh(geom, ledMat);
+            m.position.set(px, py, ledZ);
+            mountGrp.add(m);
+          }
+        }
+      }
+
+      // Pared de granito detrás del PVC (5 cm de aire para dejar ver el PVC)
+      const wallGapSvg = 5.0 / sf;
+      const wallZ = -thickSvg - wallGapSvg - wallThickSvg / 2;
+      mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
+
+      // 4 tornillos de anclaje en las esquinas del área ocupada por el anuncio.
+      // Cabeza asoma delante de la pared (visible en la escena aun con el letrero encima).
+      const screwR   = 0.35 / sf;
+      const screwLen = wallGapSvg + wallThickSvg * 0.6;
+      const screwZ   = -thickSvg - wallGapSvg * 0.15;
+      const cornerOffset = (8.0 / sf) * 0.5;  // ~4 cm dentro del padding de la pared
+      const corners = [
+        [bbSvg.mnX - cornerOffset, bbSvg.mnY - cornerOffset],
+        [bbSvg.mxX + cornerOffset, bbSvg.mnY - cornerOffset],
+        [bbSvg.mnX - cornerOffset, bbSvg.mxY + cornerOffset],
+        [bbSvg.mxX + cornerOffset, bbSvg.mxY + cornerOffset],
+      ];
+      for (const [px, py] of corners) {
+        mountGrp.add(_buildScrew(px, py, screwZ, screwR, screwLen));
+      }
+
+    } else {
+      // retro_halo: espárragos que atraviesan la letra + pared granito + halo
+      const bodyDia = 0.4 / sf;
+      const gapSvg  = 2.5 / sf;
+      const wallEmb = 3.0 / sf;
+      const bodyLen = depthSvg + gapSvg + wallEmb;
+      const patMat  = mkMat(0x9aa0a6, { spec: 0x666666, shin: 90 });
+
+      // Pared de granito
+      const wallZ = -gapSvg - wallThickSvg / 2;
+      mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
+
+      // Halo: plano emissive ligeramente más grande que cada letra pegado a la pared
+      const haloExpandSvg = 4.0 / sf;
+      const haloExt = { depth: 0.02 / sf, bevelEnabled: false };
+      const haloMat = new THREE.MeshBasicMaterial({
+        color: 0xfff2c8, transparent: true, opacity: 0.55,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      });
       for (const info of infoPorLetra) {
         const bb = info.bbox;
-        if (bb.x0 < mnX) mnX = bb.x0;
-        if (bb.y0 < mnY) mnY = bb.y0;
-        if (bb.x0 + bb.w > mxX) mxX = bb.x0 + bb.w;
-        if (bb.y0 + bb.h > mxY) mxY = bb.y0 + bb.h;
-      }
-      if (mxX > mnX) {
-        const padSvg = 12.0 / sf;
-        const wW  = (mxX - mnX) + 2 * padSvg;
-        const wH  = (mxY - mnY) + 2 * padSvg;
-        const cxW = (mnX + mxX) / 2;
-        const cyW = (mnY + mxY) / 2;
-        const wallGeom = new THREE.BoxGeometry(wW, wH, wallThick);
-        const wallMesh = new THREE.Mesh(wallGeom, wallMat);
-        wallMesh.position.set(cxW, cyW, -gapSvg - wallThick / 2);
-        wallMesh.receiveShadow = true;
-        mountGrp.add(wallMesh);
+        if (bb.w <= 0 || bb.h <= 0) continue;
+        const sx = (bb.w + 2 * haloExpandSvg) / bb.w;
+        const sy = (bb.h + 2 * haloExpandSvg) / bb.h;
+        const cx = bb.x0 + bb.w / 2;
+        const cy = bb.y0 + bb.h / 2;
+        const geom = new THREE.ExtrudeGeometry(info.shape, haloExt);
+        geom.computeVertexNormals();
+        const mesh = new THREE.Mesh(geom, haloMat);
+        mesh.scale.set(sx, sy, 1);
+        mesh.position.set(cx * (1 - sx), cy * (1 - sy), -gapSvg + 0.05 / sf);
+        mesh.renderOrder = 1;
+        mountGrp.add(mesh);
       }
 
-      // Tornillos: van en frontGrp para moverse CON la letra al hacer explode
-      // (así se ve cómo se despegan del muro, dejando los "taquetes" atrás).
+      // Tornillos separadores dentro de la letra (van en frontGrp para explode)
       for (const info of infoPorLetra) {
         const { shape, bbox: bb } = info;
         const hCm = bb.h * sf;
         const nPats = hCm >= 8 ? 4 : 2;
-        const radioSeg = (bodyDia / 2) * 1.6;   // 60% de margen sobre el radio real
+        const radioSeg = (bodyDia / 2) * 1.6;
         for (const [px, py] of _puntosDentroShape(shape, bb, nPats, radioSeg)) {
           const g = new THREE.CylinderGeometry(bodyDia/2, bodyDia/2, bodyLen, 10);
           const m = new THREE.Mesh(g, patMat);
           m.rotation.x = Math.PI / 2;
-          // Centro Z entre +depthSvg (cara frontal) y -gapSvg-wallEmb (dentro pared)
           m.position.set(px, py, (depthSvg - gapSvg - wallEmb) / 2);
           m.castShadow = true;
           m.receiveShadow = true;
@@ -8635,6 +8806,31 @@ function _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm) {
   }
 
   if (!bodyGrp.children.length && !frontGrp.children.length) return null;
+
+  // ── Pared granito + 4 tornillos de anclaje detrás de la caja ────────────
+  if (gMaxX > gMinX && gMaxY > gMinY) {
+    const wallThickSvg = 4.0 / sf;
+    const wallGapSvg = 3.0 / sf;   // aire caja↔pared: 3 cm
+    const wallZ = -wallGapSvg - wallThickSvg / 2;
+    const bbCajaSvg = { mnX: gMinX, mnY: gMinY, mxX: gMaxX, mxY: gMaxY };
+    bodyGrp.add(_buildGraniteWall(bbCajaSvg, sf, wallZ, wallThickSvg));
+
+    // Tornillos: 4 en las esquinas del outline (ligeramente hacia adentro para
+    // que atraviesen la sercha real). Cabeza asoma pegada al frente de la caja.
+    const screwR   = 0.45 / sf;
+    const screwLen = depthSvg + wallGapSvg + wallThickSvg * 0.6;
+    const screwZ   = depthSvg + 0.4 / sf;  // cabeza asoma 4 mm delante de la carátula
+    const inset    = Math.min(gMaxX - gMinX, gMaxY - gMinY) * 0.04;
+    const corners = [
+      [gMinX + inset, gMinY + inset],
+      [gMaxX - inset, gMinY + inset],
+      [gMinX + inset, gMaxY - inset],
+      [gMaxX - inset, gMaxY - inset],
+    ];
+    for (const [px, py] of corners) {
+      bodyGrp.add(_buildScrew(px, py, screwZ, screwR, screwLen));
+    }
+  }
 
   grp.scale.set(sf, -sf, sf);
 
