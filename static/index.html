@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.1.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.2.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7936,7 +7936,6 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
   });
   const _tc = tipoConstruccion || 'cajon_luz';
   const isAbierta = (_tc === 'abierta_luz') && !isPlana;
-  console.log('[v3d] _buildLetras tipo=', tipo, 'tipoConstruccion=', tipoConstruccion, '_tc=', _tc, 'isAbierta=', isAbierta);
 
   // Para SVGs de vtracer: bbox GLOBAL del diseño para filtrar el path de fondo.
   // Se compara contra el área conjunta de todo el diseño — comparar contra la
@@ -8027,15 +8026,17 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
   if (!frontGrp.children.length) return null;
 
   // ── sistema de montaje según tipo de construcción ────────────────────────
-  // cajon_luz / sin_luz / abierta_luz → placa PVC 5 mm (fondo cerrado del canal)
-  //   · cajon_luz + abierta_luz: PVC emissive (LEDs adentro iluminando)
-  //   · sin_luz: PVC neutro opaco (no hay LEDs)
+  // cajon_luz + abierta_luz → placa PVC 5 mm PEGADA a la pared (fondo cerrado)
+  //   · PVC emissive (LEDs adentro iluminando)
   //   · abierta_luz: además pequeños módulos LED visibles sobre el PVC
-  // retro_halo → tornillos separadores (letra despegada 2.5 cm de la pared),
-  //   con halo emissive sobre el muro detrás de cada letra.
+  //   · Al explotar, la LETRA se despega del PVC (PVC + pared quedan atrás)
+  // retro_halo + sin_luz → espárragos separadores (letra despegada 2.5 cm)
+  //   · retro_halo: halo emissive sobre el muro detrás de cada letra
+  //   · sin_luz: SIN halo (mismo esqueleto pero apagado — regla propietario 2026-07-27)
   const tc = tipoConstruccion || 'cajon_luz';
-  const usaBase  = (tc === 'cajon_luz' || tc === 'sin_luz' || tc === 'abierta_luz');
-  const usaPatas = (tc === 'retro_halo');
+  const usaBase  = (tc === 'cajon_luz' || tc === 'abierta_luz');
+  const usaPatas = (tc === 'retro_halo' || tc === 'sin_luz');
+  const showHalo = (tc === 'retro_halo');
 
   // bbox global del anuncio (siempre calculado, aunque no montemos base/patas)
   let gMnX = Infinity, gMnY = Infinity, gMxX = -Infinity, gMxY = -Infinity;
@@ -8054,17 +8055,13 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
     if (usaBase) {
       const thickSvg = 0.5 / sf;              // 5 mm PVC
       const shrink   = 0.2 / sf;              // 2 mm por lado
-      // cajon_luz + abierta_luz: PVC iluminado (emissive). sin_luz: PVC neutro.
-      const pvcEmissive = (tc === 'cajon_luz' || tc === 'abierta_luz');
-      const pvcMat = pvcEmissive
-        ? new THREE.MeshPhongMaterial({
-            color: 0xfff6d8,
-            emissive: new THREE.Color(0xffdc70),
-            emissiveIntensity: 0.85,
-            specular: 0x221100, shininess: 12,
-            side: THREE.DoubleSide,
-          })
-        : mkMat(0xdadde3, { spec: 0x555555, shin: 20 });
+      const pvcMat = new THREE.MeshPhongMaterial({
+        color: 0xfff6d8,
+        emissive: new THREE.Color(0xffdc70),
+        emissiveIntensity: 0.85,
+        specular: 0x221100, shininess: 12,
+        side: THREE.DoubleSide,
+      });
       const pvcExt = { depth: thickSvg, bevelEnabled: false };
       for (const shapes of shapesLetra) {
         for (const shape of shapes) {
@@ -8109,29 +8106,14 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
         }
       }
 
-      // Pared de granito detrás del PVC (5 cm de aire para dejar ver el PVC)
-      const wallGapSvg = 5.0 / sf;
-      const wallZ = -thickSvg - wallGapSvg - wallThickSvg / 2;
+      // Pared de granito PEGADA al PVC (sin gap — el PVC va montado directamente al muro).
+      // Al explotar, la LETRA se aleja; el PVC se queda con la pared.
+      const wallZ = -thickSvg - wallThickSvg / 2;
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
-      // 4 tornillos de anclaje en las esquinas del área ocupada por el anuncio.
-      // Cabeza asoma delante de la pared (visible en la escena aun con el letrero encima).
-      const screwR   = 0.35 / sf;
-      const screwLen = wallGapSvg + wallThickSvg * 0.6;
-      const screwZ   = -thickSvg - wallGapSvg * 0.15;
-      const cornerOffset = (8.0 / sf) * 0.5;  // ~4 cm dentro del padding de la pared
-      const corners = [
-        [bbSvg.mnX - cornerOffset, bbSvg.mnY - cornerOffset],
-        [bbSvg.mxX + cornerOffset, bbSvg.mnY - cornerOffset],
-        [bbSvg.mnX - cornerOffset, bbSvg.mxY + cornerOffset],
-        [bbSvg.mxX + cornerOffset, bbSvg.mxY + cornerOffset],
-      ];
-      for (const [px, py] of corners) {
-        mountGrp.add(_buildScrew(px, py, screwZ, screwR, screwLen));
-      }
-
     } else {
-      // retro_halo: espárragos que atraviesan la letra + pared granito + halo
+      // retro_halo + sin_luz: espárragos que atraviesan la letra + pared granito
+      // retro_halo añade halo emissive detrás; sin_luz mismo esqueleto pero apagado.
       const bodyDia = 0.4 / sf;
       const gapSvg  = 2.5 / sf;
       const wallEmb = 3.0 / sf;
@@ -8142,27 +8124,29 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       const wallZ = -gapSvg - wallThickSvg / 2;
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
-      // Halo: plano emissive ligeramente más grande que cada letra pegado a la pared
-      const haloExpandSvg = 4.0 / sf;
-      const haloExt = { depth: 0.02 / sf, bevelEnabled: false };
-      const haloMat = new THREE.MeshBasicMaterial({
-        color: 0xfff2c8, transparent: true, opacity: 0.55,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-      });
-      for (const info of infoPorLetra) {
-        const bb = info.bbox;
-        if (bb.w <= 0 || bb.h <= 0) continue;
-        const sx = (bb.w + 2 * haloExpandSvg) / bb.w;
-        const sy = (bb.h + 2 * haloExpandSvg) / bb.h;
-        const cx = bb.x0 + bb.w / 2;
-        const cy = bb.y0 + bb.h / 2;
-        const geom = new THREE.ExtrudeGeometry(info.shape, haloExt);
-        geom.computeVertexNormals();
-        const mesh = new THREE.Mesh(geom, haloMat);
-        mesh.scale.set(sx, sy, 1);
-        mesh.position.set(cx * (1 - sx), cy * (1 - sy), -gapSvg + 0.05 / sf);
-        mesh.renderOrder = 1;
-        mountGrp.add(mesh);
+      // Halo emissive solo para retro_halo (sin_luz no se ilumina)
+      if (showHalo) {
+        const haloExpandSvg = 4.0 / sf;
+        const haloExt = { depth: 0.02 / sf, bevelEnabled: false };
+        const haloMat = new THREE.MeshBasicMaterial({
+          color: 0xfff2c8, transparent: true, opacity: 0.55,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        for (const info of infoPorLetra) {
+          const bb = info.bbox;
+          if (bb.w <= 0 || bb.h <= 0) continue;
+          const sx = (bb.w + 2 * haloExpandSvg) / bb.w;
+          const sy = (bb.h + 2 * haloExpandSvg) / bb.h;
+          const cx = bb.x0 + bb.w / 2;
+          const cy = bb.y0 + bb.h / 2;
+          const geom = new THREE.ExtrudeGeometry(info.shape, haloExt);
+          geom.computeVertexNormals();
+          const mesh = new THREE.Mesh(geom, haloMat);
+          mesh.scale.set(sx, sy, 1);
+          mesh.position.set(cx * (1 - sx), cy * (1 - sy), -gapSvg + 0.05 / sf);
+          mesh.renderOrder = 1;
+          mountGrp.add(mesh);
+        }
       }
 
       // Tornillos separadores dentro de la letra (van en frontGrp para explode)
@@ -8502,6 +8486,17 @@ function _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm) {
   const depthSvg = depthCm / sf;
   const wallSvg  = 1.5 / sf;   // grosor visual de lámina: 1.5 cm
 
+  // Detectar si el SVG viene con colores reales (mismo criterio que letras).
+  // Si sí, la caja toma el color del outline (sercha + cara) y las letras
+  // internas se muestran con sus fills. Si no, palette gris aluminio + naranja.
+  const _esFillNeutro = (f) => {
+    if (!f || f === 'none') return true;
+    const n = String(f).toLowerCase().replace(/\s+/g, '');
+    return ['#000', '#000000', 'black', 'rgb(0,0,0)',
+            '#fff', '#ffffff', 'white', 'rgb(255,255,255)'].includes(n);
+  };
+  const useRealColors = paths.filter(p => !_esFillNeutro(p.userData?.style?.fill)).length >= 2;
+
   // ── Detectar contorno de la caja ─────────────────────────────────────────
   let outlineIdx = -1, bestArea = 0;
   for (let i = 0; i < paths.length; i++) {
@@ -8557,14 +8552,33 @@ function _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm) {
   }
 
   // ── Materiales ────────────────────────────────────────────────────────────
-  const mWall = mkMat(0x607d8b, { spec: 0xaabbcc, shin: 85 });   // aluminio (DoubleSide por default)
+  // Color base de la sercha + cara: outline del SVG si useRealColors, sino aluminio.
+  let outlineColor = null;
+  if (useRealColors && outlineIdx >= 0) {
+    const fill = paths[outlineIdx]?.userData?.style?.fill;
+    if (fill && fill !== 'none') outlineColor = new THREE.Color(fill);
+  }
+  const wallColor = outlineColor ? outlineColor.getHex() : 0x607d8b;
+  const mWall = mkMat(wallColor, { spec: 0xaabbcc, shin: 85 });   // sercha (DoubleSide default)
   const mBack = new THREE.MeshPhongMaterial({                      // fondo interior emissive (LED)
     color: new THREE.Color(0xfffde8), emissive: new THREE.Color(0xffcc44),
     emissiveIntensity: 0.82, specular: new THREE.Color(0x221100),
     shininess: 12, side: THREE.DoubleSide,
   });
-  const mFace = new THREE.MeshPhongMaterial({                      // cara translúcida delantera
-    color: new THREE.Color(0xddeeff), transparent: true, opacity: 0.38,
+  // Cara translúcida delantera. Con outlineColor: toma ese color como base
+  // (una caja negra se ve negra opaca, una amarilla se ve translúcida amarilla).
+  let faceColor, faceOpac;
+  if (outlineColor) {
+    faceColor = outlineColor.clone();
+    const bright = (faceColor.r + faceColor.g + faceColor.b) / 3;
+    // Oscuro (negra, azul marino…) → casi opaco. Claro (amarillo, blanco…) → más translúcido.
+    faceOpac = bright < 0.35 ? 0.78 : (bright < 0.65 ? 0.52 : 0.34);
+  } else {
+    faceColor = new THREE.Color(0xddeeff);
+    faceOpac = 0.38;
+  }
+  const mFace = new THREE.MeshPhongMaterial({
+    color: faceColor, transparent: true, opacity: faceOpac,
     specular: new THREE.Color(0xaaccff), shininess: 130,
     side: THREE.DoubleSide, depthWrite: false,
   });
@@ -8780,9 +8794,16 @@ function _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm) {
     for (let i = 0; i < paths.length; i++) {
       if (i === outlineIdx) continue;
 
-      const pathColor = paths[i].color;
-      const hex = pathColor ? pathColor.getHex() : 0;
-      const useColor = hex > 0x0a0a0a ? hex : 0xe87c2a;
+      // Prioridad de color: userData.style.fill (más fiel al SVG) → paths[i].color → naranja fallback
+      const styleFill = paths[i]?.userData?.style?.fill;
+      let useColor;
+      if (styleFill && styleFill !== 'none' && !_esFillNeutro(styleFill)) {
+        useColor = new THREE.Color(styleFill).getHex();
+      } else {
+        const pathColor = paths[i].color;
+        const hex = pathColor ? pathColor.getHex() : 0;
+        useColor = hex > 0x0a0a0a ? hex : 0xe87c2a;
+      }
       const mat = new THREE.MeshPhongMaterial({
         color: new THREE.Color(useColor), emissive: new THREE.Color(useColor),
         emissiveIntensity: 0.5, specular: new THREE.Color(0x111111),
