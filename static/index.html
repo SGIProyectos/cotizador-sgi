@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.10</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.4.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -1174,7 +1174,6 @@ svg g.pieza-labels                 { pointer-events: none; }
         <option value="cajon_luz">Cajón con luz</option>
         <option value="retro_halo">Retroiluminada / Halo</option>
         <option value="sin_luz">Sin luz (cajón)</option>
-        <option value="abierta_luz">Abierta con luz</option>
       </select>
       <div class="info-tag" id="construccion-desc-tag" style="margin-bottom:8px">Cara acrílico · cercha aluminio · fondo PVC · LEDs adelante</div>
       <div class="info-tag" id="distanciadores-note" style="display:none;background:rgba(232,124,42,0.2);margin-bottom:4px">⚠ Requiere distanciadores de montaje</div>
@@ -1954,11 +1953,6 @@ svg g.pieza-labels                 { pointer-events: none; }
               <div class="cfg-card-icon">⬛</div>
               <div class="cfg-card-name">Sin luz</div>
               <div class="cfg-card-desc">Letra sólida de aluminio · sin iluminación</div>
-            </div>
-            <div class="cfg-card" data-val="abierta_luz" onclick="selectCfgCard(this,'cfg-tipo-cards');renderCfgCerchaRec()">
-              <div class="cfg-card-icon">💡</div>
-              <div class="cfg-card-name">Estructura abierta</div>
-              <div class="cfg-card-desc">Sin frente · cercha visible · LEDs expuestos</div>
             </div>
           </div>
         </div>
