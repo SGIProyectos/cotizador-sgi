@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.2</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.3</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7976,19 +7976,11 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
   const usaPatas = (tc === 'retro_halo' || tc === 'sin_luz');
   const showHalo = (tc === 'retro_halo');
 
-  // Tapa trasera integrada al cuerpo — SOLO abierta_luz.
-  // MUY emissive: los LEDs adentro iluminan la placa completa. Sin esto,
-  // el fondo se veía como una "cara" plana de aluminio (indistinguible de
-  // un cajón cerrado). Con emissive fuerte lee como "canal iluminado".
-  const mBack = isAbierta
-    ? new THREE.MeshPhongMaterial({
-        color: 0xfff6d8,
-        emissive: new THREE.Color(0xffdc70),
-        emissiveIntensity: 1.15,
-        specular: 0x221100, shininess: 12,
-        side: THREE.DoubleSide,
-      })
-    : null;
+  // No hay tapa trasera integrada al cuerpo — todas las letras son tubos huecos.
+  // El "fondo" de abierta_luz se añade abajo como PIEZA SEPARADA extrudida
+  // detrás del canal (crea profundidad visible), atada al frontGrp para que
+  // se mueva con la letra al explode.
+  const mBack = null;
 
   for (const svgPath of paths) {
     const shapes = SVGLoader.createShapes(svgPath);
@@ -8123,20 +8115,54 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
     } else if (isAbierta) {
-      // Pared PEGADA a la tapa trasera aluminio de la letra
-      const wallZ = -wallThickSvg / 2;
+      // Base emissive de 5 mm extrudida DETRÁS del canal (Z=-5mm a Z=0).
+      // Es una pieza separada — desde el frente el canal se ve HUECO (Z=0 a
+      // Z=depthSvg vacío) y la base amarilla asoma con profundidad al fondo.
+      // Va al frontGrp: sercha + base + LEDs se mueven juntos al explode.
+      const baseThickSvg = 0.5 / sf;
+      const baseShrink   = 0.2 / sf;
+      const baseMat = new THREE.MeshPhongMaterial({
+        color: 0xfff6d8,
+        emissive: new THREE.Color(0xffdc70),
+        emissiveIntensity: 1.15,
+        specular: 0x221100, shininess: 12,
+        side: THREE.DoubleSide,
+      });
+      const baseExt = { depth: baseThickSvg, bevelEnabled: false };
+      for (const shapes of shapesLetra) {
+        for (const shape of shapes) {
+          const bb = _shapeBbox(shape);
+          if (!bb || bb.w <= 2 * baseShrink || bb.h <= 2 * baseShrink) continue;
+          const sx = (bb.w - 2 * baseShrink) / bb.w;
+          const sy = (bb.h - 2 * baseShrink) / bb.h;
+          const cx = bb.x0 + bb.w / 2;
+          const cy = bb.y0 + bb.h / 2;
+          const geom = new THREE.ExtrudeGeometry(shape, baseExt);
+          geom.computeVertexNormals();
+          const mesh = new THREE.Mesh(geom, baseMat);
+          mesh.scale.set(sx, sy, 1);
+          mesh.position.set(cx * (1 - sx), cy * (1 - sy), -baseThickSvg);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          frontGrp.add(mesh);
+        }
+      }
+
+      // Pared PEGADA al reverso de la base
+      const wallZ = -baseThickSvg - wallThickSvg / 2;
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
-      // LEDs cubicos visibles sobre la tapa trasera (van al frontGrp — se
-      // mueven con la letra en explode porque están atornillados a ella).
+      // LEDs cubicos flotando DENTRO del canal (arriba del plano Z=0, entre
+      // el fondo de la base y la mitad del canal). Se ven claramente como
+      // fuentes puntuales dentro del hueco.
       const ledMat = new THREE.MeshPhongMaterial({
         color: 0xffffff,
         emissive: new THREE.Color(0xffee80),
         emissiveIntensity: 2.2,
         specular: 0x333311, shininess: 40,
       });
-      const ledSize = Math.max(1.5 / sf, depthSvg * 0.32);
-      const ledZ    = ledSize * 0.5 + 0.001;  // sentados sobre la tapa (Z=0)
+      const ledSize = Math.max(1.5 / sf, depthSvg * 0.28);
+      const ledZ    = ledSize * 0.5 + 0.001;   // asentados sobre la base (Z=0)
       for (const info of infoPorLetra) {
         const { shape, bbox: bb } = info;
         const hCm = bb.h * sf;
