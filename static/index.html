@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.2.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7927,13 +7927,6 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
   const mFacePal = cfg.face != null
     ? mkMat(cfg.face, { trans: cfg.fTrans, opac: cfg.fOpac, spec: 0xaaaacc, shin: 90 })
     : null;
-  // Material INVISIBLE para la cara frontal de letras abiertas (dejan ver los LEDs).
-  // Uso transparent+opacity:0+colorWrite:false para no depender del `visible:false`
-  // que en r165 puede o no honrar el multi-material según el driver.
-  const mFaceInvisible = new THREE.MeshBasicMaterial({
-    transparent: true, opacity: 0, depthWrite: false, colorWrite: false,
-    side: THREE.DoubleSide, visible: false,
-  });
   const _tc = tipoConstruccion || 'cajon_luz';
   const isAbierta = (_tc === 'abierta_luz') && !isPlana;
 
@@ -7968,56 +7961,119 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
   const shapesLetra = [];      // Array<Shape[]>  (todos los shapes de cada svgPath)
   const infoPorLetra = [];     // { shape, bbox }[]  (biggest por letra)
 
+  // ── Tipo y sub-materiales del CUERPO de la letra ─────────────────────────
+  // Regla propietario 2026-07-27:
+  //  · Nada de PVC visible como pieza separada — el cuerpo es UN solo objeto
+  //    (sercha + tapa trasera aluminio si es tipo cerrado).
+  //  · cajon_luz + abierta_luz → cuerpo cerrado al fondo con aluminio,
+  //    pegado a la pared. Explode: cuerpo entero se despega del muro.
+  //  · retro_halo + sin_luz    → cuerpo abierto atrás (canal hueco), con
+  //    espárragos separadores 2.5 cm a la pared. Explode: cuerpo + espárragos
+  //    se separan del muro. retro_halo añade halo emissive; sin_luz no.
+  const tc = tipoConstruccion || 'cajon_luz';
+  const cerrado  = (tc === 'cajon_luz' || tc === 'abierta_luz');
+  const usaPatas = (tc === 'retro_halo' || tc === 'sin_luz');
+  const showHalo = (tc === 'retro_halo');
+  const isCajon  = (tc === 'cajon_luz');
+
+  // Tapa trasera aluminio (tono ligeramente más oscuro que la cercha).
+  const mBack = cerrado
+    ? mkMat(0x8fa0aa, { spec: 0x555566, shin: 40 })
+    : null;
+
+  // Plano emissive interior para simular LEDs prendidos dentro de un cajon_luz.
+  // Va a media profundidad, entre la tapa trasera y la cara traslúcida.
+  const mInterior = isCajon
+    ? new THREE.MeshPhongMaterial({
+        color: 0xfff2c8,
+        emissive: new THREE.Color(0xffdc70),
+        emissiveIntensity: 1.35,
+        specular: 0x221100, shininess: 8,
+        side: THREE.DoubleSide,
+      })
+    : null;
+
   for (const svgPath of paths) {
     const shapes = SVGLoader.createShapes(svgPath);
     if (!shapes.length) continue;
 
-    // Convención Three.js ExtrudeGeometry: [material 0 = sides (canal), material 1 = lids (tapa front+back)]
-    // Cercha (canal) = SIEMPRE aluminio del palette.
-    // Cara (tapa) = color del SVG si useRealColors, invisible si abierta, sino palette.
-    let faceMat;
-    if (isAbierta) {
-      faceMat = mFaceInvisible;
-    } else if (useRealColors) {
-      const fill = svgPath.userData?.style?.fill;
-      const col  = (fill && fill !== 'none') ? new THREE.Color(fill) : new THREE.Color(0x888888);
-      faceMat = new THREE.MeshPhongMaterial({
-        color: col,
-        specular: new THREE.Color(0x444444), shininess: 40,
-        side: THREE.DoubleSide,
-      });
-    } else {
-      faceMat = mFacePal || mCercha;
+    // CARA FRONTAL — material específico de este svgPath.
+    //   abierta_luz: sin cara (null).
+    //   useRealColors: color del SVG (translúcido si es cajon_luz).
+    //   sino: palette.
+    let mFrontPath = null;
+    if (!isAbierta) {
+      if (useRealColors) {
+        const fill = svgPath.userData?.style?.fill;
+        const col  = (fill && fill !== 'none') ? new THREE.Color(fill) : new THREE.Color(0x888888);
+        mFrontPath = new THREE.MeshPhongMaterial({
+          color: col,
+          transparent: isCajon, opacity: isCajon ? 0.65 : 1.0,
+          depthWrite: !isCajon,
+          specular: new THREE.Color(0x444444), shininess: 60,
+          side: THREE.DoubleSide,
+        });
+      } else {
+        mFrontPath = mFacePal || mCercha;
+      }
     }
-    const sideMat = mCercha;
 
     const shapesOk = [];
     let biggestBb = null, biggestShape = null;
     for (const shape of shapes) {
-      // Omitir paths de fondo: solo si cubren ≥90% del diseño COMPLETO
-      // y hay más de una forma (una letra sola nunca es "fondo")
+      // Omitir paths de fondo (mismo criterio que antes)
       if (useRealColors && totalArea > 0 && nShapesTot > 1) {
-        const bb = _shapeBbox(shape);
-        if (bb && bb.area > totalArea * 0.90) continue;
+        const bb0 = _shapeBbox(shape);
+        if (bb0 && bb0.area > totalArea * 0.90) continue;
       }
       const bb = _shapeBbox(shape);
       if (bb && (!biggestBb || bb.area > biggestBb.area)) {
         biggestBb = bb; biggestShape = shape;
       }
       shapesOk.push(shape);
-      const geom = new THREE.ExtrudeGeometry(shape, extCfg);
-      geom.computeVertexNormals();
-      // ExtrudeGeometry addGroup: index 0 = lids (tapas front/back), index 1 = sides (canal)
-      // Para abierta_luz: filtrar el grupo de tapas del geometry — más robusto que
-      // depender de `visible:false` en el material del array.
-      if (isAbierta && Array.isArray(geom.groups)) {
-        const g = geom.groups.filter(gr => gr.materialIndex !== 0);
-        if (g.length > 0) geom.groups = g;   // safety: si el filtro deja vacío, mantenemos original
+
+      // 1) Cercha: extrude con SOLO grupo de lados (filtramos las tapas)
+      const sideGeom = new THREE.ExtrudeGeometry(shape, extCfg);
+      if (Array.isArray(sideGeom.groups)) {
+        sideGeom.groups = sideGeom.groups.filter(g => g.materialIndex === 1);
+        sideGeom.groups.forEach(g => g.materialIndex = 0);
       }
-      const mesh = new THREE.Mesh(geom, [faceMat, sideMat]);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      frontGrp.add(mesh);
+      sideGeom.computeVertexNormals();
+      const sideMesh = new THREE.Mesh(sideGeom, mCercha);
+      sideMesh.castShadow = true;
+      sideMesh.receiveShadow = true;
+      frontGrp.add(sideMesh);
+
+      // 2) Tapa TRASERA (aluminio) — solo cerrado
+      if (mBack) {
+        const backGeom = new THREE.ShapeGeometry(shape);
+        backGeom.computeVertexNormals();
+        const backMesh = new THREE.Mesh(backGeom, mBack);
+        backMesh.position.z = 0;
+        backMesh.castShadow = true;
+        backMesh.receiveShadow = true;
+        frontGrp.add(backMesh);
+      }
+
+      // 3) Plano emissive interior (cajon_luz — visible a través del acrílico)
+      if (mInterior) {
+        const intGeom = new THREE.ShapeGeometry(shape);
+        const intMesh = new THREE.Mesh(intGeom, mInterior);
+        intMesh.position.z = depthSvg * 0.35;
+        frontGrp.add(intMesh);
+      }
+
+      // 4) Cara FRONTAL (translúcida para cajon_luz, opaca para el resto)
+      if (mFrontPath) {
+        const frontGeom = new THREE.ShapeGeometry(shape);
+        frontGeom.computeVertexNormals();
+        const frontMesh = new THREE.Mesh(frontGeom, mFrontPath);
+        frontMesh.position.z = depthSvg;
+        frontMesh.castShadow = !isCajon;
+        frontMesh.receiveShadow = true;
+        if (isCajon) frontMesh.renderOrder = 2;   // encima del emissive interior
+        frontGrp.add(frontMesh);
+      }
     }
     if (shapesOk.length) shapesLetra.push(shapesOk);
     if (biggestShape) infoPorLetra.push({ shape: biggestShape, bbox: biggestBb });
@@ -8025,20 +8081,8 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
 
   if (!frontGrp.children.length) return null;
 
-  // ── sistema de montaje según tipo de construcción ────────────────────────
-  // cajon_luz + abierta_luz → placa PVC 5 mm PEGADA a la pared (fondo cerrado)
-  //   · PVC emissive (LEDs adentro iluminando)
-  //   · abierta_luz: además pequeños módulos LED visibles sobre el PVC
-  //   · Al explotar, la LETRA se despega del PVC (PVC + pared quedan atrás)
-  // retro_halo + sin_luz → espárragos separadores (letra despegada 2.5 cm)
-  //   · retro_halo: halo emissive sobre el muro detrás de cada letra
-  //   · sin_luz: SIN halo (mismo esqueleto pero apagado — regla propietario 2026-07-27)
-  const tc = tipoConstruccion || 'cajon_luz';
-  const usaBase  = (tc === 'cajon_luz' || tc === 'abierta_luz');
-  const usaPatas = (tc === 'retro_halo' || tc === 'sin_luz');
-  const showHalo = (tc === 'retro_halo');
-
-  // bbox global del anuncio (siempre calculado, aunque no montemos base/patas)
+  // ── Montaje: pared granito + halo/espárragos según tipo ─────────────────
+  // bbox global del anuncio
   let gMnX = Infinity, gMnY = Infinity, gMxX = -Infinity, gMxY = -Infinity;
   for (const info of infoPorLetra) {
     const bb = info.bbox;
@@ -8049,49 +8093,26 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
   }
   const bbSvg = { mnX: gMnX, mnY: gMnY, mxX: gMxX, mxY: gMxY };
 
-  if (!isPlana && (usaBase || usaPatas) && isFinite(gMnX)) {
+  if (!isPlana && isFinite(gMnX)) {
     const wallThickSvg = 4.0 / sf;
 
-    if (usaBase) {
-      const thickSvg = 0.5 / sf;              // 5 mm PVC
-      const shrink   = 0.2 / sf;              // 2 mm por lado
-      const pvcMat = new THREE.MeshPhongMaterial({
-        color: 0xfff6d8,
-        emissive: new THREE.Color(0xffdc70),
-        emissiveIntensity: 0.85,
-        specular: 0x221100, shininess: 12,
-        side: THREE.DoubleSide,
-      });
-      const pvcExt = { depth: thickSvg, bevelEnabled: false };
-      for (const shapes of shapesLetra) {
-        for (const shape of shapes) {
-          const bb = _shapeBbox(shape);
-          if (!bb || bb.w <= 2 * shrink || bb.h <= 2 * shrink) continue;
-          const sx = (bb.w - 2 * shrink) / bb.w;
-          const sy = (bb.h - 2 * shrink) / bb.h;
-          const cx = bb.x0 + bb.w / 2;
-          const cy = bb.y0 + bb.h / 2;
-          const geom = new THREE.ExtrudeGeometry(shape, pvcExt);
-          geom.computeVertexNormals();
-          const mesh = new THREE.Mesh(geom, pvcMat);
-          mesh.scale.set(sx, sy, 1);
-          mesh.position.set(cx * (1 - sx), cy * (1 - sy), -thickSvg);
-          mesh.castShadow = true;
-          mesh.receiveShadow = true;
-          mountGrp.add(mesh);
-        }
-      }
+    if (cerrado) {
+      // Pared PEGADA al cuerpo de la letra (cara trasera a Z=0)
+      const wallZ = -wallThickSvg / 2;
+      mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
-      // abierta_luz: módulos LED visibles sobre el PVC (la cara está abierta)
-      if (tc === 'abierta_luz') {
+      // LEDs visibles dentro del canal para abierta_luz (montados sobre la
+      // tapa trasera de aluminio, apuntando hacia adelante). Van al frontGrp
+      // porque físicamente están atornillados a la letra.
+      if (isAbierta) {
         const ledMat = new THREE.MeshPhongMaterial({
           color: 0xffffff,
           emissive: new THREE.Color(0xffee80),
-          emissiveIntensity: 1.7,
+          emissiveIntensity: 1.75,
           specular: 0x333311, shininess: 40,
         });
-        const ledSize = Math.max(1.2 / sf, depthSvg * 0.30);
-        const ledZ    = -0.001 - ledSize * 0.5;  // asoman justo delante del PVC (Z=0 es la cara trasera de la letra)
+        const ledSize = Math.max(1.2 / sf, depthSvg * 0.28);
+        const ledZ    = ledSize * 0.5 + 0.001;  // sentado sobre la tapa trasera (Z=0)
         for (const info of infoPorLetra) {
           const { shape, bbox: bb } = info;
           const hCm = bb.h * sf;
@@ -8101,30 +8122,22 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
             const geom = new THREE.BoxGeometry(ledSize, ledSize, ledSize);
             const m = new THREE.Mesh(geom, ledMat);
             m.position.set(px, py, ledZ);
-            mountGrp.add(m);
+            frontGrp.add(m);
           }
         }
       }
 
-      // Pared de granito PEGADA al PVC (sin gap — el PVC va montado directamente al muro).
-      // Al explotar, la LETRA se aleja; el PVC se queda con la pared.
-      const wallZ = -thickSvg - wallThickSvg / 2;
-      mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
-
-    } else {
-      // retro_halo + sin_luz: espárragos que atraviesan la letra + pared granito
-      // retro_halo añade halo emissive detrás; sin_luz mismo esqueleto pero apagado.
+    } else if (usaPatas) {
+      // retro_halo + sin_luz: espárragos separan la letra 2.5 cm del muro
       const bodyDia = 0.4 / sf;
       const gapSvg  = 2.5 / sf;
       const wallEmb = 3.0 / sf;
       const bodyLen = depthSvg + gapSvg + wallEmb;
       const patMat  = mkMat(0x9aa0a6, { spec: 0x666666, shin: 90 });
 
-      // Pared de granito
       const wallZ = -gapSvg - wallThickSvg / 2;
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
-      // Halo emissive solo para retro_halo (sin_luz no se ilumina)
       if (showHalo) {
         const haloExpandSvg = 4.0 / sf;
         const haloExt = { depth: 0.02 / sf, bevelEnabled: false };
@@ -8149,7 +8162,7 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
         }
       }
 
-      // Tornillos separadores dentro de la letra (van en frontGrp para explode)
+      // Espárragos: van en frontGrp — al explotar viajan con la letra
       for (const info of infoPorLetra) {
         const { shape, bbox: bb } = info;
         const hCm = bb.h * sf;
@@ -8486,16 +8499,38 @@ function _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm) {
   const depthSvg = depthCm / sf;
   const wallSvg  = 1.5 / sf;   // grosor visual de lámina: 1.5 cm
 
-  // Detectar si el SVG viene con colores reales (mismo criterio que letras).
-  // Si sí, la caja toma el color del outline (sercha + cara) y las letras
-  // internas se muestran con sus fills. Si no, palette gris aluminio + naranja.
+  // Detectar si el SVG viene con colores reales.
+  //   Prioridad de fuente de fill:
+  //     1) userData.style.fill  — fill explícito (attr o inline style o CSS parseado)
+  //     2) paths[i].color       — resultado final del SVGLoader (incluye CSS classes)
+  //   Un SVG "coloreado" tiene ≥2 paths con color no-neutro (ni negro puro ni blanco).
   const _esFillNeutro = (f) => {
     if (!f || f === 'none') return true;
     const n = String(f).toLowerCase().replace(/\s+/g, '');
     return ['#000', '#000000', 'black', 'rgb(0,0,0)',
             '#fff', '#ffffff', 'white', 'rgb(255,255,255)'].includes(n);
   };
-  const useRealColors = paths.filter(p => !_esFillNeutro(p.userData?.style?.fill)).length >= 2;
+  const _pathFillColor = (svgPath) => {
+    const s = svgPath?.userData?.style?.fill;
+    if (s && s !== 'none') {
+      try { return new THREE.Color(s); } catch(_) { /* fallthrough */ }
+    }
+    const c = svgPath?.color;
+    return c ? c.clone() : null;
+  };
+  const _esColorNeutro = (col) => {
+    if (!col) return true;
+    const hex = col.getHex();
+    return hex === 0x000000 || hex === 0xffffff;
+  };
+  const useRealColors = paths.filter(p => {
+    const explicit = p?.userData?.style?.fill;
+    if (explicit && !_esFillNeutro(explicit)) return true;
+    const c = p?.color;
+    if (!c) return false;
+    const hex = c.getHex();
+    return hex !== 0x000000 && hex !== 0xffffff;
+  }).length >= 2;
 
   // ── Detectar contorno de la caja ─────────────────────────────────────────
   let outlineIdx = -1, bestArea = 0;
@@ -8553,10 +8588,11 @@ function _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm) {
 
   // ── Materiales ────────────────────────────────────────────────────────────
   // Color base de la sercha + cara: outline del SVG si useRealColors, sino aluminio.
+  // Usamos _pathFillColor (userData.style.fill preferido, paths[i].color fallback)
+  // para captar el color aunque venga por clase CSS que SVGLoader parseó internamente.
   let outlineColor = null;
   if (useRealColors && outlineIdx >= 0) {
-    const fill = paths[outlineIdx]?.userData?.style?.fill;
-    if (fill && fill !== 'none') outlineColor = new THREE.Color(fill);
+    outlineColor = _pathFillColor(paths[outlineIdx]);
   }
   const wallColor = outlineColor ? outlineColor.getHex() : 0x607d8b;
   const mWall = mkMat(wallColor, { spec: 0xaabbcc, shin: 85 });   // sercha (DoubleSide default)
@@ -8611,10 +8647,14 @@ function _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm) {
   }
 
   // ── Grupos para explosión ─────────────────────────────────────────────────
+  // wallGrp: pared granito — siempre estático
+  // bodyGrp: sercha + tapa trasera + LEDs + tornillos internos — despega 40%
+  // frontGrp: cara delantera — despega 100% (más lejos que el body)
   const bodyGrp  = new THREE.Group();
   const frontGrp = new THREE.Group();
+  const wallGrp  = new THREE.Group();
   const grp      = new THREE.Group();
-  grp.add(bodyGrp, frontGrp);
+  grp.add(wallGrp, bodyGrp, frontGrp);
 
   // Shapes de contorno: solo si se detectó un path rectangular real.
   // Sin outline real → no se dibuja caja; los paths se extruyen completos (como letras).
@@ -8828,34 +8868,44 @@ function _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm) {
 
   if (!bodyGrp.children.length && !frontGrp.children.length) return null;
 
-  // ── Pared granito + 4 tornillos de anclaje detrás de la caja ────────────
+  // ── Pared granito PEGADA + tornillos internos que sujetan la base ──────
   if (gMaxX > gMinX && gMaxY > gMinY) {
     const wallThickSvg = 4.0 / sf;
-    const wallGapSvg = 3.0 / sf;   // aire caja↔pared: 3 cm
-    const wallZ = -wallGapSvg - wallThickSvg / 2;
+    // Caja pegada a la pared: fondo de la sercha (Z=0) toca el frente del muro.
+    // Al explotar, bodyGrp se despega del muro y frontGrp se despega del body.
+    const wallZ = -wallThickSvg / 2;
     const bbCajaSvg = { mnX: gMinX, mnY: gMinY, mxX: gMaxX, mxY: gMaxY };
-    bodyGrp.add(_buildGraniteWall(bbCajaSvg, sf, wallZ, wallThickSvg));
+    wallGrp.add(_buildGraniteWall(bbCajaSvg, sf, wallZ, wallThickSvg));
 
-    // Tornillos: 4 en las esquinas del outline (ligeramente hacia adentro para
-    // que atraviesen la sercha real). Cabeza asoma pegada al frente de la caja.
-    const screwR   = 0.45 / sf;
-    const screwLen = depthSvg + wallGapSvg + wallThickSvg * 0.6;
-    const screwZ   = depthSvg + 0.4 / sf;  // cabeza asoma 4 mm delante de la carátula
-    const inset    = Math.min(gMaxX - gMinX, gMaxY - gMinY) * 0.04;
-    const corners = [
-      [gMinX + inset, gMinY + inset],
-      [gMaxX - inset, gMinY + inset],
-      [gMinX + inset, gMaxY - inset],
-      [gMaxX - inset, gMaxY - inset],
-    ];
-    for (const [px, py] of corners) {
-      bodyGrp.add(_buildScrew(px, py, screwZ, screwR, screwLen));
+    // Tornillos/pijas INSIDE del outline — sujetan la base de la caja al muro.
+    // Cabeza asoma justo delante de la tapa trasera de la caja (visible al explotar);
+    // cuerpo atraviesa la sercha y se hunde en el muro.
+    // Uso _puntosDentroShape para colocarlos DENTRO del shape real (no del bbox),
+    // así en una caja circular quedan realmente adentro del círculo.
+    const outlineShape0 = outlineShapes[0] || syntheticOutline;
+    if (outlineShape0) {
+      const bbShape = _shapeBbox(outlineShape0);
+      if (bbShape && bbShape.w > 0 && bbShape.h > 0) {
+        const screwR   = 0.4 / sf;
+        const screwLen = wallThickSvg * 0.7 + 1.0 / sf;   // atraviesa muro sin salir
+        const screwZ   = 0.4 / sf;                          // cabeza asoma 4 mm delante del back
+        const radioSeg = screwR * 3;
+        const positions = _puntosDentroShape(outlineShape0, bbShape, 4, radioSeg);
+        for (const [px, py] of positions) {
+          bodyGrp.add(_buildScrew(px, py, screwZ, screwR, screwLen));
+        }
+      }
     }
   }
 
   grp.scale.set(sf, -sf, sf);
 
-  _explodeGroups = { frontGrp, depthSvg, exploded: false };
+  // Explode: bodyGrp se separa del muro un poco, frontGrp se separa MÁS
+  // (así se ve el orden: pared → sercha con LEDs y tornillos → cara).
+  _explodeGroups = {
+    frontGrp, bodyGrp, isCaja: true,
+    depthSvg, exploded: false,
+  };
   const btn = document.getElementById('btn-explode');
   if (btn) { btn.style.display = ''; btn.textContent = '💥 Explotar cara'; }
 
@@ -8865,12 +8915,16 @@ function _buildCaja(svgText, sf, depthCm, viewboxW, viewboxH, realWidthCm) {
 // ─── animar vista explosionada ────────────────────────────────────────────────
 window.v3d_explode = function() {
   if (!_explodeGroups) return;
-  const { frontGrp, depthSvg } = _explodeGroups;
+  const { frontGrp, bodyGrp, depthSvg, isCaja } = _explodeGroups;
   const btn = document.getElementById('btn-explode');
 
   const from = frontGrp.position.z;
   // Explotar: alejar la cara 80% de la profundidad extra; colapsar: volver a 0
   const to = _explodeGroups.exploded ? 0 : depthSvg * 0.85;
+  // Para cajas: bodyGrp (sercha + LEDs + tornillos) despega ~40% del muro,
+  // frontGrp (cara) despega el 100% adicional. Así se ve la separación por capas.
+  const fromBody = bodyGrp ? bodyGrp.position.z : 0;
+  const toBody = _explodeGroups.exploded ? 0 : depthSvg * 0.40;
   _explodeGroups.exploded = !_explodeGroups.exploded;
   if (btn) btn.textContent = _explodeGroups.exploded ? '🔗 Juntar' : (_explodeGroups.label || '💥 Explotar cara');
 
@@ -8894,6 +8948,9 @@ window.v3d_explode = function() {
     const p = Math.min((ts - t0) / dur, 1);
     const e = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p; // ease-in-out quad
     frontGrp.position.z = from + (to - from) * e;
+    if (bodyGrp && isCaja) {
+      bodyGrp.position.z = fromBody + (toBody - fromBody) * e;
+    }
     for (let i = 0; i < _cajaLedRefs.length; i++) {
       const ref = _cajaLedRefs[i];
       const s = ledStart[i], t = ledTarget[i];
