@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.4.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.5.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -2573,6 +2573,52 @@ function sugerirLedCaja() {
 }
 
 // ─── TIPO DE CONSTRUCCIÓN ────────────────────────────────────────────────────
+// ─── Compatibilidad de materiales de CARA con el tipo de construcción ──────
+// cajon_luz    → la luz sale por la cara → SOLO translúcidos (acrílicos, menos espejo)
+// retro_halo   → la luz sale por atrás   → SOLO opacos (aluminio, alucom, PVC, espejo)
+// sin_luz      → cualquier material
+const _MATCARA_TRANSLUCIDO = new Set([
+  "acrilico_3mm", "acrilico_3mm_blanco", "acrilico_3mm_colores",
+  "acrilico_3mm_translucido", "acrilico_5mm", "acrilico_6mm",
+]);
+const _MATCARA_OPACO = new Set([
+  "acrilico_3mm_espejo",   // Espejo NO deja pasar luz
+  "alucom_base", "alucom_especial", "alucom_espejo",
+  "aluminio_cal20", "aluminio_cal18",
+]);
+function _filterMatCaraByTipo(tipoConstruccion) {
+  let permitidos;   // null = todos habilitados
+  let leyenda = "";
+  if (tipoConstruccion === "cajon_luz") {
+    permitidos = _MATCARA_TRANSLUCIDO;
+    leyenda = "No compatible con Cajón con luz — la cara debe dejar pasar luz";
+  } else if (tipoConstruccion === "retro_halo") {
+    permitidos = _MATCARA_OPACO;
+    leyenda = "No compatible con Retro/Halo — la cara debe ser opaca";
+  } else {
+    permitidos = null;
+  }
+
+  // Filtrar tanto el select del sidebar como el del modal de configuración
+  ["mat-cara", "cfg-mat-cara"].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    let firstValid = "auto";
+    let currentInvalid = false;
+    for (const opt of sel.options) {
+      if (!opt.value || opt.value === "auto") { opt.disabled = false; opt.title = ""; continue; }
+      const invalid = permitidos !== null && !permitidos.has(opt.value);
+      opt.disabled = invalid;
+      opt.title = invalid ? leyenda : "";
+      opt.style.color = invalid ? "#a0a4b0" : "";
+      if (!invalid && firstValid === "auto") firstValid = opt.value;
+      if (invalid && opt.value === sel.value) currentInvalid = true;
+    }
+    // Si el valor seleccionado quedó bloqueado, reseteo a "auto"
+    if (currentInvalid) sel.value = "auto";
+  });
+}
+
 function onTipoConstruccionChange() {
   const tipo = document.getElementById("tipo-construccion").value;
   const cfg = (catalog?.tipos_construccion || TIPOS_CONSTRUCCION_JS)[tipo] || TIPOS_CONSTRUCCION_JS.cajon_luz;
@@ -2584,6 +2630,7 @@ function onTipoConstruccionChange() {
   if (cfg.multiplicador_default) {
     document.getElementById("tipo-multiplicador").value = cfg.multiplicador_default;
   }
+  _filterMatCaraByTipo(tipo);
   actualizarAsesor();
 }
 
@@ -5991,6 +6038,12 @@ function closeCfgModal() {
 function selectCfgCard(el, groupId) {
   document.querySelectorAll(`#${groupId} .cfg-card`).forEach(c => c.classList.remove("active"));
   el.classList.add("active");
+  // Cuando cambia el tipo de construcción en el modal, filtra en vivo el
+  // select cfg-mat-cara (paso 4 del modal) — así el usuario no puede elegir
+  // un material incompatible antes de aplicar.
+  if (groupId === "cfg-tipo-cards") {
+    _filterMatCaraByTipo(el.dataset.val);
+  }
 }
 
 function _cfgCardVal(groupId) {
@@ -8972,9 +9025,11 @@ window.v3d_explode = function() {
   _explodeGroups.exploded = !_explodeGroups.exploded;
   if (btn) btn.textContent = _explodeGroups.exploded ? '🔗 Juntar' : (_explodeGroups.label || '💥 Explotar cara');
 
-  // Al explotar la caja, "encender" los LEDs: subir emissive de la placa de
-  // fondo (mBack) y los propios cilindros LED + boost del PointLight interno.
-  // Al colapsar, volver al estado neutro. Sólo aplica si hay LEDs de caja.
+  // Al explotar la caja "encender" bien la luz interior: subir emissive de la
+  // placa de fondo (mBack) y los propios LEDs + boost fuerte del PointLight
+  // interno. Al colapsar, "apagar" bajando los valores para que el contraste
+  // sea evidente. El efecto es el "muy padre" que el propietario aprobó en
+  // v1.3.9 (PointLights fuertes iluminando el interior calientemente).
   const encender = _explodeGroups.exploded;
   const ledStart = _cajaLedRefs.map(ref => ({
     matE:  ref.mat.emissiveIntensity,
@@ -8982,8 +9037,8 @@ window.v3d_explode = function() {
     lightI: ref.light ? ref.light.intensity : 0,
   }));
   const ledTarget = _cajaLedRefs.map(ref => encender
-    ? { matE: 2.4, backE: 1.6, lightI: (ref.wattsFactor || 15) * 3.5 }
-    : { matE: 1.3, backE: 0.82, lightI: (ref.wattsFactor || 15) * 1.2 });
+    ? { matE: 5.0, backE: 3.2, lightI: (ref.wattsFactor || 15) * 6.0 }
+    : { matE: 0.6, backE: 0.30, lightI: (ref.wattsFactor || 15) * 0.8 });
 
   const dur = 580;
   let t0 = null;
