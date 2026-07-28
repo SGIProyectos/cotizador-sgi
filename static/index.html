@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.6</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.7</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -8140,33 +8140,42 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       const wallZ = -wallThickSvg / 2;
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
-      // LEDs cubicos brillantes flotando dentro del canal (a 1/3 del depth).
-      // Fuertemente emissive — sobre el fondo negro parecen focos individuales.
-      const ledMat = new THREE.MeshPhongMaterial({
+      // LEDs esferas GRANDES flotando cerca del frente del canal (Z=0.65 del
+      // depth) para que NADA los tape. MeshBasicMaterial: se dibujan como
+      // blancos puros brillantes sin importar la iluminación de la escena.
+      const ledMat = new THREE.MeshBasicMaterial({
         color: 0xffffff,
-        emissive: new THREE.Color(0xfff0a0),
-        emissiveIntensity: 2.8,
-        specular: 0x333311, shininess: 40,
       });
-      const ledSize = Math.max(1.8 / sf, depthSvg * 0.32);
-      const ledZ    = depthSvg * 0.35;
+      const ledSize = Math.max(3.0 / sf, depthSvg * 0.55);
+      const ledZ    = depthSvg * 0.65;
       for (const info of infoPorLetra) {
         const { shape, bbox: bb } = info;
         const hCm = bb.h * sf;
         const nLeds = hCm >= 15 ? 4 : (hCm >= 8 ? 3 : 2);
-        const radioSeg = ledSize * 0.7;
+        const radioSeg = ledSize * 0.55;
         for (const [px, py] of _puntosDentroShape(shape, bb, nLeds, radioSeg)) {
-          const geom = new THREE.BoxGeometry(ledSize, ledSize, ledSize);
+          const geom = new THREE.SphereGeometry(ledSize * 0.5, 16, 12);
           const m = new THREE.Mesh(geom, ledMat);
           m.position.set(px, py, ledZ);
           frontGrp.add(m);
 
-          // PointLight adentro: los LEDs iluminan el interior real
-          const pl = new THREE.PointLight(0xffe090, 4, depthSvg * 6, 2);
+          // PointLight adentro para que la sercha y el fondo negro reciban luz
+          const pl = new THREE.PointLight(0xffe090, 8, depthSvg * 10, 2);
           pl.position.set(px, py, ledZ);
           frontGrp.add(pl);
         }
       }
+
+      // ── DIAGNÓSTICO v1.3.7 ─────────────────────────────────────────────
+      // Rombo ROJO gigante flotando encima del diseño. Si lo ves, mi rama
+      // de abierta_luz se ejecuta. Si NO lo ves, algo bloquea el código.
+      const diagMat = new THREE.MeshBasicMaterial({ color: 0xff2266 });
+      const diagGeom = new THREE.OctahedronGeometry(depthSvg * 1.5, 0);
+      const diagMesh = new THREE.Mesh(diagGeom, diagMat);
+      const diagCx = (bbSvg.mnX + bbSvg.mxX) / 2;
+      const diagY  = bbSvg.mnY - depthSvg * 3;   // arriba del diseño (Y invertida)
+      diagMesh.position.set(diagCx, diagY, depthSvg * 2);
+      frontGrp.add(diagMesh);
 
     } else if (usaPatas) {
       // retro_halo + sin_luz: espárragos separan la letra 2.5 cm del muro
