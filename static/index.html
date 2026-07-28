@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.5.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.5.2</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7862,6 +7862,26 @@ function _puntosDentroShape(shape, bb, n, radioSeg) {
   return pts;
 }
 
+// ─── textura de gradiente radial (para halos/glow) ──────────────────────────
+let _glowTexCache = null;
+function _glowTexture() {
+  if (_glowTexCache) return _glowTexCache;
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+  g.addColorStop(0.0, 'rgba(255,248,210,1.00)');
+  g.addColorStop(0.15, 'rgba(255,238,160,0.85)');
+  g.addColorStop(0.35, 'rgba(255,220,110,0.45)');
+  g.addColorStop(0.60, 'rgba(255,200,80,0.15)');
+  g.addColorStop(1.00, 'rgba(255,180,50,0.00)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 256);
+  const tex = new THREE.CanvasTexture(c);
+  _glowTexCache = tex;
+  return tex;
+}
+
 // ─── textura de granito procedural (pared donde monta el anuncio) ───────────
 let _wallTexCache = null;
 function _wallTexture() {
@@ -8161,34 +8181,41 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       const wallZ = -thickSvg - wallThickSvg / 2;
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
-      // Halo de luz DELANTE de la letra — simula la luz derramándose hacia el
-      // frente. Additive blending: se suma al color de la escena creando bloom.
-      // Plano ligeramente más grande que la letra (3 cm de expansión), pegado
-      // justo delante de la cara acrílica. Va al frontGrp: se mueve con la
-      // letra en el explode.
-      const glowExpandSvg = 3.0 / sf;
-      const glowExt = { depth: 0.02 / sf, bevelEnabled: false };
-      const glowMat = new THREE.MeshBasicMaterial({
-        color: 0xfff2c0,
-        transparent: true,
-        opacity: 0.45,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
+      // ── Emisión de luz al frente (efecto bloom + iluminación física) ────
+      // Combinamos dos técnicas:
+      //   1) Sprite billboard con textura gradient radial — siempre mira a
+      //      la cámara. Se ve como "resplandor" difuso alrededor de la letra
+      //      sin importar el ángulo. Additive blending = suma al fondo.
+      //   2) PointLight real al frente — ilumina la escena de verdad
+      //      (muros, tornillos, cerchas). La luz "toca" objetos reales.
+      // Ambos van en frontGrp: se mueven con la letra en el explode.
+      const glowTex = _glowTexture();
       for (const info of infoPorLetra) {
         const bb = info.bbox;
         if (bb.w <= 0 || bb.h <= 0) continue;
-        const sx = (bb.w + 2 * glowExpandSvg) / bb.w;
-        const sy = (bb.h + 2 * glowExpandSvg) / bb.h;
         const cx = bb.x0 + bb.w / 2;
         const cy = bb.y0 + bb.h / 2;
-        const geom = new THREE.ExtrudeGeometry(info.shape, glowExt);
-        geom.computeVertexNormals();
-        const mesh = new THREE.Mesh(geom, glowMat);
-        mesh.scale.set(sx, sy, 1);
-        mesh.position.set(cx * (1 - sx), cy * (1 - sy), depthSvg + 0.05 / sf);
-        mesh.renderOrder = 3;   // encima del acrílico translúcido (renderOrder 2)
-        frontGrp.add(mesh);
+
+        // Sprite radial — 2.2x el tamaño de la letra para halo generoso
+        const spriteMat = new THREE.SpriteMaterial({
+          map: glowTex,
+          color: 0xfff2c0,
+          transparent: true,
+          opacity: 0.7,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        const glowSize = Math.max(bb.w, bb.h) * 2.2;
+        const sprite = new THREE.Sprite(spriteMat);
+        sprite.scale.set(glowSize, glowSize, 1);
+        sprite.position.set(cx, cy, depthSvg + 1.0 / sf);   // 1 cm delante de la cara
+        sprite.renderOrder = 3;
+        frontGrp.add(sprite);
+
+        // PointLight cálida — ilumina físicamente la escena delante de la letra
+        const pl = new THREE.PointLight(0xffdc80, 8, depthSvg * 20, 1.4);
+        pl.position.set(cx, cy, depthSvg + 4.0 / sf);   // 4 cm delante
+        frontGrp.add(pl);
       }
 
     } else if (isAbierta) {
