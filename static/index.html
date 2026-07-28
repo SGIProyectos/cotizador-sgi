@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.8</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.9</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -8115,12 +8115,13 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
     } else if (isAbierta) {
-      // Tapa trasera NEGRO PURO — MeshBasicMaterial NO responde a la luz de
-      // la escena (Phong con negro se veía gris por el ambient+sun). Con Basic
-      // se queda 100% negro y contrasta absolutamente con los LEDs brillantes
-      // y la sercha aluminio.
-      const backMat = new THREE.MeshBasicMaterial({
-        color: 0x000000,
+      // Tapa trasera OSCURA que SÍ responde a la luz — para que los PointLights
+      // de los LEDs la iluminen creando un glow cálido natural en el interior.
+      // Sin esto, con MeshBasicMaterial los puntos LED quedan flotando sobre
+      // un plano plano y no se lee la iluminación interior.
+      const backMat = new THREE.MeshPhongMaterial({
+        color: 0x24252a,          // gris muy oscuro (casi negro)
+        specular: 0x555555, shininess: 25,
         side: THREE.DoubleSide,
       });
       for (const shapes of shapesLetra) {
@@ -8165,20 +8166,15 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
           m.position.set(px, py, ledZ);
           frontGrp.add(m);
 
-          const pl = new THREE.PointLight(0xffe090, 10, depthSvg * 12, 2);
+          // PointLight muy brillante y de alcance amplio para que el fondo
+          // dark responda: se lee como interior CALIENTE iluminado, no como
+          // puntos flotando sobre superficie plana.
+          const pl = new THREE.PointLight(0xffdc80, 25, depthSvg * 15, 1.5);
           pl.position.set(px, py, ledZ);
           frontGrp.add(pl);
         }
       }
 
-      // ── DIAGNÓSTICO v1.3.7 (mantenido en v1.3.8) ───────────────────────
-      const diagMat = new THREE.MeshBasicMaterial({ color: 0xff2266 });
-      const diagGeom = new THREE.OctahedronGeometry(depthSvg * 1.5, 0);
-      const diagMesh = new THREE.Mesh(diagGeom, diagMat);
-      const diagCx = (bbSvg.mnX + bbSvg.mxX) / 2;
-      const diagY  = bbSvg.mnY - depthSvg * 3;
-      diagMesh.position.set(diagCx, diagY, depthSvg * 2);
-      frontGrp.add(diagMesh);
 
     } else if (usaPatas) {
       // retro_halo + sin_luz: espárragos separan la letra 2.5 cm del muro
