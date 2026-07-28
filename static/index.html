@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.7</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.8</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -8140,40 +8140,43 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       const wallZ = -wallThickSvg / 2;
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
-      // LEDs esferas GRANDES flotando cerca del frente del canal (Z=0.65 del
-      // depth) para que NADA los tape. MeshBasicMaterial: se dibujan como
-      // blancos puros brillantes sin importar la iluminación de la escena.
+      // LEDs esferas MeshBasicMaterial (no responden a luces — blanco puro
+      // siempre). Fallback: si _puntosDentroShape no encuentra posiciones
+      // válidas (shape muy pequeño respecto al radioSeg), coloca UNA led al
+      // centro del bbox de cada letra — así SIEMPRE hay al menos 1 LED visible.
       const ledMat = new THREE.MeshBasicMaterial({
         color: 0xffffff,
       });
-      const ledSize = Math.max(3.0 / sf, depthSvg * 0.55);
-      const ledZ    = depthSvg * 0.65;
+      const ledSize = Math.max(2.5 / sf, depthSvg * 0.40);
+      const ledZ    = depthSvg * 0.75;   // muy cerca del frente
       for (const info of infoPorLetra) {
         const { shape, bbox: bb } = info;
         const hCm = bb.h * sf;
         const nLeds = hCm >= 15 ? 4 : (hCm >= 8 ? 3 : 2);
-        const radioSeg = ledSize * 0.55;
-        for (const [px, py] of _puntosDentroShape(shape, bb, nLeds, radioSeg)) {
-          const geom = new THREE.SphereGeometry(ledSize * 0.5, 16, 12);
+        const radioSeg = ledSize * 0.30;  // margen mínimo — cabe casi siempre
+
+        let positions = _puntosDentroShape(shape, bb, nLeds, radioSeg);
+        if (positions.length === 0) {
+          positions = [[bb.x0 + bb.w / 2, bb.y0 + bb.h / 2]];  // fallback centro
+        }
+        for (const [px, py] of positions) {
+          const geom = new THREE.SphereGeometry(ledSize * 0.5, 20, 14);
           const m = new THREE.Mesh(geom, ledMat);
           m.position.set(px, py, ledZ);
           frontGrp.add(m);
 
-          // PointLight adentro para que la sercha y el fondo negro reciban luz
-          const pl = new THREE.PointLight(0xffe090, 8, depthSvg * 10, 2);
+          const pl = new THREE.PointLight(0xffe090, 10, depthSvg * 12, 2);
           pl.position.set(px, py, ledZ);
           frontGrp.add(pl);
         }
       }
 
-      // ── DIAGNÓSTICO v1.3.7 ─────────────────────────────────────────────
-      // Rombo ROJO gigante flotando encima del diseño. Si lo ves, mi rama
-      // de abierta_luz se ejecuta. Si NO lo ves, algo bloquea el código.
+      // ── DIAGNÓSTICO v1.3.7 (mantenido en v1.3.8) ───────────────────────
       const diagMat = new THREE.MeshBasicMaterial({ color: 0xff2266 });
       const diagGeom = new THREE.OctahedronGeometry(depthSvg * 1.5, 0);
       const diagMesh = new THREE.Mesh(diagGeom, diagMat);
       const diagCx = (bbSvg.mnX + bbSvg.mxX) / 2;
-      const diagY  = bbSvg.mnY - depthSvg * 3;   // arriba del diseño (Y invertida)
+      const diagY  = bbSvg.mnY - depthSvg * 3;
       diagMesh.position.set(diagCx, diagY, depthSvg * 2);
       frontGrp.add(diagMesh);
 
