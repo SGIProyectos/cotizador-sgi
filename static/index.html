@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.5</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.6</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -8115,15 +8115,12 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
     } else if (isAbierta) {
-      // Tapa trasera OSCURA (casi negro) — contrasta con los LEDs brillantes
-      // y con la sercha aluminio. El "hueco con luz" se lee porque:
-      //   - la sercha aluminio brilla en los bordes (mate metálico)
-      //   - el fondo oscuro no compite con la sercha (no parece cara lit)
-      //   - los LEDs brillantes contrastan sobre el fondo oscuro (luz clara)
-      // Todo integrado al frontGrp — sercha + base + LEDs se mueven juntos.
-      const backMat = new THREE.MeshPhongMaterial({
-        color: 0x18191c,           // negro azabache
-        specular: 0x222222, shininess: 20,
+      // Tapa trasera NEGRO PURO — MeshBasicMaterial NO responde a la luz de
+      // la escena (Phong con negro se veía gris por el ambient+sun). Con Basic
+      // se queda 100% negro y contrasta absolutamente con los LEDs brillantes
+      // y la sercha aluminio.
+      const backMat = new THREE.MeshBasicMaterial({
+        color: 0x000000,
         side: THREE.DoubleSide,
       });
       for (const shapes of shapesLetra) {
