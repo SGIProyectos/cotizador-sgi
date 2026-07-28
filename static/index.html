@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.5.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.5.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7963,7 +7963,7 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
 
   // Paleta de materiales según tipo de construcción (SVGs sin color)
   const paleta = {
-    cajon_luz:   { face: 0xf2f4f8, cercha: 0x8fa8b8, fTrans: true,  fOpac: 0.82 },
+    cajon_luz:   { face: 0xffffff, cercha: 0x8fa8b8, fTrans: true,  fOpac: 0.55 },
     retro_halo:  { face: 0xb0bec5, cercha: 0x78909c, fTrans: false, fOpac: 1.0  },
     sin_luz:     { face: 0xbdbdbd, cercha: 0x757575, fTrans: false, fOpac: 1.0  },
     abierta_luz: { face: null,     cercha: 0x8fa8b8, fTrans: false, fOpac: 1.0  },
@@ -8160,6 +8160,36 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       // Pared PEGADA al reverso del PVC
       const wallZ = -thickSvg - wallThickSvg / 2;
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
+
+      // Halo de luz DELANTE de la letra — simula la luz derramándose hacia el
+      // frente. Additive blending: se suma al color de la escena creando bloom.
+      // Plano ligeramente más grande que la letra (3 cm de expansión), pegado
+      // justo delante de la cara acrílica. Va al frontGrp: se mueve con la
+      // letra en el explode.
+      const glowExpandSvg = 3.0 / sf;
+      const glowExt = { depth: 0.02 / sf, bevelEnabled: false };
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: 0xfff2c0,
+        transparent: true,
+        opacity: 0.45,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      for (const info of infoPorLetra) {
+        const bb = info.bbox;
+        if (bb.w <= 0 || bb.h <= 0) continue;
+        const sx = (bb.w + 2 * glowExpandSvg) / bb.w;
+        const sy = (bb.h + 2 * glowExpandSvg) / bb.h;
+        const cx = bb.x0 + bb.w / 2;
+        const cy = bb.y0 + bb.h / 2;
+        const geom = new THREE.ExtrudeGeometry(info.shape, glowExt);
+        geom.computeVertexNormals();
+        const mesh = new THREE.Mesh(geom, glowMat);
+        mesh.scale.set(sx, sy, 1);
+        mesh.position.set(cx * (1 - sx), cy * (1 - sy), depthSvg + 0.05 / sf);
+        mesh.renderOrder = 3;   // encima del acrílico translúcido (renderOrder 2)
+        frontGrp.add(mesh);
+      }
 
     } else if (isAbierta) {
       // Tapa trasera OSCURA que SÍ responde a la luz — para que los PointLights
