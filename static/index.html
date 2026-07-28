@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.2</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7977,13 +7977,15 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
   const showHalo = (tc === 'retro_halo');
 
   // Tapa trasera integrada al cuerpo — SOLO abierta_luz.
-  // Aluminio con leve emissive (LEDs adentro tiñen la placa).
+  // MUY emissive: los LEDs adentro iluminan la placa completa. Sin esto,
+  // el fondo se veía como una "cara" plana de aluminio (indistinguible de
+  // un cajón cerrado). Con emissive fuerte lee como "canal iluminado".
   const mBack = isAbierta
     ? new THREE.MeshPhongMaterial({
-        color: 0x9aa8b0,
+        color: 0xfff6d8,
         emissive: new THREE.Color(0xffdc70),
-        emissiveIntensity: 0.30,
-        specular: 0x555566, shininess: 40,
+        emissiveIntensity: 1.15,
+        specular: 0x221100, shininess: 12,
         side: THREE.DoubleSide,
       })
     : null;
