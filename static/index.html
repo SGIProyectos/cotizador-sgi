@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7962,33 +7962,28 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
   const infoPorLetra = [];     // { shape, bbox }[]  (biggest por letra)
 
   // ── Tipo y sub-materiales del CUERPO de la letra ─────────────────────────
-  // Regla propietario 2026-07-27:
-  //  · Nada de PVC visible como pieza separada — el cuerpo es UN solo objeto
-  //    (sercha + tapa trasera aluminio si es tipo cerrado).
-  //  · cajon_luz + abierta_luz → cuerpo cerrado al fondo con aluminio,
-  //    pegado a la pared. Explode: cuerpo entero se despega del muro.
-  //  · retro_halo + sin_luz    → cuerpo abierto atrás (canal hueco), con
-  //    espárragos separadores 2.5 cm a la pared. Explode: cuerpo + espárragos
-  //    se separan del muro. retro_halo añade halo emissive; sin_luz no.
+  //  · cajon_luz  → sercha aluminio + cara acrílico translúcida.
+  //                 SIN tapa trasera propia — cierra con una placa PVC
+  //                 emissive SEPARADA (queda con muro en explode).
+  //  · abierta_luz→ sercha aluminio + tapa trasera aluminio integrada +
+  //                 LEDs cubicos visibles. Cara abierta (canal hueco visible).
+  //                 Explode: cuerpo entero se despega del muro.
+  //  · retro_halo → sercha aluminio + cara aluminio + espárragos 2.5 cm a
+  //                 la pared. Halo emissive detrás.
+  //  · sin_luz    → mismo esqueleto que retro_halo, sin halo.
   const tc = tipoConstruccion || 'cajon_luz';
-  const cerrado  = (tc === 'cajon_luz' || tc === 'abierta_luz');
+  const isCajon  = (tc === 'cajon_luz');
   const usaPatas = (tc === 'retro_halo' || tc === 'sin_luz');
   const showHalo = (tc === 'retro_halo');
-  const isCajon  = (tc === 'cajon_luz');
 
-  // Tapa trasera aluminio (tono ligeramente más oscuro que la cercha).
-  const mBack = cerrado
-    ? mkMat(0x8fa0aa, { spec: 0x555566, shin: 40 })
-    : null;
-
-  // Plano emissive interior para simular LEDs prendidos dentro de un cajon_luz.
-  // Va a media profundidad, entre la tapa trasera y la cara traslúcida.
-  const mInterior = isCajon
+  // Tapa trasera integrada al cuerpo — SOLO abierta_luz.
+  // Aluminio con leve emissive (LEDs adentro tiñen la placa).
+  const mBack = isAbierta
     ? new THREE.MeshPhongMaterial({
-        color: 0xfff2c8,
+        color: 0x9aa8b0,
         emissive: new THREE.Color(0xffdc70),
-        emissiveIntensity: 1.35,
-        specular: 0x221100, shininess: 8,
+        emissiveIntensity: 0.30,
+        specular: 0x555566, shininess: 40,
         side: THREE.DoubleSide,
       })
     : null;
@@ -8055,15 +8050,8 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
         frontGrp.add(backMesh);
       }
 
-      // 3) Plano emissive interior (cajon_luz — visible a través del acrílico)
-      if (mInterior) {
-        const intGeom = new THREE.ShapeGeometry(shape);
-        const intMesh = new THREE.Mesh(intGeom, mInterior);
-        intMesh.position.z = depthSvg * 0.35;
-        frontGrp.add(intMesh);
-      }
-
-      // 4) Cara FRONTAL (translúcida para cajon_luz, opaca para el resto)
+      // 3) Cara FRONTAL (translúcida para cajon_luz, opaca para el resto).
+      //    En cajon_luz la placa PVC emissive detrás se ve a través del acrílico.
       if (mFrontPath) {
         const frontGeom = new THREE.ShapeGeometry(shape);
         frontGeom.computeVertexNormals();
@@ -8071,7 +8059,7 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
         frontMesh.position.z = depthSvg;
         frontMesh.castShadow = !isCajon;
         frontMesh.receiveShadow = true;
-        if (isCajon) frontMesh.renderOrder = 2;   // encima del emissive interior
+        if (isCajon) frontMesh.renderOrder = 2;
         frontGrp.add(frontMesh);
       }
     }
@@ -8096,34 +8084,67 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
   if (!isPlana && isFinite(gMnX)) {
     const wallThickSvg = 4.0 / sf;
 
-    if (cerrado) {
-      // Pared PEGADA al cuerpo de la letra (cara trasera a Z=0)
+    if (isCajon) {
+      // Placa PVC emissive con la forma de cada letra (5 mm), 2 mm menos por
+      // lado para embonar dentro de la cercha. Va al mountGrp — queda con el
+      // muro cuando explotamos. La letra (frontGrp) se despega del PVC.
+      const thickSvg = 0.5 / sf;
+      const shrink   = 0.2 / sf;
+      const pvcMat = new THREE.MeshPhongMaterial({
+        color: 0xfff6d8,
+        emissive: new THREE.Color(0xffdc70),
+        emissiveIntensity: 1.15,
+        specular: 0x221100, shininess: 12,
+        side: THREE.DoubleSide,
+      });
+      const pvcExt = { depth: thickSvg, bevelEnabled: false };
+      for (const shapes of shapesLetra) {
+        for (const shape of shapes) {
+          const bb = _shapeBbox(shape);
+          if (!bb || bb.w <= 2 * shrink || bb.h <= 2 * shrink) continue;
+          const sx = (bb.w - 2 * shrink) / bb.w;
+          const sy = (bb.h - 2 * shrink) / bb.h;
+          const cx = bb.x0 + bb.w / 2;
+          const cy = bb.y0 + bb.h / 2;
+          const geom = new THREE.ExtrudeGeometry(shape, pvcExt);
+          geom.computeVertexNormals();
+          const mesh = new THREE.Mesh(geom, pvcMat);
+          mesh.scale.set(sx, sy, 1);
+          mesh.position.set(cx * (1 - sx), cy * (1 - sy), -thickSvg);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          mountGrp.add(mesh);
+        }
+      }
+      // Pared PEGADA al reverso del PVC
+      const wallZ = -thickSvg - wallThickSvg / 2;
+      mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
+
+    } else if (isAbierta) {
+      // Pared PEGADA a la tapa trasera aluminio de la letra
       const wallZ = -wallThickSvg / 2;
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
-      // LEDs visibles dentro del canal para abierta_luz (montados sobre la
-      // tapa trasera de aluminio, apuntando hacia adelante). Van al frontGrp
-      // porque físicamente están atornillados a la letra.
-      if (isAbierta) {
-        const ledMat = new THREE.MeshPhongMaterial({
-          color: 0xffffff,
-          emissive: new THREE.Color(0xffee80),
-          emissiveIntensity: 1.75,
-          specular: 0x333311, shininess: 40,
-        });
-        const ledSize = Math.max(1.2 / sf, depthSvg * 0.28);
-        const ledZ    = ledSize * 0.5 + 0.001;  // sentado sobre la tapa trasera (Z=0)
-        for (const info of infoPorLetra) {
-          const { shape, bbox: bb } = info;
-          const hCm = bb.h * sf;
-          const nLeds = hCm >= 15 ? 4 : (hCm >= 8 ? 3 : 2);
-          const radioSeg = ledSize * 0.7;
-          for (const [px, py] of _puntosDentroShape(shape, bb, nLeds, radioSeg)) {
-            const geom = new THREE.BoxGeometry(ledSize, ledSize, ledSize);
-            const m = new THREE.Mesh(geom, ledMat);
-            m.position.set(px, py, ledZ);
-            frontGrp.add(m);
-          }
+      // LEDs cubicos visibles sobre la tapa trasera (van al frontGrp — se
+      // mueven con la letra en explode porque están atornillados a ella).
+      const ledMat = new THREE.MeshPhongMaterial({
+        color: 0xffffff,
+        emissive: new THREE.Color(0xffee80),
+        emissiveIntensity: 2.2,
+        specular: 0x333311, shininess: 40,
+      });
+      const ledSize = Math.max(1.5 / sf, depthSvg * 0.32);
+      const ledZ    = ledSize * 0.5 + 0.001;  // sentados sobre la tapa (Z=0)
+      for (const info of infoPorLetra) {
+        const { shape, bbox: bb } = info;
+        const hCm = bb.h * sf;
+        const nLeds = hCm >= 15 ? 4 : (hCm >= 8 ? 3 : 2);
+        const radioSeg = ledSize * 0.7;
+        for (const [px, py] of _puntosDentroShape(shape, bb, nLeds, radioSeg)) {
+          const geom = new THREE.BoxGeometry(ledSize, ledSize, ledSize);
+          const m = new THREE.Mesh(geom, ledMat);
+          m.position.set(px, py, ledZ);
+          frontGrp.add(m);
         }
       }
 
