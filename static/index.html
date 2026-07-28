@@ -1077,7 +1077,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.9</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.3.10</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -8141,35 +8141,36 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       const wallZ = -wallThickSvg / 2;
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
-      // LEDs esferas MeshBasicMaterial (no responden a luces — blanco puro
-      // siempre). Fallback: si _puntosDentroShape no encuentra posiciones
-      // válidas (shape muy pequeño respecto al radioSeg), coloca UNA led al
-      // centro del bbox de cada letra — así SIEMPRE hay al menos 1 LED visible.
+      // LEDs = pequeños FOCOS INDIVIDUALES tipo bombillo cálido, montados
+      // sobre la base (Z≈0). Cantidad generosa por letra para simular
+      // instalación real de LED strip. Cada uno con su PointLight — el
+      // conjunto ilumina la base y las paredes del canal generando el
+      // "canal iluminado desde adentro" que se pidió.
       const ledMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
+        color: 0xfff2c0,   // blanco cálido tipo bombillo halógeno
       });
-      const ledSize = Math.max(2.5 / sf, depthSvg * 0.40);
-      const ledZ    = depthSvg * 0.75;   // muy cerca del frente
+      const ledSize = Math.max(1.2 / sf, depthSvg * 0.18);   // 1.2 cm o 18% del depth
+      const ledZ    = ledSize * 0.5 + 0.002;                 // sentado sobre la base
       for (const info of infoPorLetra) {
         const { shape, bbox: bb } = info;
         const hCm = bb.h * sf;
-        const nLeds = hCm >= 15 ? 4 : (hCm >= 8 ? 3 : 2);
-        const radioSeg = ledSize * 0.30;  // margen mínimo — cabe casi siempre
+        // Más LEDs para que se lea como strip de bombillos individuales
+        const nLeds = hCm >= 20 ? 6 : hCm >= 12 ? 5 : hCm >= 6 ? 4 : 3;
+        const radioSeg = ledSize * 0.30;
 
         let positions = _puntosDentroShape(shape, bb, nLeds, radioSeg);
         if (positions.length === 0) {
-          positions = [[bb.x0 + bb.w / 2, bb.y0 + bb.h / 2]];  // fallback centro
+          positions = [[bb.x0 + bb.w / 2, bb.y0 + bb.h / 2]];
         }
         for (const [px, py] of positions) {
-          const geom = new THREE.SphereGeometry(ledSize * 0.5, 20, 14);
+          const geom = new THREE.SphereGeometry(ledSize * 0.5, 16, 12);
           const m = new THREE.Mesh(geom, ledMat);
           m.position.set(px, py, ledZ);
           frontGrp.add(m);
 
-          // PointLight muy brillante y de alcance amplio para que el fondo
-          // dark responda: se lee como interior CALIENTE iluminado, no como
-          // puntos flotando sobre superficie plana.
-          const pl = new THREE.PointLight(0xffdc80, 25, depthSvg * 15, 1.5);
+          // PointLight moderada — con muchos focos el interior se ilumina
+          // uniformemente sin saturar en cada punto.
+          const pl = new THREE.PointLight(0xffdc80, 8, depthSvg * 8, 1.8);
           pl.position.set(px, py, ledZ);
           frontGrp.add(pl);
         }
