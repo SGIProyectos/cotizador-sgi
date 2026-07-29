@@ -982,37 +982,6 @@ svg g.pieza-labels                 { pointer-events: none; }
   font-size: 10.5px; color: rgba(255,255,255,.4);
   line-height: 1.5; margin-top: 8px;
 }
-.fach-cm-modal {
-  position: absolute; top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 20; min-width: 300px;
-  background: rgba(18, 22, 30, .96); backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,.14);
-  border-radius: 12px; padding: 18px 20px;
-  box-shadow: 0 14px 48px rgba(0,0,0,.7);
-}
-.fach-cm-title { font-size: 12.5px; font-weight: 600; color: #E4E8EE; margin-bottom: 10px; }
-.fach-cm-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
-.fach-cm-row input {
-  flex: 1; padding: 9px 11px; text-align: right;
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.15); border-radius: 7px;
-  color: var(--c-soft); font-family: var(--mono);
-  font-size: 15px; font-weight: 600;
-  -moz-appearance: textfield;
-}
-.fach-cm-row input:focus {
-  outline: none; border-color: var(--c); background: rgba(44,197,236,.08);
-}
-.fach-cm-row input::-webkit-inner-spin-button,
-.fach-cm-row input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.fach-cm-row .fach-cm-suffix {
-  color: rgba(255,255,255,.5); font-family: var(--mono); font-size: 12px;
-}
-.fach-cm-hint { font-size: 10.5px; color: rgba(255,255,255,.4); line-height: 1.5; margin-bottom: 12px; }
-.fach-cm-actions { display: flex; gap: 8px; }
-.fach-cm-actions .fach-btn { padding: 8px 12px; font-size: 12px; }
-
 .fach-escala-recordada {
   font-size: 10.5px; color: var(--c-soft); font-weight: 600;
   margin-top: 6px; display: flex; align-items: center; gap: 6px;
@@ -1297,7 +1266,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.7.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.8.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7836,13 +7805,15 @@ const _fach = {
   zoom: 1,
   tx: 0, ty: 0,         // offset del wrap dentro del stage (px de pantalla)
   panDrag: null,        // {sx, sy, tx0, ty0}
-  // Escala real por referencia
-  realPxPerCm: null,    // si != null, activa modo escala real
+  // Área del letrero (2 clicks en esquinas opuestas → rectángulo destino)
+  // El ancho del rectángulo se interpreta como letreroAnchoCm → calcula
+  // realPxPerCm y el letrero se auto-coloca centrado a 1:1 real.
+  areaRect: null,       // {x, y, w, h} en coords de foto, persistente
+  realPxPerCm: null,    // si != null, escala 1:1 activa
   letreroAnchoCm: null, // ancho real cotizado del letrero (cm)
-  measureMode: false,   // usuario está calibrando
-  measurePts: [],       // clicks de calibración (max 2)
-  pendingDistPx: null,  // px de referencia esperando confirmación del mini-modal
-  escalaRehidratada: false, // true si realPxPerCm vino de localStorage al abrir la foto
+  measureMode: false,   // usuario está marcando (2 clicks pendientes)
+  measurePts: [],       // clicks (max 2)
+  escalaRehidratada: false, // true si el area/escala vino de localStorage al abrir
   photoHash: null,      // FNV-1a hash de la foto actual (key en localStorage)
 };
 
@@ -7875,6 +7846,7 @@ function _fachSaveEscala() {
   try {
     localStorage.setItem(_FACH_LS_PREFIX + _fach.photoHash, JSON.stringify({
       realPxPerCm: _fach.realPxPerCm,
+      areaRect:    _fach.areaRect,
       t: Date.now(),
     }));
   } catch (e) { console.warn("Escala no guardada:", e); }
@@ -7886,7 +7858,8 @@ function _fachLoadEscala(hash) {
     const raw = localStorage.getItem(_FACH_LS_PREFIX + hash);
     if (!raw) return null;
     const obj = JSON.parse(raw);
-    return (obj && obj.realPxPerCm > 0) ? obj.realPxPerCm : null;
+    if (!obj || !(obj.realPxPerCm > 0)) return null;
+    return { realPxPerCm: obj.realPxPerCm, areaRect: obj.areaRect || null };
   } catch (e) { return null; }
 }
 
@@ -7923,8 +7896,6 @@ function _resetFachadaUI() {
   document.getElementById('fach-op-val').value    = 100;
   _fach.zoom = 1; _fach.tx = 0; _fach.ty = 0;
   _fachApplyZoomTransform();
-  const cm = document.getElementById('fach-cm-modal');
-  if (cm) cm.style.display = 'none';
 }
 
 // Aplicar transform CSS al wrap (zoom + pan del stage)
@@ -8018,13 +7989,18 @@ function fachOnFile(file) {
         const anchoInp = parseFloat(document.getElementById("ancho-real")?.value);
         _fach.letreroAnchoCm = (anchoInp && anchoInp > 0) ? anchoInp : null;
         _fach.photoHash = _fachPhotoHash(img);
-        // D: rehidratar escala real si ya calibramos esta foto antes
-        const savedPxPerCm = _fachLoadEscala(_fach.photoHash);
-        _fach.realPxPerCm = savedPxPerCm;
-        _fach.escalaRehidratada = !!savedPxPerCm;
+        // D: rehidratar área + escala si ya marcamos esta foto antes
+        const saved = _fachLoadEscala(_fach.photoHash);
+        _fach.realPxPerCm = saved?.realPxPerCm || null;
+        _fach.areaRect    = saved?.areaRect    || null;
+        _fach.escalaRehidratada = !!saved;
+        // Si rehidratamos con área, centrar el letrero adentro
+        if (_fach.areaRect) {
+          const r = _fach.areaRect;
+          _fach.positions = [{ cx: r.x + r.w / 2, cy: r.y + r.h / 2 }];
+        }
         _fach.measureMode = false;
         _fach.measurePts = [];
-        _fach.pendingDistPx = null;
         // Sincronizar UI: slider 100% = scale actual
         document.getElementById('fach-scale').value = 100;
         document.getElementById('fach-rot').value = 0;
@@ -8070,6 +8046,11 @@ function _fachDraw() {
   ctx.clearRect(0, 0, cv.width, cv.height);
   ctx.drawImage(_fach.photo, 0, 0, cv.width, cv.height);
 
+  // Cuadro rojo del área marcada (persistente) + labels ancho/alto en cm
+  if (_fach.areaRect && _fach.realPxPerCm) {
+    _fachDrawAreaRect(ctx, cv, _fach.areaRect);
+  }
+
   // Letreros (1 o 2 copias con misma escala/rot/opacidad)
   if (_fach.overlay) {
     const w = _fach.baseW * _fach.scale;
@@ -8085,24 +8066,90 @@ function _fachDraw() {
     ctx.globalAlpha = 1;
   }
 
-  // Marcas de calibración de escala real (puntos + línea)
+  // Puntos de calibración en curso (1er click, esperando el 2do)
   if (_fach.measureMode && _fach.measurePts.length > 0) {
     const dotR = Math.max(6, cv.width * 0.004);
     ctx.strokeStyle = '#ff3860';
     ctx.fillStyle   = '#ff3860';
     ctx.lineWidth   = Math.max(2, cv.width * 0.0015);
-    if (_fach.measurePts.length === 2) {
-      const [a, b] = _fach.measurePts;
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-    }
     for (const pt of _fach.measurePts) {
       ctx.beginPath();
       ctx.arc(pt.x, pt.y, dotR, 0, Math.PI * 2);
       ctx.fill();
     }
   }
+}
+
+// Dibuja el cuadro rojo del área del letrero con labels ancho/alto en cm.
+// Estilo tipo AutoCAD/Figma: dashed rojo + labels con fondo rojo, texto blanco.
+function _fachDrawAreaRect(ctx, cv, r) {
+  const dashOn  = Math.max(8, cv.width * 0.005);
+  const dashOff = Math.max(6, cv.width * 0.004);
+  const lw      = Math.max(2, cv.width * 0.0015);
+  const fontPx  = Math.max(14, cv.width * 0.012);
+
+  ctx.save();
+  // Rectángulo dashed
+  ctx.strokeStyle = '#ff3860';
+  ctx.lineWidth = lw;
+  ctx.setLineDash([dashOn, dashOff]);
+  ctx.strokeRect(r.x, r.y, r.w, r.h);
+  ctx.setLineDash([]);
+
+  const wCm = Math.round(r.w / _fach.realPxPerCm);
+  const hCm = Math.round(r.h / _fach.realPxPerCm);
+  const wTxt = `${wCm} cm`;
+  const hTxt = `${hCm} cm`;
+
+  ctx.font = `700 ${fontPx}px "SF Mono", "Roboto Mono", Consolas, monospace`;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  const padX = fontPx * 0.55;
+  const padY = fontPx * 0.32;
+  const rr   = fontPx * 0.28;
+
+  // Label ancho (arriba, centrado)
+  const wm = ctx.measureText(wTxt);
+  const wLw = wm.width + padX * 2;
+  const wLh = fontPx + padY * 2;
+  const wLx = r.x + r.w / 2 - wLw / 2;
+  const wLy = r.y - wLh - fontPx * 0.35;
+  ctx.fillStyle = 'rgba(255, 56, 96, .95)';
+  _fachRoundRect(ctx, wLx, wLy, wLw, wLh, rr);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillText(wTxt, wLx + wLw / 2, wLy + wLh / 2);
+
+  // Label alto (izquierda, rotado -90°)
+  const hm = ctx.measureText(hTxt);
+  const hLw = hm.width + padX * 2;
+  const hLh = fontPx + padY * 2;
+  ctx.save();
+  ctx.translate(r.x - hLh - fontPx * 0.35, r.y + r.h / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillStyle = 'rgba(255, 56, 96, .95)';
+  _fachRoundRect(ctx, -hLw / 2, -hLh / 2, hLw, hLh, rr);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillText(hTxt, 0, 0);
+  ctx.restore();
+
+  ctx.restore();
+}
+
+function _fachRoundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 // Handler sliders. Origen puede ser 'slider' o 'input' — el otro se sincroniza.
@@ -8188,103 +8235,112 @@ function fachPosicion(preset) {
   _fachDraw();
 }
 
-function fachRecentrar() { fachPosicion('centro'); }
+function fachRecentrar() {
+  // Si hay área marcada, recentrar dentro del cuadro rojo (referencia visual).
+  // Si no, centro geométrico de la foto.
+  if (_fach.areaRect) {
+    const r = _fach.areaRect;
+    const cx = r.x + r.w / 2;
+    const cy = r.y + r.h / 2;
+    if (_fach.positions.length === 1) {
+      _fach.positions[0] = { cx, cy };
+    } else {
+      const w = _fach.baseW * _fach.scale;
+      const gap = Math.max(w * 0.1, _fach.photo.width * 0.03);
+      _fach.positions[0] = { cx: cx - (w + gap) / 2, cy };
+      _fach.positions[1] = { cx: cx + (w + gap) / 2, cy };
+    }
+    _fachDraw();
+  } else {
+    fachPosicion('centro');
+  }
+}
 
-// ─── ESCALA REAL POR REFERENCIA ─────────────────────────────────────────────
-// Modo: usuario hace 2 clicks sobre puntos de altura/ancho conocido en la foto
-// → prompt pide cm → calcula px/cm → escala el letrero a su ancho real cotizado.
-function fachMedirEscala() {
+// ─── ÁREA DEL LETRERO ───────────────────────────────────────────────────────
+// Modo: usuario marca 2 esquinas opuestas del área destino en la foto. El
+// ancho del rectángulo se interpreta como letreroAnchoCm → calcula px/cm y
+// centra el letrero adentro a 1:1 real. Persistente en localStorage.
+function fachMarcarArea() {
   if (!_fach.photo || !_fach.overlay) return;
   if (!_fach.letreroAnchoCm || _fach.letreroAnchoCm <= 0) {
-    alert("No se pudo leer el ancho real del letrero (input 'Ancho real cm' vacío).");
+    alert(
+      "No se pudo leer el ancho real del letrero.\n" +
+      "Cotizá primero (llenando 'Ancho real cm') para poder colocarlo a escala 1:1 en la foto."
+    );
     return;
   }
   _fach.measureMode = true;
   _fach.measurePts = [];
+  const cv = document.getElementById('fach-canvas');
+  if (cv) cv.style.cursor = 'crosshair';
   const hint = document.getElementById('fach-escala-hint');
-  if (hint) hint.textContent = 'Modo medición · click en 2 puntos de altura/ancho conocido en la foto';
-  document.getElementById('fach-canvas').style.cursor = 'crosshair';
+  if (hint) hint.textContent = 'Marcá 2 esquinas opuestas del área donde va el letrero (Esc para cancelar).';
   _fachDraw();
 }
 
-function _fachMeasureClick(x, y) {
+function _fachAreaClick(x, y) {
   _fach.measurePts.push({ x, y });
   _fachDraw();
-  if (_fach.measurePts.length === 2) {
-    // Calcular distancia en px, mostrar mini-modal para pedir cm
-    const [a, b] = _fach.measurePts;
-    _fach.pendingDistPx = Math.hypot(b.x - a.x, b.y - a.y);
-    _fachCmOpen();
-  }
-}
+  if (_fach.measurePts.length < 2) return;
 
-// Mini-modal in-canvas para ingresar cm de la referencia (reemplaza prompt())
-function _fachCmOpen() {
-  const m = document.getElementById('fach-cm-modal');
-  if (!m) return;
-  m.style.display = 'block';
-  const inp = document.getElementById('fach-cm-input');
-  // focus + select con delay para que el navegador termine el layout
-  setTimeout(() => { inp?.focus(); inp?.select(); }, 40);
-}
-
-function _fachCmClose() {
-  const m = document.getElementById('fach-cm-modal');
-  if (m) m.style.display = 'none';
-}
-
-function _fachCmKey(ev) {
-  if (ev.key === 'Enter')  { ev.preventDefault(); _fachCmConfirm(); }
-  if (ev.key === 'Escape') { ev.preventDefault(); _fachCmCancel(); }
-}
-
-function _fachCmCancel() {
-  _fachCmClose();
-  _fach.pendingDistPx = null;
-  _fach.measureMode = false;
-  _fach.measurePts = [];
-  const cv = document.getElementById('fach-canvas');
-  if (cv) cv.style.cursor = 'grab';
-  _fachRefreshEscalaUI();
-  _fachDraw();
-}
-
-function _fachCmConfirm() {
-  const inp = document.getElementById('fach-cm-input');
-  const cm = parseFloat(inp?.value);
-  if (!cm || isNaN(cm) || cm <= 0) {
-    inp?.focus(); inp?.select();
+  const [a, b] = _fach.measurePts;
+  const rx = Math.min(a.x, b.x);
+  const ry = Math.min(a.y, b.y);
+  const rw = Math.abs(b.x - a.x);
+  const rh = Math.abs(b.y - a.y);
+  // Ignorar rectángulos degenerados (doble click en el mismo punto)
+  if (rw < 6 || rh < 6) {
+    _fach.measurePts = [];
+    _fachDraw();
     return;
   }
-  const distPx = _fach.pendingDistPx;
-  _fachCmClose();
-  _fach.pendingDistPx = null;
+  _fach.areaRect = { x: rx, y: ry, w: rw, h: rh };
+  _fach.realPxPerCm = rw / _fach.letreroAnchoCm;
+  _fach.escalaRehidratada = false;
   _fach.measureMode = false;
+  _fach.measurePts = [];
   const cv = document.getElementById('fach-canvas');
   if (cv) cv.style.cursor = 'grab';
-  if (!distPx || distPx <= 0) { _fachDraw(); return; }
 
-  _fach.realPxPerCm = distPx / cm;
-  _fach.escalaRehidratada = false; // recién medida, no rehidratada
-  _fach.measurePts = [];
-  _fachSaveEscala(); // D — persistir la calibración para esta foto
-  // Reset slider tamaño a 100% (= 1:1 real ahora)
+  // Centrar letrero(s) en el rectángulo
+  const cx = rx + rw / 2;
+  const cy = ry + rh / 2;
+  if (_fach.positions.length === 1) {
+    _fach.positions[0] = { cx, cy };
+  } else {
+    // Con 2 letreros, distribuir simétricamente respetando ancho + gap
+    const w = _fach.letreroAnchoCm * _fach.realPxPerCm; // ancho de cada letrero en px a 1:1
+    const gap = Math.max(w * 0.1, _fach.photo.width * 0.03);
+    _fach.positions[0] = { cx: cx - (w + gap) / 2, cy };
+    _fach.positions[1] = { cx: cx + (w + gap) / 2, cy };
+  }
+
+  _fachSaveEscala();
   document.getElementById('fach-scale').value = 100;
   document.getElementById('fach-scale-val').value = 100;
-  fachRecentrar();
   fachUpdate('slider');
   _fachRefreshEscalaUI();
 }
 
-function fachResetEscala() {
-  _fachForgetEscala(); // D — también olvidar la persistida
+function fachCancelarMarcado() {
+  if (!_fach.measureMode) return;
+  _fach.measureMode = false;
+  _fach.measurePts = [];
+  const cv = document.getElementById('fach-canvas');
+  if (cv) cv.style.cursor = 'grab';
+  _fachRefreshEscalaUI();
+  _fachDraw();
+}
+
+function fachResetArea() {
+  _fachForgetEscala();
   _fach.realPxPerCm = null;
+  _fach.areaRect = null;
   _fach.escalaRehidratada = false;
   _fach.measureMode = false;
   _fach.measurePts = [];
-  _fach.pendingDistPx = null;
-  _fachCmClose();
-  document.getElementById('fach-canvas').style.cursor = 'grab';
+  const cv = document.getElementById('fach-canvas');
+  if (cv) cv.style.cursor = 'grab';
   document.getElementById('fach-scale').value = 100;
   document.getElementById('fach-scale-val').value = 100;
   fachUpdate('slider');
@@ -8294,7 +8350,7 @@ function fachResetEscala() {
 function _fachEscalaHintTxt() {
   const cm = _fach.letreroAnchoCm || 0;
   const m = cm >= 100 ? (cm / 100).toFixed(2) + ' m' : cm + ' cm';
-  return `Escala 1:1 activa · letrero a ${m} reales sobre la foto`;
+  return `Escala 1:1 activa · letrero a ${m} reales dentro del cuadro rojo.`;
 }
 
 function _fachRefreshEscalaUI() {
@@ -8303,15 +8359,15 @@ function _fachRefreshEscalaUI() {
   const btnR = document.getElementById('fach-btn-escala-reset');
   const scLbl = document.getElementById('fach-scale-lbl');
   const rec  = document.getElementById('fach-escala-recordada');
-  if (_fach.realPxPerCm) {
+  if (_fach.realPxPerCm && _fach.areaRect) {
     if (hint) hint.textContent = _fachEscalaHintTxt();
-    if (btn) btn.textContent = 'Re-medir referencia';
-    if (btnR) { btnR.style.display = ''; btnR.textContent = 'Olvidar escala de esta foto'; }
+    if (btn) btn.textContent = 'Re-marcar área';
+    if (btnR) { btnR.style.display = ''; btnR.textContent = 'Borrar área marcada'; }
     if (scLbl) scLbl.textContent = 'Tamaño (1:1 real)';
     if (rec) rec.style.display = _fach.escalaRehidratada ? 'flex' : 'none';
   } else {
-    if (hint) hint.textContent = 'Marcá 2 puntos en la foto sobre algo de tamaño conocido (puerta, ventana, señalización).';
-    if (btn) btn.textContent = 'Medir referencia';
+    if (hint) hint.textContent = 'Marcá las 2 esquinas opuestas del área donde va el letrero.';
+    if (btn) btn.textContent = 'Marcar área del letrero';
     if (btnR) btnR.style.display = 'none';
     if (scLbl) scLbl.textContent = 'Tamaño';
     if (rec) rec.style.display = 'none';
@@ -8359,7 +8415,7 @@ function _fachRefreshEscalaUI() {
       const p = _clientToCanvas(e.clientX, e.clientY);
       // Modo medición: los clicks son puntos de calibración, no drag
       if (_fach.measureMode) {
-        _fachMeasureClick(p.x, p.y);
+        _fachAreaClick(p.x, p.y);
         e.preventDefault();
         return;
       }
@@ -8412,7 +8468,7 @@ function _fachRefreshEscalaUI() {
       if (!e.touches[0]) return;
       const t = e.touches[0];
       const p = _clientToCanvas(t.clientX, t.clientY);
-      if (_fach.measureMode) { _fachMeasureClick(p.x, p.y); e.preventDefault(); return; }
+      if (_fach.measureMode) { _fachAreaClick(p.x, p.y); e.preventDefault(); return; }
       const idx = _hitOverlayIdx(p.x, p.y);
       if (idx < 0) return;
       const pos = _fach.positions[idx];
@@ -8449,12 +8505,13 @@ function _fachRefreshEscalaUI() {
       });
     }
 
-    // Esc para cerrar el modal
+    // Esc: si está en modo marcado, cancelar marcado. Si no, cerrar modal.
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') {
-        const m = document.getElementById('modal-fachada');
-        if (m && m.classList.contains('open')) cerrarFachada();
-      }
+      if (e.key !== 'Escape') return;
+      const m = document.getElementById('modal-fachada');
+      if (!m || !m.classList.contains('open')) return;
+      if (_fach.measureMode) { fachCancelarMarcado(); e.preventDefault(); return; }
+      cerrarFachada();
     });
   });
 })();
@@ -8649,9 +8706,10 @@ window.v3d_render = function({ svgText, depthCm, tipo, tipoConstruccion,
   grp.userData.v3d = true;
   S.add(grp);
 
-  // Botón "En fachada" — solo en Letras 3D (no cajas, no planas)
+  // Botón "En fachada" — disponible en los 3 tipos (letras / cajas / planas).
+  // v3d_snapshot funciona igual porque toma del grupo activo en la escena `S`.
   const btnFach = document.getElementById('btn-fachada');
-  if (btnFach) btnFach.style.display = (tipo === 'letras') ? 'inline-flex' : 'none';
+  if (btnFach) btnFach.style.display = 'inline-flex';
 
   // Ajustar cámara al grupo
   const bb = new THREE.Box3().setFromObject(grp);
@@ -10197,23 +10255,6 @@ window.v3d_snapshot = function(targetW = 2200) {
 
       <!-- Indicador de zoom -->
       <div class="fach-zoom-indicator" id="fach-zoom-indicator">100%</div>
-
-      <!-- Mini-modal para ingresar cm de la referencia (reemplaza prompt() nativo) -->
-      <div id="fach-cm-modal" class="fach-cm-modal" style="display:none">
-        <div class="fach-cm-title">Distancia entre los 2 puntos</div>
-        <div class="fach-cm-row">
-          <input type="number" id="fach-cm-input" min="1" step="1" value="210" placeholder="210"
-                 onkeydown="_fachCmKey(event)">
-          <span class="fach-cm-suffix">cm</span>
-        </div>
-        <div class="fach-cm-hint">
-          Ej: <b>210</b> puerta 2.10 m · <b>90</b> ancho conocido de 90 cm
-        </div>
-        <div class="fach-cm-actions">
-          <button class="fach-btn" onclick="_fachCmCancel()">Cancelar</button>
-          <button class="fach-btn primary" onclick="_fachCmConfirm()">Confirmar</button>
-        </div>
-      </div>
     </div>
 
     <!-- PANEL derecho -->
@@ -10287,25 +10328,24 @@ window.v3d_snapshot = function(targetW = 2200) {
       </div>
 
       <div class="fach-section">
-        <h3>Escala real</h3>
-        <button class="fach-btn" id="fach-btn-escala" onclick="fachMedirEscala()">
+        <h3>Área del letrero</h3>
+        <button class="fach-btn" id="fach-btn-escala" onclick="fachMarcarArea()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0Z"/>
-            <path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/>
-            <path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/>
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" stroke-dasharray="3 3"/>
+            <path d="M8 8v8M16 8v8M8 8h8M8 16h8"/>
           </svg>
-          Medir referencia
+          Marcar área del letrero
         </button>
         <button class="fach-btn" id="fach-btn-escala-reset"
-                onclick="fachResetEscala()" style="display:none;margin-top:6px">
-          Olvidar escala de esta foto
+                onclick="fachResetArea()" style="display:none;margin-top:6px">
+          Borrar área marcada
         </button>
         <div class="fach-escala-recordada" id="fach-escala-recordada" style="display:none">
-          <span>✓ Escala real recordada de una sesión previa</span>
+          <span>✓ Área recordada de una sesión previa</span>
         </div>
         <div class="fach-hint" id="fach-escala-hint">
-          Marcá 2 puntos en la foto sobre algo de tamaño conocido (puerta, ventana, señalización).
+          Marcá las 2 esquinas opuestas del área donde va el letrero.
         </div>
       </div>
 
