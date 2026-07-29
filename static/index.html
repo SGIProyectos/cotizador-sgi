@@ -1019,6 +1019,12 @@ svg g.pieza-labels                 { pointer-events: none; }
 .fach-cm-actions { display: flex; gap: 8px; }
 .fach-cm-actions .fach-btn { padding: 8px 12px; font-size: 12px; }
 
+.fach-scale-cm {
+  margin-top: 6px; text-align: right;
+  font-size: 11px; font-family: var(--mono); font-weight: 600;
+  color: var(--c-soft); letter-spacing: .02em;
+}
+
 .fach-escala-recordada {
   font-size: 10.5px; color: var(--c-soft); font-weight: 600;
   margin-top: 6px; display: flex; align-items: center; gap: 6px;
@@ -1303,7 +1309,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.9.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.9.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -8242,6 +8248,20 @@ function fachUpdate(origen) {
   _fach.scale = scale100 * (sPct / 100);
   _fach.rot = rDeg * Math.PI / 180;
   _fach.opacity = oPct / 100;
+
+  // Badge cm: dimensión real actual del letrero (solo cuando hay escala real)
+  const cmEl = document.getElementById('fach-scale-cm');
+  if (cmEl) {
+    if (_fach.realPxPerCm && _fach.baseW > 0) {
+      const wCm = Math.round((_fach.baseW * _fach.scale) / _fach.realPxPerCm);
+      const hCm = Math.round((_fach.baseH * _fach.scale) / _fach.realPxPerCm);
+      cmEl.textContent = `= ${wCm} × ${hCm} cm`;
+      cmEl.style.display = '';
+    } else {
+      cmEl.style.display = 'none';
+    }
+  }
+
   _fachDraw();
 }
 
@@ -10442,6 +10462,7 @@ window.v3d_snapshot = function(targetW = 2200) {
           </label>
           <input type="range" id="fach-scale" min="10" max="300" value="100"
                  oninput="fachUpdate('fach-scale')">
+          <div class="fach-scale-cm" id="fach-scale-cm" style="display:none"></div>
         </div>
         <div class="fach-slider-row">
           <label>
