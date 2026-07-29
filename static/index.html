@@ -982,6 +982,48 @@ svg g.pieza-labels                 { pointer-events: none; }
   font-size: 10.5px; color: rgba(255,255,255,.4);
   line-height: 1.5; margin-top: 8px;
 }
+.fach-cm-modal {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20; min-width: 300px;
+  background: rgba(18, 22, 30, .96); backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 12px; padding: 18px 20px;
+  box-shadow: 0 14px 48px rgba(0,0,0,.7);
+}
+.fach-cm-title { font-size: 12.5px; font-weight: 600; color: #E4E8EE; margin-bottom: 10px; }
+.fach-cm-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.fach-cm-row input {
+  flex: 1; padding: 9px 11px; text-align: right;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.15); border-radius: 7px;
+  color: var(--c-soft); font-family: var(--mono);
+  font-size: 15px; font-weight: 600;
+  -moz-appearance: textfield;
+}
+.fach-cm-row input:focus {
+  outline: none; border-color: var(--c); background: rgba(44,197,236,.08);
+}
+.fach-cm-row input::-webkit-inner-spin-button,
+.fach-cm-row input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.fach-cm-row .fach-cm-suffix {
+  color: rgba(255,255,255,.5); font-family: var(--mono); font-size: 12px;
+}
+.fach-cm-hint { font-size: 10.5px; color: rgba(255,255,255,.4); line-height: 1.5; margin-bottom: 12px; }
+.fach-cm-actions { display: flex; gap: 8px; }
+.fach-cm-actions .fach-btn { padding: 8px 12px; font-size: 12px; }
+
+.fach-escala-recordada {
+  font-size: 10.5px; color: var(--c-soft); font-weight: 600;
+  margin-top: 6px; display: flex; align-items: center; gap: 6px;
+}
+.fach-escala-recordada button {
+  background: none; border: none; padding: 0; margin: 0;
+  color: rgba(255,255,255,.4); font-size: 10.5px; cursor: pointer;
+  text-decoration: underline; font-family: inherit;
+}
+.fach-escala-recordada button:hover { color: rgba(255,255,255,.7); }
+
 @media (max-width: 900px) {
   .fach-body { flex-direction: column; }
   .fach-panel { width: 100%; border-left: none; border-top: 1px solid rgba(255,255,255,.08); max-height: 40vh; }
@@ -1255,7 +1297,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.7.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.7.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7799,7 +7841,59 @@ const _fach = {
   letreroAnchoCm: null, // ancho real cotizado del letrero (cm)
   measureMode: false,   // usuario está calibrando
   measurePts: [],       // clicks de calibración (max 2)
+  pendingDistPx: null,  // px de referencia esperando confirmación del mini-modal
+  escalaRehidratada: false, // true si realPxPerCm vino de localStorage al abrir la foto
+  photoHash: null,      // FNV-1a hash de la foto actual (key en localStorage)
 };
+
+// ─── Persistencia de escala real (D) ────────────────────────────────────────
+// La escala real es propiedad de LA FOTO, no de la cotización. Guardamos px/cm
+// por foto para que el vendedor no remida la misma foto de un local en visitas
+// siguientes. Fingerprint = FNV-1a 32b sobre canal RGB de un downsample 32×32.
+// Es robusto a cambios de nombre/formato/dimensiones (misma imagen → mismo hash).
+const _FACH_LS_PREFIX = 'sgi.fach.escala.';
+
+function _fachPhotoHash(img) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = 32; c.height = 32;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, 32, 32);
+    const data = ctx.getImageData(0, 0, 32, 32).data;
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < data.length; i += 4) {
+      h ^= data[i];     h = Math.imul(h, 16777619);
+      h ^= data[i + 1]; h = Math.imul(h, 16777619);
+      h ^= data[i + 2]; h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0).toString(36);
+  } catch (e) { return null; }
+}
+
+function _fachSaveEscala() {
+  if (!_fach.photoHash || !_fach.realPxPerCm) return;
+  try {
+    localStorage.setItem(_FACH_LS_PREFIX + _fach.photoHash, JSON.stringify({
+      realPxPerCm: _fach.realPxPerCm,
+      t: Date.now(),
+    }));
+  } catch (e) { console.warn("Escala no guardada:", e); }
+}
+
+function _fachLoadEscala(hash) {
+  if (!hash) return null;
+  try {
+    const raw = localStorage.getItem(_FACH_LS_PREFIX + hash);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    return (obj && obj.realPxPerCm > 0) ? obj.realPxPerCm : null;
+  } catch (e) { return null; }
+}
+
+function _fachForgetEscala() {
+  if (!_fach.photoHash) return;
+  try { localStorage.removeItem(_FACH_LS_PREFIX + _fach.photoHash); } catch (e) {}
+}
 
 function abrirFachada() {
   if (typeof window.v3d_snapshot !== 'function') {
@@ -7829,6 +7923,8 @@ function _resetFachadaUI() {
   document.getElementById('fach-op-val').value    = 100;
   _fach.zoom = 1; _fach.tx = 0; _fach.ty = 0;
   _fachApplyZoomTransform();
+  const cm = document.getElementById('fach-cm-modal');
+  if (cm) cm.style.display = 'none';
 }
 
 // Aplicar transform CSS al wrap (zoom + pan del stage)
@@ -7921,9 +8017,14 @@ function fachOnFile(file) {
         // Escala real: capturar ancho cotizado (para futura calibración)
         const anchoInp = parseFloat(document.getElementById("ancho-real")?.value);
         _fach.letreroAnchoCm = (anchoInp && anchoInp > 0) ? anchoInp : null;
-        _fach.realPxPerCm = null;    // sin calibrar al abrir
+        _fach.photoHash = _fachPhotoHash(img);
+        // D: rehidratar escala real si ya calibramos esta foto antes
+        const savedPxPerCm = _fachLoadEscala(_fach.photoHash);
+        _fach.realPxPerCm = savedPxPerCm;
+        _fach.escalaRehidratada = !!savedPxPerCm;
         _fach.measureMode = false;
         _fach.measurePts = [];
+        _fach.pendingDistPx = null;
         // Sincronizar UI: slider 100% = scale actual
         document.getElementById('fach-scale').value = 100;
         document.getElementById('fach-rot').value = 0;
@@ -7945,7 +8046,9 @@ function fachOnFile(file) {
         document.getElementById('fach-panel').classList.remove('hidden');
         _fachRefreshDupBtn();
         _fachRefreshEscalaUI();
-        _fachDraw();
+        // fachUpdate('slider') re-computa scale usando el realPxPerCm rehidratado
+        // (si aplica) — así el letrero arranca a 1:1 real, no al 25% default.
+        fachUpdate('slider');
       };
       ov.src = snapUrl;
     };
@@ -8108,41 +8211,79 @@ function _fachMeasureClick(x, y) {
   _fach.measurePts.push({ x, y });
   _fachDraw();
   if (_fach.measurePts.length === 2) {
-    // Calcular distancia en px y preguntar cm
+    // Calcular distancia en px, mostrar mini-modal para pedir cm
     const [a, b] = _fach.measurePts;
-    const distPx = Math.hypot(b.x - a.x, b.y - a.y);
-    // Prompt (MVP — un mini-modal in-place quedaría mejor si el propietario pide)
-    const respuesta = prompt(
-      "¿Cuánto mide en centímetros la distancia entre los 2 puntos que marcaste?\n" +
-      "(Ej: 210 para una puerta de 2.10 m, 90 para un ancho conocido de 90 cm)",
-      "210"
-    );
-    _fach.measureMode = false;
-    document.getElementById('fach-canvas').style.cursor = 'grab';
-    const cm = parseFloat(respuesta);
-    if (!respuesta || isNaN(cm) || cm <= 0) {
-      _fach.measurePts = [];
-      document.getElementById('fach-escala-hint').textContent =
-        _fach.realPxPerCm ? _fachEscalaHintTxt() : 'Marcá 2 puntos en la foto sobre algo de tamaño conocido (puerta, ventana, señalización).';
-      _fachDraw();
-      return;
-    }
-    _fach.realPxPerCm = distPx / cm;
-    _fach.measurePts = [];
-    // Reset slider tamaño a 100% (= 1:1 real ahora)
-    document.getElementById('fach-scale').value = 100;
-    document.getElementById('fach-scale-val').value = 100;
-    // Recentrar (para que no quede fuera de la foto si cambió mucho el tamaño)
-    fachRecentrar();
-    fachUpdate('slider');
-    _fachRefreshEscalaUI();
+    _fach.pendingDistPx = Math.hypot(b.x - a.x, b.y - a.y);
+    _fachCmOpen();
   }
 }
 
-function fachResetEscala() {
-  _fach.realPxPerCm = null;
+// Mini-modal in-canvas para ingresar cm de la referencia (reemplaza prompt())
+function _fachCmOpen() {
+  const m = document.getElementById('fach-cm-modal');
+  if (!m) return;
+  m.style.display = 'block';
+  const inp = document.getElementById('fach-cm-input');
+  // focus + select con delay para que el navegador termine el layout
+  setTimeout(() => { inp?.focus(); inp?.select(); }, 40);
+}
+
+function _fachCmClose() {
+  const m = document.getElementById('fach-cm-modal');
+  if (m) m.style.display = 'none';
+}
+
+function _fachCmKey(ev) {
+  if (ev.key === 'Enter')  { ev.preventDefault(); _fachCmConfirm(); }
+  if (ev.key === 'Escape') { ev.preventDefault(); _fachCmCancel(); }
+}
+
+function _fachCmCancel() {
+  _fachCmClose();
+  _fach.pendingDistPx = null;
   _fach.measureMode = false;
   _fach.measurePts = [];
+  const cv = document.getElementById('fach-canvas');
+  if (cv) cv.style.cursor = 'grab';
+  _fachRefreshEscalaUI();
+  _fachDraw();
+}
+
+function _fachCmConfirm() {
+  const inp = document.getElementById('fach-cm-input');
+  const cm = parseFloat(inp?.value);
+  if (!cm || isNaN(cm) || cm <= 0) {
+    inp?.focus(); inp?.select();
+    return;
+  }
+  const distPx = _fach.pendingDistPx;
+  _fachCmClose();
+  _fach.pendingDistPx = null;
+  _fach.measureMode = false;
+  const cv = document.getElementById('fach-canvas');
+  if (cv) cv.style.cursor = 'grab';
+  if (!distPx || distPx <= 0) { _fachDraw(); return; }
+
+  _fach.realPxPerCm = distPx / cm;
+  _fach.escalaRehidratada = false; // recién medida, no rehidratada
+  _fach.measurePts = [];
+  _fachSaveEscala(); // D — persistir la calibración para esta foto
+  // Reset slider tamaño a 100% (= 1:1 real ahora)
+  document.getElementById('fach-scale').value = 100;
+  document.getElementById('fach-scale-val').value = 100;
+  fachRecentrar();
+  fachUpdate('slider');
+  _fachRefreshEscalaUI();
+}
+
+function fachResetEscala() {
+  _fachForgetEscala(); // D — también olvidar la persistida
+  _fach.realPxPerCm = null;
+  _fach.escalaRehidratada = false;
+  _fach.measureMode = false;
+  _fach.measurePts = [];
+  _fach.pendingDistPx = null;
+  _fachCmClose();
   document.getElementById('fach-canvas').style.cursor = 'grab';
   document.getElementById('fach-scale').value = 100;
   document.getElementById('fach-scale-val').value = 100;
@@ -8161,16 +8302,19 @@ function _fachRefreshEscalaUI() {
   const btn  = document.getElementById('fach-btn-escala');
   const btnR = document.getElementById('fach-btn-escala-reset');
   const scLbl = document.getElementById('fach-scale-lbl');
+  const rec  = document.getElementById('fach-escala-recordada');
   if (_fach.realPxPerCm) {
     if (hint) hint.textContent = _fachEscalaHintTxt();
     if (btn) btn.textContent = 'Re-medir referencia';
-    if (btnR) btnR.style.display = '';
+    if (btnR) { btnR.style.display = ''; btnR.textContent = 'Olvidar escala de esta foto'; }
     if (scLbl) scLbl.textContent = 'Tamaño (1:1 real)';
+    if (rec) rec.style.display = _fach.escalaRehidratada ? 'flex' : 'none';
   } else {
     if (hint) hint.textContent = 'Marcá 2 puntos en la foto sobre algo de tamaño conocido (puerta, ventana, señalización).';
     if (btn) btn.textContent = 'Medir referencia';
     if (btnR) btnR.style.display = 'none';
     if (scLbl) scLbl.textContent = 'Tamaño';
+    if (rec) rec.style.display = 'none';
   }
 }
 
@@ -10053,6 +10197,23 @@ window.v3d_snapshot = function(targetW = 2200) {
 
       <!-- Indicador de zoom -->
       <div class="fach-zoom-indicator" id="fach-zoom-indicator">100%</div>
+
+      <!-- Mini-modal para ingresar cm de la referencia (reemplaza prompt() nativo) -->
+      <div id="fach-cm-modal" class="fach-cm-modal" style="display:none">
+        <div class="fach-cm-title">Distancia entre los 2 puntos</div>
+        <div class="fach-cm-row">
+          <input type="number" id="fach-cm-input" min="1" step="1" value="210" placeholder="210"
+                 onkeydown="_fachCmKey(event)">
+          <span class="fach-cm-suffix">cm</span>
+        </div>
+        <div class="fach-cm-hint">
+          Ej: <b>210</b> puerta 2.10 m · <b>90</b> ancho conocido de 90 cm
+        </div>
+        <div class="fach-cm-actions">
+          <button class="fach-btn" onclick="_fachCmCancel()">Cancelar</button>
+          <button class="fach-btn primary" onclick="_fachCmConfirm()">Confirmar</button>
+        </div>
+      </div>
     </div>
 
     <!-- PANEL derecho -->
@@ -10138,8 +10299,11 @@ window.v3d_snapshot = function(targetW = 2200) {
         </button>
         <button class="fach-btn" id="fach-btn-escala-reset"
                 onclick="fachResetEscala()" style="display:none;margin-top:6px">
-          Quitar escala real
+          Olvidar escala de esta foto
         </button>
+        <div class="fach-escala-recordada" id="fach-escala-recordada" style="display:none">
+          <span>✓ Escala real recordada de una sesión previa</span>
+        </div>
         <div class="fach-hint" id="fach-escala-hint">
           Marcá 2 puntos en la foto sobre algo de tamaño conocido (puerta, ventana, señalización).
         </div>
