@@ -1028,6 +1028,12 @@ svg g.pieza-labels                 { pointer-events: none; }
   font-size: 11px; font-family: var(--mono); font-weight: 600;
   color: var(--c-soft); letter-spacing: .02em;
 }
+.fach-wm-toggle {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; color: rgba(255,255,255,.7);
+  margin: 8px 0; cursor: pointer;
+}
+.fach-wm-toggle input { accent-color: var(--c); cursor: pointer; }
 .fach-scale-cm.excede {
   color: #ff3860;
 }
@@ -1317,7 +1323,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.10.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.11.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7867,6 +7873,8 @@ const _fach = {
   // Modos de vista
   oculto: false,        // true = foto sola sin overlay (antes/después)
   nightMode: false,     // true = simulación letrero encendido de noche
+  iluminado: false,     // true si el letrero es luminoso (glow perimetral)
+  watermark: true,      // marca de agua "SGI" en la esquina de la composición
   realPxPerCm: null,    // si != null, escala 1:1 activa
   letreroAnchoCm: null, // ancho real cotizado del letrero (cm)
   measureMode: false,   // usuario está marcando (2 clicks pendientes)
@@ -8015,6 +8023,22 @@ function fachZoomReset() {
   _fachApplyZoomTransform();
 }
 
+// Detecta si el letrero cotizado emite luz (impacta glow perimetral):
+//   - letras: cajon_luz / retro_halo / abierta_luz
+//   - caja:   siempre luminosa
+//   - planas: sólo si tipoAnun === "corte_base_luz"
+function _fachDetectIluminado() {
+  const tipo = typeof tipoActual !== 'undefined' ? tipoActual : 'letras';
+  if (tipo === 'caja') return true;
+  if (tipo === 'planas') {
+    const tipoAnun = document.getElementById('planas-tipo-anuncio')?.value ||
+                     document.querySelector('input[name="planas-tipo"]:checked')?.value;
+    return tipoAnun === 'corte_base_luz';
+  }
+  const tipoC = document.getElementById('tipo-construccion')?.value;
+  return ['cajon_luz', 'retro_halo', 'abierta_luz'].includes(tipoC);
+}
+
 // Cargar foto y capturar snapshot 3D
 function fachOnFile(file) {
   if (!file) return;
@@ -8066,6 +8090,7 @@ function fachOnFile(file) {
         _fach.measureMode = false;
         _fach.measurePts = [];
         _fach.pendingRect = null;
+        _fach.iluminado = _fachDetectIluminado();
         // Sincronizar UI: slider 100% = scale actual
         document.getElementById('fach-scale').value = 100;
         document.getElementById('fach-rot').value = 0;
@@ -8128,11 +8153,33 @@ function _fachDraw() {
     _fachDrawAreaRect(ctx, cv, _fach.areaRect);
   }
 
-  // Letreros (1 o 2 copias con misma escala/rot/opacidad). Drop shadow leve
-  // detrás para sensación de estar montado en la pared, no pegado como sticker.
+  // Letreros (1 o 2 copias con misma escala/rot/opacidad).
   if (_fach.overlay) {
     const w = _fach.baseW * _fach.scale;
     const h = _fach.baseH * _fach.scale;
+
+    // PASS 1 — GLOW perimetral para letreros iluminados. Blur del propio
+    // overlay con blend "lighter" (aditivo) crea un halo natural que respeta
+    // la forma de las letras. Más intenso en noche, sutil de día.
+    if (_fach.iluminado) {
+      const blurPx  = Math.max(_fach.nightMode ? 24 : 12, cv.width * (_fach.nightMode ? 0.018 : 0.008));
+      const glowAlp = _fach.nightMode ? 0.85 : 0.35;
+      ctx.save();
+      ctx.filter = `blur(${blurPx}px)`;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = glowAlp * _fach.opacity;
+      for (const p of _fach.positions) {
+        ctx.save();
+        ctx.translate(p.cx, p.cy);
+        ctx.rotate(_fach.rot);
+        ctx.drawImage(_fach.overlay, -w / 2, -h / 2, w, h);
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+
+    // PASS 2 — Overlay real con drop shadow leve para sensación de estar
+    // montado en la pared, no pegado como sticker.
     ctx.globalAlpha = _fach.opacity;
     ctx.shadowColor   = 'rgba(0, 0, 0, 0.32)';
     ctx.shadowBlur    = Math.max(10, cv.width * 0.008);
@@ -8165,6 +8212,35 @@ function _fachDraw() {
       ctx.fill();
     }
   }
+
+  // Marca de agua SGI (esquina inferior derecha). Discreta pero visible
+  // en la composición que va a WhatsApp/redes → refuerza branding.
+  if (_fach.watermark) _fachDrawWatermark(ctx, cv);
+}
+
+function _fachDrawWatermark(ctx, cv) {
+  const txt = 'SGI · Cotización visual';
+  const fontPx = Math.max(11, cv.width * 0.011);
+  ctx.save();
+  ctx.font = `600 ${fontPx}px "SF Mono", "Roboto Mono", Consolas, monospace`;
+  ctx.textBaseline = 'middle';
+  const padX = fontPx * 0.75;
+  const padY = fontPx * 0.4;
+  const tw = ctx.measureText(txt).width;
+  const boxW = tw + padX * 2;
+  const boxH = fontPx + padY * 2;
+  const margin = Math.max(10, cv.width * 0.008);
+  const x = cv.width - boxW - margin;
+  const y = cv.height - boxH - margin;
+  // Fondo semi-transparente oscuro para legibilidad sobre cualquier foto
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+  _fachRoundRect(ctx, x, y, boxW, boxH, fontPx * 0.35);
+  ctx.fill();
+  // Texto blanco suave
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.textAlign = 'left';
+  ctx.fillText(txt, x + padX, y + boxH / 2);
+  ctx.restore();
 }
 
 // Dibuja el cuadro rojo del área del letrero con labels ancho/alto en cm.
@@ -8454,9 +8530,12 @@ function _fachCmOpen() {
   if (!m) return;
   const wIn = document.getElementById('fach-cm-w');
   const hIn = document.getElementById('fach-cm-h');
-  // Prefills: valores previos o sugerencia razonable en base al letrero cotizado
-  if (wIn) wIn.value = _fach.espacioCm?.ancho || Math.max(300, Math.round(_fach.letreroAnchoCm * 1.3));
-  if (hIn) hIn.value = _fach.espacioCm?.alto  || Math.max(150, Math.round(_fach.letreroAnchoCm * 0.5));
+  // Prefills: SOLO valores previos reales. Sin fallbacks arbitrarios: si el
+  // vendedor no midió antes, que ingrese los cm reales (los placeholders
+  // hacen ejemplos). Nunca sugerir números inventados que puede confirmar
+  // por reflejo.
+  if (wIn) wIn.value = _fach.espacioCm?.ancho || '';
+  if (hIn) hIn.value = _fach.espacioCm?.alto  || '';
   m.style.display = 'block';
   setTimeout(() => { wIn?.focus(); wIn?.select(); }, 40);
 }
@@ -8716,6 +8795,11 @@ function _fachRefreshEscalaUI() {
     });
   });
 })();
+
+function fachToggleWatermark(checked) {
+  _fach.watermark = !!checked;
+  _fachDraw();
+}
 
 function fachSetFormat(fmt) {
   _fach.format = fmt;
@@ -10701,6 +10785,10 @@ window.v3d_snapshot = function(targetW = 2200, opts = {}) {
           <button id="fach-fmt-jpg" class="active" onclick="fachSetFormat('jpg')">JPG</button>
           <button id="fach-fmt-png" onclick="fachSetFormat('png')">PNG</button>
         </div>
+        <label class="fach-wm-toggle">
+          <input type="checkbox" id="fach-wm" checked onchange="fachToggleWatermark(this.checked)">
+          <span>Marca de agua "SGI"</span>
+        </label>
         <button class="fach-btn primary" onclick="fachDescargar()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round">
