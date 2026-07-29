@@ -922,6 +922,35 @@ svg g.pieza-labels                 { pointer-events: none; }
   height: 4px; background: rgba(255,255,255,.08);
   border-radius: 2px; outline: none;
 }
+.fach-slider-row input[type=number].fach-val-input {
+  width: 62px; padding: 2px 6px; text-align: right;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12);
+  border-radius: 5px; color: var(--c-soft); font-family: var(--mono);
+  font-size: 11px; font-weight: 600; -moz-appearance: textfield;
+}
+.fach-slider-row input[type=number].fach-val-input:focus {
+  outline: none; border-color: var(--c); background: rgba(44,197,236,.08);
+}
+.fach-slider-row input[type=number].fach-val-input::-webkit-inner-spin-button,
+.fach-slider-row input[type=number].fach-val-input::-webkit-outer-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+.fach-val-suffix {
+  font-family: var(--mono); font-size: 11px; color: rgba(255,255,255,.5);
+  margin-left: 3px;
+}
+.fach-chips {
+  display: flex; gap: 5px; margin-bottom: 8px;
+}
+.fach-chips button {
+  flex: 1; padding: 6px 4px; border-radius: 7px; cursor: pointer;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
+  color: rgba(255,255,255,.7); font-size: 11px; font-weight: 600;
+  font-family: inherit; transition: .15s;
+}
+.fach-chips button:hover {
+  background: rgba(255,255,255,.09); color: #fff; border-color: rgba(255,255,255,.2);
+}
 .fach-btn {
   width: 100%; padding: 10px 14px; border-radius: 9px;
   border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04);
@@ -1226,7 +1255,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.6.2</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.7.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7753,17 +7782,23 @@ function _v3dAutoRender(data) {
 const _fach = {
   photo: null,          // HTMLImageElement de la foto
   overlay: null,        // HTMLImageElement del snapshot 3D
-  cx: 0, cy: 0,         // centro del overlay en coords de foto (px)
+  // Posiciones de los letreros. 1 o 2 items. Comparten scale/rot/opacity.
+  positions: [{ cx: 0, cy: 0 }],
   scale: 1,             // multiplicador (1 = tamaño natural del snapshot)
   rot: 0,               // radianes
   opacity: 1,
   baseW: 0, baseH: 0,   // dimensiones base del overlay (px del snapshot)
   format: 'jpg',
-  drag: null,           // {sx, sy, cx0, cy0}
+  drag: null,           // {sx, sy, cx0, cy0, idx}
   // Zoom + pan del stage (CSS transform sobre #fach-canvas-wrap)
   zoom: 1,
   tx: 0, ty: 0,         // offset del wrap dentro del stage (px de pantalla)
   panDrag: null,        // {sx, sy, tx0, ty0}
+  // Escala real por referencia
+  realPxPerCm: null,    // si != null, activa modo escala real
+  letreroAnchoCm: null, // ancho real cotizado del letrero (cm)
+  measureMode: false,   // usuario está calibrando
+  measurePts: [],       // clicks de calibración (max 2)
 };
 
 function abrirFachada() {
@@ -7789,9 +7824,9 @@ function _resetFachadaUI() {
   document.getElementById('fach-scale').value = 100;
   document.getElementById('fach-rot').value = 0;
   document.getElementById('fach-op').value = 100;
-  document.getElementById('fach-scale-val').textContent = '100%';
-  document.getElementById('fach-rot-val').textContent = '0°';
-  document.getElementById('fach-op-val').textContent = '100%';
+  document.getElementById('fach-scale-val').value = 100;
+  document.getElementById('fach-rot-val').value   = 0;
+  document.getElementById('fach-op-val').value    = 100;
   _fach.zoom = 1; _fach.tx = 0; _fach.ty = 0;
   _fachApplyZoomTransform();
 }
@@ -7877,13 +7912,18 @@ function fachOnFile(file) {
         _fach.baseW = ov.width;
         _fach.baseH = ov.height;
         // Posición inicial: centro superior de la foto (donde va un letrero de fachada)
-        _fach.cx = img.width / 2;
-        _fach.cy = img.height * 0.35;
+        _fach.positions = [{ cx: img.width / 2, cy: img.height * 0.35 }];
         // Tamaño inicial: overlay ocupa ~25% del ancho de la foto (razonable para letreros)
         const initialScale = (img.width * 0.25) / ov.width;
         _fach.scale = initialScale;
         _fach.rot = 0;
         _fach.opacity = 1;
+        // Escala real: capturar ancho cotizado (para futura calibración)
+        const anchoInp = parseFloat(document.getElementById("ancho-real")?.value);
+        _fach.letreroAnchoCm = (anchoInp && anchoInp > 0) ? anchoInp : null;
+        _fach.realPxPerCm = null;    // sin calibrar al abrir
+        _fach.measureMode = false;
+        _fach.measurePts = [];
         // Sincronizar UI: slider 100% = scale actual
         document.getElementById('fach-scale').value = 100;
         document.getElementById('fach-rot').value = 0;
@@ -7903,6 +7943,8 @@ function fachOnFile(file) {
         document.getElementById('fach-drop').style.display = 'none';
         document.getElementById('fach-canvas-wrap').style.display = 'block';
         document.getElementById('fach-panel').classList.remove('hidden');
+        _fachRefreshDupBtn();
+        _fachRefreshEscalaUI();
         _fachDraw();
       };
       ov.src = snapUrl;
@@ -7924,31 +7966,212 @@ function _fachDraw() {
   ctx.imageSmoothingQuality = 'high';
   ctx.clearRect(0, 0, cv.width, cv.height);
   ctx.drawImage(_fach.photo, 0, 0, cv.width, cv.height);
+
+  // Letreros (1 o 2 copias con misma escala/rot/opacidad)
   if (_fach.overlay) {
-    ctx.save();
-    ctx.globalAlpha = _fach.opacity;
-    ctx.translate(_fach.cx, _fach.cy);
-    ctx.rotate(_fach.rot);
     const w = _fach.baseW * _fach.scale;
     const h = _fach.baseH * _fach.scale;
-    ctx.drawImage(_fach.overlay, -w / 2, -h / 2, w, h);
-    ctx.restore();
+    ctx.globalAlpha = _fach.opacity;
+    for (const p of _fach.positions) {
+      ctx.save();
+      ctx.translate(p.cx, p.cy);
+      ctx.rotate(_fach.rot);
+      ctx.drawImage(_fach.overlay, -w / 2, -h / 2, w, h);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Marcas de calibración de escala real (puntos + línea)
+  if (_fach.measureMode && _fach.measurePts.length > 0) {
+    const dotR = Math.max(6, cv.width * 0.004);
+    ctx.strokeStyle = '#ff3860';
+    ctx.fillStyle   = '#ff3860';
+    ctx.lineWidth   = Math.max(2, cv.width * 0.0015);
+    if (_fach.measurePts.length === 2) {
+      const [a, b] = _fach.measurePts;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+    for (const pt of _fach.measurePts) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, dotR, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 }
 
-// Handler sliders
-function fachUpdate() {
-  const sPct = +document.getElementById('fach-scale').value;
-  const rDeg = +document.getElementById('fach-rot').value;
-  const oPct = +document.getElementById('fach-op').value;
-  document.getElementById('fach-scale-val').textContent = sPct + '%';
-  document.getElementById('fach-rot-val').textContent = rDeg + '°';
-  document.getElementById('fach-op-val').textContent = oPct + '%';
-  // scale=100% ⇒ escala inicial (25% del ancho de foto)
-  _fach.scale = (_fach._initScale || 1) * (sPct / 100);
+// Handler sliders. Origen puede ser 'slider' o 'input' — el otro se sincroniza.
+function fachUpdate(origen) {
+  // Sincronizar valor entre slider y su input numérico
+  const _syncPair = (sliderId, inputId, min, max) => {
+    const sl = document.getElementById(sliderId);
+    const inp = document.getElementById(inputId);
+    if (!sl || !inp) return +sl?.value || 0;
+    let v;
+    if (origen === inputId) {
+      v = parseFloat(inp.value);
+      if (isNaN(v)) v = +sl.value;
+      v = Math.max(min, Math.min(max, v));
+      sl.value = v;
+    } else {
+      v = +sl.value;
+      inp.value = v;
+    }
+    return v;
+  };
+  const sPct = _syncPair('fach-scale', 'fach-scale-val', 10, 300);
+  const rDeg = _syncPair('fach-rot',   'fach-rot-val',   -180, 180);
+  const oPct = _syncPair('fach-op',    'fach-op-val',    30, 100);
+
+  // Escala: si hay realPxPerCm → 100% = 1:1 real. Si no → 100% = inicial (25% foto).
+  const scale100 = _fach.realPxPerCm && _fach.letreroAnchoCm
+    ? (_fach.letreroAnchoCm * _fach.realPxPerCm) / _fach.baseW
+    : (_fach._initScale || 1);
+  _fach.scale = scale100 * (sPct / 100);
   _fach.rot = rDeg * Math.PI / 180;
   _fach.opacity = oPct / 100;
   _fachDraw();
+}
+
+// ─── DUPLICAR / QUITAR letrero ──────────────────────────────────────────────
+function fachToggleDuplicado() {
+  if (!_fach.photo || !_fach.overlay) return;
+  if (_fach.positions.length === 1) {
+    // Añadir 2do con offset horizontal a la derecha del 1ro (ancho letrero + gap)
+    const a = _fach.positions[0];
+    const w = _fach.baseW * _fach.scale;
+    const gap = Math.max(w * 0.1, _fach.photo.width * 0.03);
+    _fach.positions.push({ cx: a.cx + w + gap, cy: a.cy });
+    // Reposicionar el 1ro para que ambos queden centrados en la foto
+    const total = w * 2 + gap;
+    a.cx = _fach.photo.width / 2 - total / 2 + w / 2;
+    _fach.positions[1].cx = a.cx + w + gap;
+  } else {
+    _fach.positions.length = 1;
+    _fach.positions[0].cx = _fach.photo.width / 2;
+  }
+  _fachRefreshDupBtn();
+  _fachDraw();
+}
+
+function _fachRefreshDupBtn() {
+  const btn = document.getElementById('fach-btn-dup');
+  if (!btn) return;
+  btn.textContent = _fach.positions.length === 1 ? 'Duplicar letrero' : 'Quitar copia';
+}
+
+// ─── TEMPLATES DE POSICIÓN ──────────────────────────────────────────────────
+function fachPosicion(preset) {
+  if (!_fach.photo) return;
+  const W = _fach.photo.width;
+  const H = _fach.photo.height;
+  const yPct = { alto: 0.18, centro: 0.40, puerta: 0.62 }[preset] || 0.40;
+  const yPx = H * yPct;
+  if (_fach.positions.length === 1) {
+    _fach.positions[0].cx = W / 2;
+    _fach.positions[0].cy = yPx;
+  } else {
+    // Distribuir simétricamente respetando la separación actual entre ambos
+    const w = _fach.baseW * _fach.scale;
+    const gap = Math.max(w * 0.1, W * 0.03);
+    const half = (w + gap) / 2;
+    _fach.positions[0].cx = W / 2 - half;
+    _fach.positions[0].cy = yPx;
+    _fach.positions[1].cx = W / 2 + half;
+    _fach.positions[1].cy = yPx;
+  }
+  _fachDraw();
+}
+
+function fachRecentrar() { fachPosicion('centro'); }
+
+// ─── ESCALA REAL POR REFERENCIA ─────────────────────────────────────────────
+// Modo: usuario hace 2 clicks sobre puntos de altura/ancho conocido en la foto
+// → prompt pide cm → calcula px/cm → escala el letrero a su ancho real cotizado.
+function fachMedirEscala() {
+  if (!_fach.photo || !_fach.overlay) return;
+  if (!_fach.letreroAnchoCm || _fach.letreroAnchoCm <= 0) {
+    alert("No se pudo leer el ancho real del letrero (input 'Ancho real cm' vacío).");
+    return;
+  }
+  _fach.measureMode = true;
+  _fach.measurePts = [];
+  const hint = document.getElementById('fach-escala-hint');
+  if (hint) hint.textContent = 'Modo medición · click en 2 puntos de altura/ancho conocido en la foto';
+  document.getElementById('fach-canvas').style.cursor = 'crosshair';
+  _fachDraw();
+}
+
+function _fachMeasureClick(x, y) {
+  _fach.measurePts.push({ x, y });
+  _fachDraw();
+  if (_fach.measurePts.length === 2) {
+    // Calcular distancia en px y preguntar cm
+    const [a, b] = _fach.measurePts;
+    const distPx = Math.hypot(b.x - a.x, b.y - a.y);
+    // Prompt (MVP — un mini-modal in-place quedaría mejor si el propietario pide)
+    const respuesta = prompt(
+      "¿Cuánto mide en centímetros la distancia entre los 2 puntos que marcaste?\n" +
+      "(Ej: 210 para una puerta de 2.10 m, 90 para un ancho conocido de 90 cm)",
+      "210"
+    );
+    _fach.measureMode = false;
+    document.getElementById('fach-canvas').style.cursor = 'grab';
+    const cm = parseFloat(respuesta);
+    if (!respuesta || isNaN(cm) || cm <= 0) {
+      _fach.measurePts = [];
+      document.getElementById('fach-escala-hint').textContent =
+        _fach.realPxPerCm ? _fachEscalaHintTxt() : 'Marcá 2 puntos en la foto sobre algo de tamaño conocido (puerta, ventana, señalización).';
+      _fachDraw();
+      return;
+    }
+    _fach.realPxPerCm = distPx / cm;
+    _fach.measurePts = [];
+    // Reset slider tamaño a 100% (= 1:1 real ahora)
+    document.getElementById('fach-scale').value = 100;
+    document.getElementById('fach-scale-val').value = 100;
+    // Recentrar (para que no quede fuera de la foto si cambió mucho el tamaño)
+    fachRecentrar();
+    fachUpdate('slider');
+    _fachRefreshEscalaUI();
+  }
+}
+
+function fachResetEscala() {
+  _fach.realPxPerCm = null;
+  _fach.measureMode = false;
+  _fach.measurePts = [];
+  document.getElementById('fach-canvas').style.cursor = 'grab';
+  document.getElementById('fach-scale').value = 100;
+  document.getElementById('fach-scale-val').value = 100;
+  fachUpdate('slider');
+  _fachRefreshEscalaUI();
+}
+
+function _fachEscalaHintTxt() {
+  const cm = _fach.letreroAnchoCm || 0;
+  const m = cm >= 100 ? (cm / 100).toFixed(2) + ' m' : cm + ' cm';
+  return `Escala 1:1 activa · letrero a ${m} reales sobre la foto`;
+}
+
+function _fachRefreshEscalaUI() {
+  const hint = document.getElementById('fach-escala-hint');
+  const btn  = document.getElementById('fach-btn-escala');
+  const btnR = document.getElementById('fach-btn-escala-reset');
+  const scLbl = document.getElementById('fach-scale-lbl');
+  if (_fach.realPxPerCm) {
+    if (hint) hint.textContent = _fachEscalaHintTxt();
+    if (btn) btn.textContent = 'Re-medir referencia';
+    if (btnR) btnR.style.display = '';
+    if (scLbl) scLbl.textContent = 'Tamaño (1:1 real)';
+  } else {
+    if (hint) hint.textContent = 'Marcá 2 puntos en la foto sobre algo de tamaño conocido (puerta, ventana, señalización).';
+    if (btn) btn.textContent = 'Medir referencia';
+    if (btnR) btnR.style.display = 'none';
+    if (scLbl) scLbl.textContent = 'Tamaño';
+  }
 }
 
 // Drag del overlay
@@ -7964,16 +8187,21 @@ function fachUpdate() {
       return { x: (clientX - rect.left) * sx, y: (clientY - rect.top) * sy };
     }
 
-    function _hitOverlay(x, y) {
-      if (!_fach.overlay) return false;
-      // Transformación inversa: rotar el punto alrededor de (cx,cy), luego test bbox
-      const dx = x - _fach.cx, dy = y - _fach.cy;
+    // Hit-test contra los N letreros. Devuelve el índice del que golpea (el
+    // último dibujado gana en caso de solape) o -1.
+    function _hitOverlayIdx(x, y) {
+      if (!_fach.overlay) return -1;
       const c = Math.cos(-_fach.rot), s = Math.sin(-_fach.rot);
-      const lx = dx * c - dy * s;
-      const ly = dx * s + dy * c;
       const w = _fach.baseW * _fach.scale / 2;
       const h = _fach.baseH * _fach.scale / 2;
-      return Math.abs(lx) <= w && Math.abs(ly) <= h;
+      for (let i = _fach.positions.length - 1; i >= 0; i--) {
+        const p = _fach.positions[i];
+        const dx = x - p.cx, dy = y - p.cy;
+        const lx = dx * c - dy * s;
+        const ly = dx * s + dy * c;
+        if (Math.abs(lx) <= w && Math.abs(ly) <= h) return i;
+      }
+      return -1;
     }
 
     cv.addEventListener('mousedown', e => {
@@ -7985,8 +8213,16 @@ function fachUpdate() {
         return;
       }
       const p = _clientToCanvas(e.clientX, e.clientY);
-      if (!_hitOverlay(p.x, p.y)) return;
-      _fach.drag = { sx: p.x, sy: p.y, cx0: _fach.cx, cy0: _fach.cy };
+      // Modo medición: los clicks son puntos de calibración, no drag
+      if (_fach.measureMode) {
+        _fachMeasureClick(p.x, p.y);
+        e.preventDefault();
+        return;
+      }
+      const idx = _hitOverlayIdx(p.x, p.y);
+      if (idx < 0) return;
+      const pos = _fach.positions[idx];
+      _fach.drag = { sx: p.x, sy: p.y, cx0: pos.cx, cy0: pos.cy, idx };
       cv.classList.add('dragging');
       e.preventDefault();
     });
@@ -8000,8 +8236,9 @@ function fachUpdate() {
       }
       if (!_fach.drag) return;
       const p = _clientToCanvas(e.clientX, e.clientY);
-      _fach.cx = _fach.drag.cx0 + (p.x - _fach.drag.sx);
-      _fach.cy = _fach.drag.cy0 + (p.y - _fach.drag.sy);
+      const pos = _fach.positions[_fach.drag.idx];
+      pos.cx = _fach.drag.cx0 + (p.x - _fach.drag.sx);
+      pos.cy = _fach.drag.cy0 + (p.y - _fach.drag.sy);
       _fachDraw();
     });
 
@@ -8023,21 +8260,19 @@ function fachUpdate() {
       _fachZoomAt(_fach.zoom * step, e.clientX, e.clientY);
     }, { passive: false });
 
-    // Doble-click: recentrar
-    cv.addEventListener('dblclick', () => {
-      if (!_fach.photo) return;
-      _fach.cx = _fach.photo.width / 2;
-      _fach.cy = _fach.photo.height * 0.35;
-      _fachDraw();
-    });
+    // Doble-click: recentrar (todos los letreros, distribuidos si hay >1)
+    cv.addEventListener('dblclick', () => { fachRecentrar(); });
 
     // Touch (móvil)
     cv.addEventListener('touchstart', e => {
       if (!e.touches[0]) return;
       const t = e.touches[0];
       const p = _clientToCanvas(t.clientX, t.clientY);
-      if (!_hitOverlay(p.x, p.y)) return;
-      _fach.drag = { sx: p.x, sy: p.y, cx0: _fach.cx, cy0: _fach.cy };
+      if (_fach.measureMode) { _fachMeasureClick(p.x, p.y); e.preventDefault(); return; }
+      const idx = _hitOverlayIdx(p.x, p.y);
+      if (idx < 0) return;
+      const pos = _fach.positions[idx];
+      _fach.drag = { sx: p.x, sy: p.y, cx0: pos.cx, cy0: pos.cy, idx };
       e.preventDefault();
     }, { passive: false });
 
@@ -8045,8 +8280,9 @@ function fachUpdate() {
       if (!_fach.drag || !e.touches[0]) return;
       const t = e.touches[0];
       const p = _clientToCanvas(t.clientX, t.clientY);
-      _fach.cx = _fach.drag.cx0 + (p.x - _fach.drag.sx);
-      _fach.cy = _fach.drag.cy0 + (p.y - _fach.drag.sy);
+      const pos = _fach.positions[_fach.drag.idx];
+      pos.cx = _fach.drag.cx0 + (p.x - _fach.drag.sx);
+      pos.cy = _fach.drag.cy0 + (p.y - _fach.drag.sy);
       _fachDraw();
       e.preventDefault();
     }, { passive: false });
@@ -9825,22 +10061,87 @@ window.v3d_snapshot = function(targetW = 2200) {
       <div class="fach-section">
         <h3>Ajustar diseño</h3>
         <div class="fach-slider-row">
-          <label>Tamaño <span id="fach-scale-val">100%</span></label>
+          <label>
+            <span id="fach-scale-lbl">Tamaño</span>
+            <span>
+              <input type="number" class="fach-val-input" id="fach-scale-val"
+                     min="10" max="300" step="1" value="100"
+                     oninput="fachUpdate('fach-scale-val')"
+                     onchange="fachUpdate('fach-scale-val')">
+              <span class="fach-val-suffix">%</span>
+            </span>
+          </label>
           <input type="range" id="fach-scale" min="10" max="300" value="100"
-                 oninput="fachUpdate()">
+                 oninput="fachUpdate('fach-scale')">
         </div>
         <div class="fach-slider-row">
-          <label>Rotación <span id="fach-rot-val">0°</span></label>
+          <label>
+            <span>Rotación</span>
+            <span>
+              <input type="number" class="fach-val-input" id="fach-rot-val"
+                     min="-180" max="180" step="1" value="0"
+                     oninput="fachUpdate('fach-rot-val')"
+                     onchange="fachUpdate('fach-rot-val')">
+              <span class="fach-val-suffix">°</span>
+            </span>
+          </label>
           <input type="range" id="fach-rot" min="-180" max="180" value="0"
-                 oninput="fachUpdate()">
+                 oninput="fachUpdate('fach-rot')">
         </div>
         <div class="fach-slider-row">
-          <label>Opacidad <span id="fach-op-val">100%</span></label>
+          <label>
+            <span>Opacidad</span>
+            <span>
+              <input type="number" class="fach-val-input" id="fach-op-val"
+                     min="30" max="100" step="1" value="100"
+                     oninput="fachUpdate('fach-op-val')"
+                     onchange="fachUpdate('fach-op-val')">
+              <span class="fach-val-suffix">%</span>
+            </span>
+          </label>
           <input type="range" id="fach-op" min="30" max="100" value="100"
-                 oninput="fachUpdate()">
+                 oninput="fachUpdate('fach-op')">
         </div>
         <div class="fach-hint">
           Arrastrá el letrero para moverlo. Doble-click para recentrar.
+          Podés editar los valores a mano en los cuadros.
+        </div>
+      </div>
+
+      <div class="fach-section">
+        <h3>Posición rápida</h3>
+        <div class="fach-chips">
+          <button onclick="fachPosicion('alto')" title="Colocar en la parte alta de la fachada">Alto</button>
+          <button onclick="fachPosicion('centro')" title="Centrar sobre la foto">Centro</button>
+          <button onclick="fachPosicion('puerta')" title="Colocar sobre puerta comercial">Sobre puerta</button>
+        </div>
+        <button class="fach-btn" id="fach-btn-dup" onclick="fachToggleDuplicado()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          Duplicar letrero
+        </button>
+      </div>
+
+      <div class="fach-section">
+        <h3>Escala real</h3>
+        <button class="fach-btn" id="fach-btn-escala" onclick="fachMedirEscala()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0Z"/>
+            <path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/>
+            <path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/>
+          </svg>
+          Medir referencia
+        </button>
+        <button class="fach-btn" id="fach-btn-escala-reset"
+                onclick="fachResetEscala()" style="display:none;margin-top:6px">
+          Quitar escala real
+        </button>
+        <div class="fach-hint" id="fach-escala-hint">
+          Marcá 2 puntos en la foto sobre algo de tamaño conocido (puerta, ventana, señalización).
         </div>
       </div>
 
