@@ -1323,7 +1323,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.11.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.12.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7939,6 +7939,153 @@ function _fachForgetEscala() {
   try { localStorage.removeItem(_FACH_LS_PREFIX + _fach.photoHash); } catch (e) {}
 }
 
+// ─── PERSISTENCIA CON LA COTIZACIÓN (Sprint 3a) ──────────────────────────────
+// La composición se guarda como blob JSON en la columna quotes.fachada_json.
+// Foto comprimida a JPEG 0.85 con max 1600px de ancho para acotar tamaño
+// (típico ~200-500 KB por composición). Sin esto, cerrar el modal perdía
+// todo el trabajo salvo el localStorage por foto.
+
+function _fachRefreshSaveBtn() {
+  const btn = document.getElementById('fach-btn-save');
+  if (!btn) return;
+  btn.style.display = quoteId ? '' : 'none';
+}
+
+// Serializa la foto actual a JPEG 0.85 con max 1600px. Devuelve base64.
+function _fachSerializePhoto() {
+  if (!_fach.photo) return null;
+  const MAX_W = 1600;
+  const img = _fach.photo;
+  const scale = Math.min(1, MAX_W / img.width);
+  const w = Math.round(img.width * scale);
+  const h = Math.round(img.height * scale);
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0, w, h);
+  return c.toDataURL('image/jpeg', 0.85);
+}
+
+async function fachGuardarEnCotizacion() {
+  if (!quoteId) { alert("No hay cotización activa."); return; }
+  if (!_fach.photo) { alert("Cargá una foto primero."); return; }
+  const btn = document.getElementById('fach-btn-save');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
+  try {
+    const photoB64 = _fachSerializePhoto();
+    const payload = {
+      v: 1, // esquema — para migraciones futuras
+      photo:      photoB64,
+      positions:  _fach.positions,
+      scale:      _fach.scale,
+      rot:        _fach.rot,
+      opacity:    _fach.opacity,
+      areaRect:   _fach.areaRect,
+      espacioCm:  _fach.espacioCm,
+      realPxPerCm:_fach.realPxPerCm,
+      letreroAnchoCm: _fach.letreroAnchoCm,
+      nightMode:  _fach.nightMode,
+      iluminado:  _fach.iluminado,
+      watermark:  _fach.watermark,
+    };
+    const r = await fetch(`/api/quotes/${quoteId}/fachada`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fachada: payload }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${r.status}`);
+    }
+    if (btn) btn.textContent = '✓ Guardada';
+    setTimeout(() => { if (btn) btn.textContent = orig || 'Guardar en cotización'; }, 1800);
+  } catch (e) {
+    console.error("Error guardando fachada:", e);
+    alert("No se pudo guardar la composición: " + e.message);
+    if (btn) btn.textContent = orig || 'Guardar en cotización';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Auto-carga la composición guardada de la cotización actual (si existe).
+async function _fachCargarGuardada() {
+  if (!quoteId) return;
+  try {
+    const r = await fetch(`/api/quotes/${quoteId}/fachada`);
+    if (!r.ok) return;
+    const { fachada } = await r.json();
+    if (!fachada || !fachada.photo) return;
+    _fachRehidratar(fachada);
+  } catch (e) {
+    console.warn("No se pudo cargar fachada guardada:", e);
+  }
+}
+
+// Aplica un payload guardado al estado actual + recompone la vista.
+function _fachRehidratar(f) {
+  const img = new Image();
+  img.onload = () => {
+    _fach.photo = img;
+    // Re-tomar snapshot 3D del diseño actual (no re-usar uno viejo del payload)
+    const snapUrl = window.v3d_snapshot(2200, { night: !!f.nightMode });
+    if (!snapUrl) return;
+    const ov = new Image();
+    ov.onload = () => {
+      _fach.overlay = ov;
+      _fach.baseW = ov.width;
+      _fach.baseH = ov.height;
+      _fach.positions      = f.positions || [{cx: img.width/2, cy: img.height*0.35}];
+      _fach.scale          = f.scale ?? 1;
+      _fach.rot            = f.rot ?? 0;
+      _fach.opacity        = f.opacity ?? 1;
+      _fach.areaRect       = f.areaRect || null;
+      _fach.espacioCm      = f.espacioCm || null;
+      _fach.realPxPerCm    = f.realPxPerCm || null;
+      _fach.letreroAnchoCm = f.letreroAnchoCm || _fach.letreroAnchoCm;
+      _fach.nightMode      = !!f.nightMode;
+      _fach.iluminado      = !!f.iluminado;
+      _fach.watermark      = f.watermark !== false;
+      _fach.photoHash      = _fachPhotoHash(img);
+      _fach.escalaRehidratada = false;
+      _fach.measureMode = false; _fach.measurePts = []; _fach.pendingRect = null;
+      _fach._initScale = (img.width * 0.25) / ov.width;
+
+      // Preparar canvas
+      const cv = document.getElementById('fach-canvas');
+      cv.width = img.width; cv.height = img.height;
+      cv.style.maxWidth = '100%'; cv.style.maxHeight = '100%';
+      cv.style.width = 'auto'; cv.style.height = 'auto';
+
+      document.getElementById('fach-drop').style.display = 'none';
+      document.getElementById('fach-canvas-wrap').style.display = 'block';
+      document.getElementById('fach-panel').classList.remove('hidden');
+
+      // Sincronizar UI de sliders con el estado cargado
+      const sPct = Math.round((_fach.scale / (_fach._initScale || 1)) * 100);
+      const rDeg = Math.round(_fach.rot * 180 / Math.PI);
+      const oPct = Math.round(_fach.opacity * 100);
+      const sSl = document.getElementById('fach-scale'); if (sSl) sSl.value = sPct;
+      const sIn = document.getElementById('fach-scale-val'); if (sIn) sIn.value = sPct;
+      const rSl = document.getElementById('fach-rot'); if (rSl) rSl.value = rDeg;
+      const rIn = document.getElementById('fach-rot-val'); if (rIn) rIn.value = rDeg;
+      const oSl = document.getElementById('fach-op'); if (oSl) oSl.value = oPct;
+      const oIn = document.getElementById('fach-op-val'); if (oIn) oIn.value = oPct;
+      const wm = document.getElementById('fach-wm'); if (wm) wm.checked = _fach.watermark;
+      const bNight = document.getElementById('fach-btn-night');
+      if (bNight) bNight.classList.toggle('active', _fach.nightMode);
+
+      _fachRefreshDupBtn();
+      _fachRefreshEscalaUI();
+      fachUpdate('slider'); // re-calcula scale y dibuja
+    };
+    ov.src = snapUrl;
+  };
+  img.src = f.photo;
+}
+
 function abrirFachada() {
   if (typeof window.v3d_snapshot !== 'function') {
     alert("El visor 3D aún no está listo — espera a que renderice la vista.");
@@ -7949,6 +8096,11 @@ function abrirFachada() {
   // Reset estado UI (mantiene el snapshot en cache si ya hay foto — útil si
   // cerraron por error)
   if (!_fach.photo) _resetFachadaUI();
+  // Refrescar botón "Guardar en cotización" (se muestra sólo si hay quoteId).
+  _fachRefreshSaveBtn();
+  // Auto-cargar composición guardada si esta cotización tiene una.
+  // Sólo si no hay foto en memoria (para no pisar trabajo en curso).
+  if (quoteId && !_fach.photo) _fachCargarGuardada();
 }
 
 function cerrarFachada() {
@@ -10786,6 +10938,24 @@ window.v3d_snapshot = function(targetW = 2200, opts = {}) {
           </svg>
           Cambiar foto
         </button>
+      </div>
+
+      <div class="fach-section">
+        <h3>Cotización</h3>
+        <button class="fach-btn" id="fach-btn-save" onclick="fachGuardarEnCotizacion()"
+                style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+          Guardar en cotización
+        </button>
+        <div class="fach-hint">
+          Guarda la foto + posición + escala en esta cotización. Se restaura al
+          re-abrir el módulo con la misma cotización activa.
+        </div>
       </div>
 
       <div class="fach-section">

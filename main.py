@@ -805,6 +805,45 @@ async def api_delete_quote(quote_id: str):
     return {"ok": True}
 
 
+# ─── PERSISTENCIA "EN FACHADA" ───────────────────────────────────────────────
+# La composición del simulador se serializa como JSON (foto b64 + estado) y
+# se guarda en la columna `fachada_json` de la cotización. Cap defensivo de
+# 8 MB para evitar payloads absurdos que revienten la DB.
+_FACH_MAX_BYTES = 8 * 1024 * 1024
+
+
+class FachadaRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fachada: dict | None  # None borra la composición
+
+
+@app.post("/api/quotes/{quote_id}/fachada")
+async def api_save_fachada(quote_id: str, req: FachadaRequest):
+    if not db.get_quote(quote_id):
+        raise HTTPException(404, "Cotización no encontrada")
+    if req.fachada is None:
+        db.save_fachada(quote_id, None)
+        return {"ok": True, "guardada": False}
+    payload = json.dumps(req.fachada, ensure_ascii=False)
+    if len(payload.encode("utf-8")) > _FACH_MAX_BYTES:
+        raise HTTPException(413, f"Composición demasiado grande (máx {_FACH_MAX_BYTES // (1024*1024)} MB)")
+    db.save_fachada(quote_id, payload)
+    return {"ok": True, "guardada": True}
+
+
+@app.get("/api/quotes/{quote_id}/fachada")
+async def api_get_fachada(quote_id: str):
+    if not db.get_quote(quote_id):
+        raise HTTPException(404, "Cotización no encontrada")
+    raw = db.get_fachada(quote_id)
+    if not raw:
+        return {"fachada": None}
+    try:
+        return {"fachada": json.loads(raw)}
+    except Exception:
+        return {"fachada": None}
+
+
 # ─── PIPELINE DE ESTADOS Y PAGOS ─────────────────────────────────────────────
 
 class EstadoRequest(BaseModel):

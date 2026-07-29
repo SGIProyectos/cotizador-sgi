@@ -92,6 +92,10 @@ def init_db():
             c.execute("ALTER TABLE quotes ADD COLUMN pagado REAL DEFAULT 0")
         if "estado_fecha" not in cols:
             c.execute("ALTER TABLE quotes ADD COLUMN estado_fecha TEXT DEFAULT ''")
+        # Migración defensiva: composición "En fachada" (JSON con foto b64 +
+        # posiciones + escala + espacio). NULL = nunca se guardó fachada.
+        if "fachada_json" not in cols:
+            c.execute("ALTER TABLE quotes ADD COLUMN fachada_json TEXT DEFAULT NULL")
 
 
 def next_folio() -> str:
@@ -155,6 +159,24 @@ def get_quote(qid: str) -> dict | None:
 def delete_quote(qid: str):
     with _conn() as c:
         c.execute("DELETE FROM quotes WHERE id=?", (qid,))
+
+
+def save_fachada(qid: str, fachada_json: str | None) -> bool:
+    """Guarda la composición 'En fachada' asociada a la cotización. Pasar
+    None borra la composición guardada. Devuelve False si no existe la
+    cotización."""
+    with _conn() as c:
+        cur = c.execute("UPDATE quotes SET fachada_json=? WHERE id=?",
+                        (fachada_json, qid))
+    return cur.rowcount > 0
+
+
+def get_fachada(qid: str) -> str | None:
+    """Devuelve el JSON de la composición fachada o None si no existe."""
+    with _conn() as c:
+        row = c.execute("SELECT fachada_json FROM quotes WHERE id=?",
+                        (qid,)).fetchone()
+    return (row["fachada_json"] if row else None)
 
 
 # ─── ADMINISTRACIÓN ──────────────────────────────────────────────────────────
