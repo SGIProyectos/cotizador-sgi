@@ -951,6 +951,10 @@ svg g.pieza-labels                 { pointer-events: none; }
 .fach-chips button:hover {
   background: rgba(255,255,255,.09); color: #fff; border-color: rgba(255,255,255,.2);
 }
+.fach-chips button.active {
+  background: rgba(44,197,236,.18); border-color: var(--c);
+  color: var(--c-soft);
+}
 .fach-btn {
   width: 100%; padding: 10px 14px; border-radius: 9px;
   border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04);
@@ -1024,6 +1028,10 @@ svg g.pieza-labels                 { pointer-events: none; }
   font-size: 11px; font-family: var(--mono); font-weight: 600;
   color: var(--c-soft); letter-spacing: .02em;
 }
+.fach-scale-cm.excede {
+  color: #ff3860;
+}
+.fach-scale-cm.excede::before { content: '⚠ '; }
 
 .fach-escala-recordada {
   font-size: 10.5px; color: var(--c-soft); font-weight: 600;
@@ -1309,7 +1317,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.9.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.10.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7856,6 +7864,9 @@ const _fach = {
   areaRect: null,       // {x, y, w, h} en coords de foto, persistente
   espacioCm: null,      // {ancho, alto} — dimensiones reales del espacio pared
   pendingRect: null,    // rect pendiente esperando confirmación del mini-modal cm
+  // Modos de vista
+  oculto: false,        // true = foto sola sin overlay (antes/después)
+  nightMode: false,     // true = simulación letrero encendido de noche
   realPxPerCm: null,    // si != null, escala 1:1 activa
   letreroAnchoCm: null, // ancho real cotizado del letrero (cm)
   measureMode: false,   // usuario está marcando (2 clicks pendientes)
@@ -8100,6 +8111,18 @@ function _fachDraw() {
   ctx.clearRect(0, 0, cv.width, cv.height);
   ctx.drawImage(_fach.photo, 0, 0, cv.width, cv.height);
 
+  // Modo noche: overlay oscuro semi-transparente sobre la foto para simular
+  // atardecer/noche. El letrero luminoso (snapshot con emissive intacto) se
+  // ve más brillante contra ese fondo apagado. Tinte ligeramente azul-frío.
+  if (_fach.nightMode) {
+    ctx.fillStyle = 'rgba(6, 12, 28, 0.55)';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+  }
+
+  // Modo "antes/después": mostrar foto sola sin overlay ni cuadro rojo.
+  // Útil para mostrarle al cliente la comparación en vivo.
+  if (_fach.oculto) return;
+
   // Cuadro rojo del área marcada (persistente) + labels ancho/alto en cm
   if (_fach.areaRect && _fach.realPxPerCm) {
     _fachDrawAreaRect(ctx, cv, _fach.areaRect);
@@ -8249,16 +8272,24 @@ function fachUpdate(origen) {
   _fach.rot = rDeg * Math.PI / 180;
   _fach.opacity = oPct / 100;
 
-  // Badge cm: dimensión real actual del letrero (solo cuando hay escala real)
+  // Badge cm: dimensión real actual del letrero (solo cuando hay escala real).
+  // Marca rojo + ⚠ si el letrero excede el espacio marcado (evita ofrecer
+  // tamaños que no caben físicamente).
   const cmEl = document.getElementById('fach-scale-cm');
   if (cmEl) {
     if (_fach.realPxPerCm && _fach.baseW > 0) {
       const wCm = Math.round((_fach.baseW * _fach.scale) / _fach.realPxPerCm);
       const hCm = Math.round((_fach.baseH * _fach.scale) / _fach.realPxPerCm);
-      cmEl.textContent = `= ${wCm} × ${hCm} cm`;
+      const excede = _fach.espacioCm &&
+        (wCm > _fach.espacioCm.ancho || hCm > _fach.espacioCm.alto);
+      cmEl.textContent = excede
+        ? `${wCm} × ${hCm} cm — excede espacio ${_fach.espacioCm.ancho}×${_fach.espacioCm.alto}`
+        : `= ${wCm} × ${hCm} cm`;
+      cmEl.classList.toggle('excede', !!excede);
       cmEl.style.display = '';
     } else {
       cmEl.style.display = 'none';
+      cmEl.classList.remove('excede');
     }
   }
 
@@ -8283,6 +8314,38 @@ function fachToggleDuplicado() {
     _fach.positions[0].cx = _fach.photo.width / 2;
   }
   _fachRefreshDupBtn();
+  _fachDraw();
+}
+
+// Antes/después: oculta el overlay + cuadro rojo → foto sola. Toggle.
+function fachToggleOculto() {
+  _fach.oculto = !_fach.oculto;
+  const btn = document.getElementById('fach-btn-oculto');
+  if (btn) btn.classList.toggle('active', _fach.oculto);
+  _fachDraw();
+}
+
+// Día/noche: re-toma snapshot con emissive intacto (letreros luminosos glow)
+// y oscurece la foto para simular vista nocturna. Ideal para cajones de luz.
+function fachToggleNight() {
+  _fach.nightMode = !_fach.nightMode;
+  const btn = document.getElementById('fach-btn-night');
+  if (btn) btn.classList.toggle('active', _fach.nightMode);
+  // Re-capturar snapshot con el modo actualizado
+  if (typeof window.v3d_snapshot === 'function') {
+    const url = window.v3d_snapshot(2200, { night: _fach.nightMode });
+    if (url) {
+      const ov = new Image();
+      ov.onload = () => {
+        _fach.overlay = ov;
+        _fach.baseW = ov.width;
+        _fach.baseH = ov.height;
+        _fachDraw();
+      };
+      ov.src = url;
+      return;
+    }
+  }
   _fachDraw();
 }
 
@@ -8663,14 +8726,8 @@ function fachSetFormat(fmt) {
     : 'PNG · máxima calidad, archivo más pesado';
 }
 
-function fachDescargar() {
-  const cv = document.getElementById('fach-canvas');
-  if (!cv || !_fach.photo) return;
-  const mime = _fach.format === 'jpg' ? 'image/jpeg' : 'image/png';
-  const ext  = _fach.format === 'jpg' ? 'jpg' : 'png';
-  const quality = _fach.format === 'jpg' ? 0.92 : undefined;
-
-  // Nombre: fachada-{cliente|fecha}
+// Nombre base para archivos exportados: fachada-{cliente|fecha}
+function _fachBaseName() {
   let base = 'fachada';
   const cli = document.getElementById('cliente-input')?.value?.trim();
   if (cli) {
@@ -8680,18 +8737,70 @@ function fachDescargar() {
     const pad = n => String(n).padStart(2, '0');
     base += `-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
   }
+  return base;
+}
 
-  cv.toBlob(blob => {
+// Genera Blob de la composición actual. Callback recibe (blob, mime, ext).
+function _fachGenBlob(fmt, cb) {
+  const cv = document.getElementById('fach-canvas');
+  if (!cv || !_fach.photo) { cb(null); return; }
+  const mime = fmt === 'jpg' ? 'image/jpeg' : 'image/png';
+  const ext  = fmt === 'jpg' ? 'jpg' : 'png';
+  const quality = fmt === 'jpg' ? 0.92 : undefined;
+  cv.toBlob(blob => cb(blob, mime, ext), mime, quality);
+}
+
+function fachDescargar() {
+  _fachGenBlob(_fach.format, (blob, mime, ext) => {
     if (!blob) { alert("No se pudo generar la imagen."); return; }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${base}.${ext}`;
+    a.download = `${_fachBaseName()}.${ext}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 4000);
-  }, mime, quality);
+  });
+}
+
+// Compartir por WhatsApp / Web Share API. Móvil: navigator.share nativo.
+// Desktop: descarga + abre wa.me con mensaje predefinido (el usuario adjunta
+// manualmente la imagen recién descargada).
+async function fachCompartir() {
+  _fachGenBlob('jpg', async (blob, mime) => {
+    if (!blob) { alert("No se pudo generar la imagen."); return; }
+    const fileName = `${_fachBaseName()}.jpg`;
+    const cli = document.getElementById('cliente-input')?.value?.trim() || '';
+    const txt = cli
+      ? `Cotización visual SGI — ${cli}. Así se vería el letrero en la fachada.`
+      : 'Cotización visual SGI — así se vería el letrero en la fachada.';
+
+    // Web Share API con archivos (móviles modernos + Edge)
+    try {
+      const file = new File([blob], fileName, { type: mime });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Cotización visual SGI',
+          text: txt,
+        });
+        return;
+      }
+    } catch (e) {
+      // Usuario canceló o error — caemos al fallback
+      if (e.name === 'AbortError') return;
+    }
+
+    // Fallback desktop: descarga la imagen + abre wa.me con mensaje
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    // Abrir WhatsApp Web con el mensaje pre-cargado (el user adjunta la img)
+    window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+  });
 }
 
 </script>
@@ -10266,10 +10375,13 @@ function _getSnapRenderer() {
 // renderiza a 2× ese valor para SSAA — el downsample al dibujar en canvas 2D
 // con smoothingQuality='high' produce bordes mucho más limpios que el MSAA
 // 4× nativo de WebGL, sobre todo en las curvas de las letras.
-window.v3d_snapshot = function(targetW = 2200) {
+window.v3d_snapshot = function(targetW = 2200, opts = {}) {
+  // opts.night = true → NO atenuar emissiveIntensity (letreros luminosos
+  //   se ven encendidos, para simular vista nocturna).
   // Factor SSAA — subir a 3 si sigue viéndose pobre, con costo cuadrático de memoria.
   const SSAA = 2;
   const superW = targetW * SSAA;
+  const nightMode = !!opts.night;
   if (!S || !CAM) return null;
   // Ubicar el grupo activo (el que tiene userData.v3d)
   let grp = null;
@@ -10287,6 +10399,7 @@ window.v3d_snapshot = function(targetW = 2200) {
   //    la placa PVC lleva emissive alto (1.15) que satura la cara translúcida y
   //    ahoga el detalle de la letra. Bajar a ~0.25 preserva el efecto luminoso
   //    sin quemar el frente.
+  // En modo NOCHE se salta esta atenuación → el letrero se ve encendido.
   const emiSaved = [];
   const _clampEmi = mat => {
     if (!mat) return;
@@ -10296,7 +10409,9 @@ window.v3d_snapshot = function(targetW = 2200) {
       mat.emissiveIntensity = 0.25;
     }
   };
-  grp.traverse(o => { if (o.isMesh) _clampEmi(o.material); });
+  if (!nightMode) {
+    grp.traverse(o => { if (o.isMesh) _clampEmi(o.material); });
+  }
 
   // ── Tilt 3D leve para que las letras muestren su profundidad (ya son 3D,
   //    la cámara ortográfica frontal las hacía parecer stickers). 6° derecha
@@ -10538,6 +10653,23 @@ window.v3d_snapshot = function(targetW = 2200) {
       </div>
 
       <div class="fach-section">
+        <h3>Vista</h3>
+        <div class="fach-chips">
+          <button id="fach-btn-oculto" onclick="fachToggleOculto()"
+                  title="Ocultá temporalmente el letrero para mostrar el antes/después">
+            👁 Foto sola
+          </button>
+          <button id="fach-btn-night" onclick="fachToggleNight()"
+                  title="Simular letrero encendido de noche (para cajones de luz)">
+            🌙 Noche
+          </button>
+        </div>
+        <div class="fach-hint">
+          Foto sola: comparación antes/después. Noche: útil para cajones de luz.
+        </div>
+      </div>
+
+      <div class="fach-section">
         <h3>Zoom</h3>
         <div class="fach-zoom-controls">
           <button onclick="fachZoomStep(-1)" title="Alejar">−</button>
@@ -10577,6 +10709,14 @@ window.v3d_snapshot = function(targetW = 2200) {
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
           Descargar composición
+        </button>
+        <button class="fach-btn" onclick="fachCompartir()" style="margin-top:6px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 12.5a8 8 0 1 1-3.4-6.5L20 4l-.9 3.6A8 8 0 0 1 20 12.5Z"/>
+            <path d="M8 11.5c.5 1 1.5 2 3 3s2.5 1 3.5.5l1.5-1 1.5 1.5-.5 1.5c-1 1.5-3 1.5-5 .5s-4-3-5-5-1-4 .5-5l1.5-.5 1.5 1.5-1 1.5c-.5 1 0 2 .5 2.5Z"/>
+          </svg>
+          Compartir por WhatsApp
         </button>
         <div class="fach-hint" id="fach-format-hint">
           JPG · más chico, ideal para WhatsApp
