@@ -1323,7 +1323,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.11.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.11.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -8348,14 +8348,23 @@ function fachUpdate(origen) {
   _fach.rot = rDeg * Math.PI / 180;
   _fach.opacity = oPct / 100;
 
-  // Badge cm: dimensión real actual del letrero (solo cuando hay escala real).
-  // Marca rojo + ⚠ si el letrero excede el espacio marcado (evita ofrecer
-  // tamaños que no caben físicamente).
+  // Badge cm: bounding box APARENTE del letrero considerando la rotación
+  // (que es lo que ve el vendedor sobre la foto). Fórmula bbox rotado:
+  //   bbox_w = |W·cos(θ)| + |H·sin(θ)|
+  //   bbox_h = |W·sin(θ)| + |H·cos(θ)|
+  // Sin esto, rotar un letrero horizontal 90° reportaba las dims originales
+  // sin swap → falsa alerta de "excede" en espacios verticales que sí caben.
   const cmEl = document.getElementById('fach-scale-cm');
   if (cmEl) {
     if (_fach.realPxPerCm && _fach.baseW > 0) {
-      const wCm = Math.round((_fach.baseW * _fach.scale) / _fach.realPxPerCm);
-      const hCm = Math.round((_fach.baseH * _fach.scale) / _fach.realPxPerCm);
+      const wSignPx = _fach.baseW * _fach.scale;
+      const hSignPx = _fach.baseH * _fach.scale;
+      const cs = Math.abs(Math.cos(_fach.rot));
+      const sn = Math.abs(Math.sin(_fach.rot));
+      const wPx = wSignPx * cs + hSignPx * sn;
+      const hPx = wSignPx * sn + hSignPx * cs;
+      const wCm = Math.round(wPx / _fach.realPxPerCm);
+      const hCm = Math.round(hPx / _fach.realPxPerCm);
       const excede = _fach.espacioCm &&
         (wCm > _fach.espacioCm.ancho || hCm > _fach.espacioCm.alto);
       cmEl.textContent = excede
