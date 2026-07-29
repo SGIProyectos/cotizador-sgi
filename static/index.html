@@ -809,6 +809,124 @@ svg g.pieza-labels                 { pointer-events: none; }
   font-size: 11px; color: var(--txt3); pointer-events: none; user-select: none;
 }
 
+/* ── MODAL "EN FACHADA" ── */
+#modal-fachada {
+  position: fixed; inset: 0; z-index: 2000; display: none;
+  background: #0a0d13; color: #E4E8EE;
+  font-family: var(--sans);
+}
+#modal-fachada.open { display: flex; flex-direction: column; }
+.fach-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 22px; background: #0f131b;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  flex-shrink: 0;
+}
+.fach-header h2 {
+  font-size: 15px; font-weight: 700; letter-spacing: .01em; margin: 0;
+  display: flex; align-items: center; gap: 10px;
+}
+.fach-header h2 svg { width: 18px; height: 18px; color: var(--c); }
+.fach-header .fach-close {
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+  color: #C6CFDA; padding: 6px 14px; border-radius: 8px;
+  font-size: 12.5px; cursor: pointer; font-family: inherit; transition: .15s;
+}
+.fach-header .fach-close:hover { background: rgba(255,255,255,.1); color: #fff; }
+.fach-body { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+
+.fach-stage {
+  flex: 1; background: #1a1a20; padding: 20px;
+  display: flex; align-items: center; justify-content: center;
+  min-width: 0; min-height: 0; overflow: hidden; position: relative;
+}
+#fach-canvas-wrap {
+  max-width: 100%; max-height: 100%;
+  display: none; position: relative;
+  box-shadow: 0 8px 40px rgba(0,0,0,.6);
+  border-radius: 4px; overflow: hidden;
+}
+#fach-canvas { display: block; max-width: 100%; max-height: 100%; cursor: grab; }
+#fach-canvas.dragging { cursor: grabbing; }
+
+#fach-drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px; padding: 60px 80px; cursor: pointer;
+  border: 2px dashed rgba(255,255,255,.18); border-radius: 12px;
+  transition: .18s; text-align: center;
+  background: rgba(255,255,255,.02);
+}
+#fach-drop:hover, #fach-drop.dragover {
+  border-color: var(--c); background: rgba(44,197,236,.05);
+}
+#fach-drop svg { width: 56px; height: 56px; color: rgba(255,255,255,.35); stroke-width: 1.3; }
+#fach-drop:hover svg { color: var(--c); }
+#fach-drop .fach-drop-title { font-size: 15px; font-weight: 600; color: #E4E8EE; }
+#fach-drop .fach-drop-sub   { font-size: 12px; color: rgba(255,255,255,.4); }
+
+.fach-panel {
+  width: 300px; flex-shrink: 0; overflow-y: auto;
+  background: rgba(255,255,255,.03);
+  border-left: 1px solid rgba(255,255,255,.08);
+  padding: 20px 22px;
+}
+.fach-panel.hidden { display: none; }
+.fach-panel h3 {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: rgba(255,255,255,.5);
+  margin: 0 0 14px 0;
+}
+.fach-panel .fach-section { margin-bottom: 22px; }
+.fach-slider-row { margin-bottom: 14px; }
+.fach-slider-row label {
+  display: flex; justify-content: space-between;
+  font-size: 11.5px; color: rgba(255,255,255,.75);
+  margin-bottom: 6px;
+}
+.fach-slider-row label span:last-child {
+  font-family: var(--mono); color: var(--c-soft); font-weight: 600;
+}
+.fach-slider-row input[type=range] {
+  width: 100%; accent-color: var(--c);
+  height: 4px; background: rgba(255,255,255,.08);
+  border-radius: 2px; outline: none;
+}
+.fach-btn {
+  width: 100%; padding: 10px 14px; border-radius: 9px;
+  border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04);
+  color: #E4E8EE; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  font-family: inherit; transition: .15s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.fach-btn:hover { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.2); }
+.fach-btn.primary {
+  background: linear-gradient(93deg,#1FB5E4,#E7449A); color: #fff;
+  border: none; box-shadow: 0 3px 12px rgba(35,140,200,.25);
+}
+.fach-btn.primary:hover { filter: brightness(1.08); }
+.fach-btn svg { width: 14px; height: 14px; }
+.fach-format {
+  display: flex; gap: 6px; margin-bottom: 10px;
+}
+.fach-format button {
+  flex: 1; padding: 6px 0; border-radius: 7px; cursor: pointer;
+  background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.1);
+  color: rgba(255,255,255,.6); font-size: 11.5px; font-weight: 600;
+  font-family: inherit; transition: .15s;
+}
+.fach-format button.active {
+  background: rgba(44,197,236,.15); border-color: var(--c);
+  color: var(--c-soft);
+}
+.fach-hint {
+  font-size: 10.5px; color: rgba(255,255,255,.4);
+  line-height: 1.5; margin-top: 8px;
+}
+@media (max-width: 900px) {
+  .fach-body { flex-direction: column; }
+  .fach-panel { width: 100%; border-left: none; border-top: 1px solid rgba(255,255,255,.08); max-height: 40vh; }
+}
+
 /* ── RESPONSIVO ── */
 @media (max-width: 1440px) {
   .sidebar { width: 280px; min-width: 280px; }
@@ -1077,7 +1195,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.5.2</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.6.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -1528,6 +1646,19 @@ svg g.pieza-labels                 { pointer-events: none; }
             onclick="window.v3d_explode?.()"
             style="display:none;border-color:#e87c2a;color:#e87c2a">
             💥 Explotar cara
+          </button>
+          <button class="v3d-btn" id="btn-fachada"
+            onclick="abrirFachada()"
+            style="display:none;gap:5px;align-items:center"
+            title="Montar sobre foto real del muro/local">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 style="vertical-align:-2px;margin-right:4px">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="9" cy="9" r="2"/>
+              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+            </svg>
+            En fachada
           </button>
         </div>
         <canvas id="visor3d-canvas" style="display:none"></canvas>
@@ -7583,6 +7714,287 @@ function _v3dAutoRender(data) {
     window.v3d_render(args);
   } catch(e) { console.warn("Vista 3D:", e); }
 }
+
+// ══════════════════ MODULO "EN FACHADA" ══════════════════════════════════
+// Simulador que compone el diseño 3D actual sobre foto real del muro.
+// Toma snapshot del three.js (v3d_snapshot), lo pone como overlay draggable
+// sobre canvas 2D con la foto, y descarga la composición.
+const _fach = {
+  photo: null,          // HTMLImageElement de la foto
+  overlay: null,        // HTMLImageElement del snapshot 3D
+  cx: 0, cy: 0,         // centro del overlay en coords de foto (px)
+  scale: 1,             // multiplicador (1 = tamaño natural del snapshot)
+  rot: 0,               // radianes
+  opacity: 1,
+  baseW: 0, baseH: 0,   // dimensiones base del overlay (px del snapshot)
+  format: 'jpg',
+  drag: null,           // {startX, startY, cx0, cy0}
+};
+
+function abrirFachada() {
+  if (typeof window.v3d_snapshot !== 'function') {
+    alert("El visor 3D aún no está listo — espera a que renderice la vista.");
+    return;
+  }
+  const modal = document.getElementById('modal-fachada');
+  modal.classList.add('open');
+  // Reset estado UI (mantiene el snapshot en cache si ya hay foto — útil si
+  // cerraron por error)
+  if (!_fach.photo) _resetFachadaUI();
+}
+
+function cerrarFachada() {
+  document.getElementById('modal-fachada').classList.remove('open');
+}
+
+function _resetFachadaUI() {
+  document.getElementById('fach-drop').style.display = 'flex';
+  document.getElementById('fach-canvas-wrap').style.display = 'none';
+  document.getElementById('fach-panel').classList.add('hidden');
+  document.getElementById('fach-scale').value = 100;
+  document.getElementById('fach-rot').value = 0;
+  document.getElementById('fach-op').value = 100;
+  document.getElementById('fach-scale-val').textContent = '100%';
+  document.getElementById('fach-rot-val').textContent = '0°';
+  document.getElementById('fach-op-val').textContent = '100%';
+}
+
+// Cargar foto y capturar snapshot 3D
+function fachOnFile(file) {
+  if (!file) return;
+  if (!/^image\//.test(file.type)) {
+    alert("Formato no soportado. Usa JPG, PNG o WEBP.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      _fach.photo = img;
+      // Capturar snapshot 3D actual
+      const snapUrl = window.v3d_snapshot(1400);
+      if (!snapUrl) {
+        alert("No se pudo capturar el diseño 3D. Verifica que hayas cargado un SVG y calculado la cotización.");
+        return;
+      }
+      const ov = new Image();
+      ov.onload = () => {
+        _fach.overlay = ov;
+        _fach.baseW = ov.width;
+        _fach.baseH = ov.height;
+        // Posición inicial: centro superior de la foto (donde va un letrero de fachada)
+        _fach.cx = img.width / 2;
+        _fach.cy = img.height * 0.35;
+        // Tamaño inicial: overlay ocupa ~25% del ancho de la foto (razonable para letreros)
+        const initialScale = (img.width * 0.25) / ov.width;
+        _fach.scale = initialScale;
+        _fach.rot = 0;
+        _fach.opacity = 1;
+        // Sincronizar UI: slider 100% = scale actual
+        document.getElementById('fach-scale').value = 100;
+        document.getElementById('fach-rot').value = 0;
+        document.getElementById('fach-op').value = 100;
+        _fach._initScale = initialScale;
+
+        // Preparar canvas
+        const cv = document.getElementById('fach-canvas');
+        cv.width = img.width;
+        cv.height = img.height;
+        // CSS: ajustar al viewport respetando ratio (max 100% del stage)
+        cv.style.maxWidth = '100%';
+        cv.style.maxHeight = '100%';
+        cv.style.width = 'auto';
+        cv.style.height = 'auto';
+
+        document.getElementById('fach-drop').style.display = 'none';
+        document.getElementById('fach-canvas-wrap').style.display = 'block';
+        document.getElementById('fach-panel').classList.remove('hidden');
+        _fachDraw();
+      };
+      ov.src = snapUrl;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// Redibujar canvas 2D
+function _fachDraw() {
+  const cv = document.getElementById('fach-canvas');
+  if (!cv || !_fach.photo) return;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.drawImage(_fach.photo, 0, 0, cv.width, cv.height);
+  if (_fach.overlay) {
+    ctx.save();
+    ctx.globalAlpha = _fach.opacity;
+    ctx.translate(_fach.cx, _fach.cy);
+    ctx.rotate(_fach.rot);
+    const w = _fach.baseW * _fach.scale;
+    const h = _fach.baseH * _fach.scale;
+    ctx.drawImage(_fach.overlay, -w / 2, -h / 2, w, h);
+    ctx.restore();
+  }
+}
+
+// Handler sliders
+function fachUpdate() {
+  const sPct = +document.getElementById('fach-scale').value;
+  const rDeg = +document.getElementById('fach-rot').value;
+  const oPct = +document.getElementById('fach-op').value;
+  document.getElementById('fach-scale-val').textContent = sPct + '%';
+  document.getElementById('fach-rot-val').textContent = rDeg + '°';
+  document.getElementById('fach-op-val').textContent = oPct + '%';
+  // scale=100% ⇒ escala inicial (25% del ancho de foto)
+  _fach.scale = (_fach._initScale || 1) * (sPct / 100);
+  _fach.rot = rDeg * Math.PI / 180;
+  _fach.opacity = oPct / 100;
+  _fachDraw();
+}
+
+// Drag del overlay
+(function _fachInitDrag() {
+  document.addEventListener('DOMContentLoaded', () => {
+    const cv = document.getElementById('fach-canvas');
+    if (!cv) return;
+
+    function _clientToCanvas(clientX, clientY) {
+      const rect = cv.getBoundingClientRect();
+      const sx = cv.width / rect.width;
+      const sy = cv.height / rect.height;
+      return { x: (clientX - rect.left) * sx, y: (clientY - rect.top) * sy };
+    }
+
+    function _hitOverlay(x, y) {
+      if (!_fach.overlay) return false;
+      // Transformación inversa: rotar el punto alrededor de (cx,cy), luego test bbox
+      const dx = x - _fach.cx, dy = y - _fach.cy;
+      const c = Math.cos(-_fach.rot), s = Math.sin(-_fach.rot);
+      const lx = dx * c - dy * s;
+      const ly = dx * s + dy * c;
+      const w = _fach.baseW * _fach.scale / 2;
+      const h = _fach.baseH * _fach.scale / 2;
+      return Math.abs(lx) <= w && Math.abs(ly) <= h;
+    }
+
+    cv.addEventListener('mousedown', e => {
+      const p = _clientToCanvas(e.clientX, e.clientY);
+      if (!_hitOverlay(p.x, p.y)) return;
+      _fach.drag = { sx: p.x, sy: p.y, cx0: _fach.cx, cy0: _fach.cy };
+      cv.classList.add('dragging');
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', e => {
+      if (!_fach.drag) return;
+      const p = _clientToCanvas(e.clientX, e.clientY);
+      _fach.cx = _fach.drag.cx0 + (p.x - _fach.drag.sx);
+      _fach.cy = _fach.drag.cy0 + (p.y - _fach.drag.sy);
+      _fachDraw();
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!_fach.drag) return;
+      _fach.drag = null;
+      cv.classList.remove('dragging');
+    });
+
+    // Doble-click: recentrar
+    cv.addEventListener('dblclick', () => {
+      if (!_fach.photo) return;
+      _fach.cx = _fach.photo.width / 2;
+      _fach.cy = _fach.photo.height * 0.35;
+      _fachDraw();
+    });
+
+    // Touch (móvil)
+    cv.addEventListener('touchstart', e => {
+      if (!e.touches[0]) return;
+      const t = e.touches[0];
+      const p = _clientToCanvas(t.clientX, t.clientY);
+      if (!_hitOverlay(p.x, p.y)) return;
+      _fach.drag = { sx: p.x, sy: p.y, cx0: _fach.cx, cy0: _fach.cy };
+      e.preventDefault();
+    }, { passive: false });
+
+    cv.addEventListener('touchmove', e => {
+      if (!_fach.drag || !e.touches[0]) return;
+      const t = e.touches[0];
+      const p = _clientToCanvas(t.clientX, t.clientY);
+      _fach.cx = _fach.drag.cx0 + (p.x - _fach.drag.sx);
+      _fach.cy = _fach.drag.cy0 + (p.y - _fach.drag.sy);
+      _fachDraw();
+      e.preventDefault();
+    }, { passive: false });
+
+    cv.addEventListener('touchend', () => { _fach.drag = null; });
+
+    // Drag & drop de archivo sobre la stage
+    const stage = document.querySelector('#modal-fachada .fach-stage');
+    const drop  = document.getElementById('fach-drop');
+    if (stage && drop) {
+      ['dragenter','dragover'].forEach(ev => stage.addEventListener(ev, e => {
+        e.preventDefault(); drop.classList.add('dragover');
+      }));
+      ['dragleave','drop'].forEach(ev => stage.addEventListener(ev, e => {
+        e.preventDefault(); drop.classList.remove('dragover');
+      }));
+      stage.addEventListener('drop', e => {
+        const f = e.dataTransfer?.files?.[0];
+        if (f) fachOnFile(f);
+      });
+    }
+
+    // Esc para cerrar el modal
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        const m = document.getElementById('modal-fachada');
+        if (m && m.classList.contains('open')) cerrarFachada();
+      }
+    });
+  });
+})();
+
+function fachSetFormat(fmt) {
+  _fach.format = fmt;
+  document.getElementById('fach-fmt-jpg').classList.toggle('active', fmt === 'jpg');
+  document.getElementById('fach-fmt-png').classList.toggle('active', fmt === 'png');
+  document.getElementById('fach-format-hint').textContent = fmt === 'jpg'
+    ? 'JPG · más chico, ideal para WhatsApp'
+    : 'PNG · máxima calidad, archivo más pesado';
+}
+
+function fachDescargar() {
+  const cv = document.getElementById('fach-canvas');
+  if (!cv || !_fach.photo) return;
+  const mime = _fach.format === 'jpg' ? 'image/jpeg' : 'image/png';
+  const ext  = _fach.format === 'jpg' ? 'jpg' : 'png';
+  const quality = _fach.format === 'jpg' ? 0.88 : undefined;
+
+  // Nombre: fachada-{cliente|fecha}
+  let base = 'fachada';
+  const cli = document.getElementById('cliente-input')?.value?.trim();
+  if (cli) {
+    base += '-' + cli.replace(/[^\w\-]+/g, '_').substring(0, 40);
+  } else {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    base += `-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+  }
+
+  cv.toBlob(blob => {
+    if (!blob) { alert("No se pudo generar la imagen."); return; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${base}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }, mime, quality);
+}
+
 </script>
 
 <!-- ══════════════════ VISTA 3D — Three.js ES module ══════════════════ -->
@@ -7675,6 +8087,8 @@ function clearMeshes() {
   _cajaLedRefs = [];
   const btn = document.getElementById('btn-explode');
   if (btn) { btn.style.display = 'none'; btn.textContent = '💥 Explotar cara'; }
+  const btnF = document.getElementById('btn-fachada');
+  if (btnF) btnF.style.display = 'none';
 }
 
 // ─── material helper ────────────────────────────────────────────────────────
@@ -7730,6 +8144,10 @@ window.v3d_render = function({ svgText, depthCm, tipo, tipoConstruccion,
 
   grp.userData.v3d = true;
   S.add(grp);
+
+  // Botón "En fachada" — solo en Letras 3D (no cajas, no planas)
+  const btnFach = document.getElementById('btn-fachada');
+  if (btnFach) btnFach.style.display = (tipo === 'letras') ? 'inline-flex' : 'none';
 
   // Ajustar cámara al grupo
   const bb = new THREE.Box3().setFromObject(grp);
@@ -9118,7 +9536,192 @@ window.v3d_explode = function() {
   })(performance.now());
 };
 
+// ─── SNAPSHOT OFFSCREEN (para módulo "En fachada") ──────────────────────────
+// Renderer WebGL dedicado en canvas oculto. Renderiza la MISMA escena S con
+// framing tight al bbox del grupo activo. No toca el visor visible.
+// El renderer se crea perezosamente y se cachea (dispose es caro).
+let _snapRenderer = null;
+let _snapCanvas   = null;
+
+function _getSnapRenderer() {
+  if (_snapRenderer) return _snapRenderer;
+  _snapCanvas = document.createElement('canvas');
+  _snapCanvas.style.display = 'none';
+  document.body.appendChild(_snapCanvas);
+  _snapRenderer = new THREE.WebGLRenderer({
+    canvas: _snapCanvas,
+    antialias: true,
+    alpha: true,
+    preserveDrawingBuffer: true,
+    powerPreference: 'high-performance',
+  });
+  _snapRenderer.setPixelRatio(1);       // resolución controlada por setSize
+  _snapRenderer.shadowMap.enabled = false;
+  return _snapRenderer;
+}
+
+// Devuelve dataURL PNG con alpha del grupo 3D activo, framing tight.
+// targetW: ancho en px del bitmap (default 1200). El alto sigue la razón bbox.
+window.v3d_snapshot = function(targetW = 1200) {
+  if (!S || !CAM) return null;
+  // Ubicar el grupo activo (el que tiene userData.v3d)
+  let grp = null;
+  S.traverse(o => { if (o.userData?.v3d && !grp) grp = o; });
+  if (!grp) return null;
+
+  const bb = new THREE.Box3().setFromObject(grp);
+  const sz = bb.getSize(new THREE.Vector3());
+  const ct = bb.getCenter(new THREE.Vector3());
+  if (sz.x <= 0 || sz.y <= 0) return null;
+
+  const aspect = sz.x / sz.y;
+  const targetH = Math.round(targetW / aspect);
+
+  const renderer = _getSnapRenderer();
+  renderer.setSize(targetW, targetH, false);
+  renderer.setClearColor(0x000000, 0);
+
+  // Cámara ortográfica frontal centrada en el bbox, sin padding extra
+  // (el usuario controla el padding via el slider de tamaño en el modal).
+  const halfW = sz.x / 2;
+  const halfH = sz.y / 2;
+  const dist  = Math.max(sz.x, sz.y, sz.z) * 4 + 100;
+  const snapCam = new THREE.OrthographicCamera(
+    -halfW, halfW, halfH, -halfH, 0.1, dist * 3
+  );
+  snapCam.position.set(ct.x, ct.y, ct.z + dist);
+  snapCam.lookAt(ct);
+  snapCam.updateProjectionMatrix();
+
+  // Ocultar helpers (grid + plano de sombra) durante el snapshot
+  const hidden = [];
+  S.traverse(o => {
+    if (o.userData?.v3d) return;              // el grupo 3D SÍ se renderiza
+    if (o.isGridHelper) { hidden.push([o, o.visible]); o.visible = false; }
+    else if (o.isMesh && o.material?.isShadowMaterial) {
+      hidden.push([o, o.visible]); o.visible = false;
+    }
+  });
+
+  // Guardar background y usar transparente
+  const bgOrig = S.background;
+  S.background = null;
+
+  try {
+    renderer.render(S, snapCam);
+    return _snapCanvas.toDataURL('image/png');
+  } finally {
+    // Restaurar TODO — incluso si el render lanzó
+    S.background = bgOrig;
+    hidden.forEach(([o, v]) => { o.visible = v; });
+  }
+};
+
 </script>
+
+<!-- ═══ MODAL "EN FACHADA" ══════════════════════════════════════════════════ -->
+<div id="modal-fachada">
+  <div class="fach-header">
+    <h2>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+        <circle cx="9" cy="9" r="2"/>
+        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+      </svg>
+      Simulador en fachada
+    </h2>
+    <button class="fach-close" onclick="cerrarFachada()">✕ Cerrar</button>
+  </div>
+
+  <div class="fach-body">
+
+    <!-- STAGE: foto + overlay -->
+    <div class="fach-stage">
+      <!-- Placeholder inicial -->
+      <div id="fach-drop" onclick="document.getElementById('fach-file-input').click()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+          <circle cx="9" cy="9" r="2"/>
+          <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+        </svg>
+        <div class="fach-drop-title">Click para subir foto del muro</div>
+        <div class="fach-drop-sub">JPG, PNG, WEBP</div>
+      </div>
+      <input type="file" id="fach-file-input"
+             accept="image/jpeg,image/png,image/webp,image/gif"
+             style="display:none" onchange="fachOnFile(this.files[0]); this.value=''">
+
+      <!-- Canvas composición -->
+      <div id="fach-canvas-wrap">
+        <canvas id="fach-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- PANEL derecho -->
+    <div class="fach-panel hidden" id="fach-panel">
+
+      <div class="fach-section">
+        <h3>Ajustar diseño</h3>
+        <div class="fach-slider-row">
+          <label>Tamaño <span id="fach-scale-val">100%</span></label>
+          <input type="range" id="fach-scale" min="10" max="300" value="100"
+                 oninput="fachUpdate()">
+        </div>
+        <div class="fach-slider-row">
+          <label>Rotación <span id="fach-rot-val">0°</span></label>
+          <input type="range" id="fach-rot" min="-180" max="180" value="0"
+                 oninput="fachUpdate()">
+        </div>
+        <div class="fach-slider-row">
+          <label>Opacidad <span id="fach-op-val">100%</span></label>
+          <input type="range" id="fach-op" min="30" max="100" value="100"
+                 oninput="fachUpdate()">
+        </div>
+        <div class="fach-hint">
+          Arrastrá el letrero para moverlo. Doble-click para recentrar.
+        </div>
+      </div>
+
+      <div class="fach-section">
+        <h3>Foto</h3>
+        <button class="fach-btn" onclick="document.getElementById('fach-file-input').click()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          Cambiar foto
+        </button>
+      </div>
+
+      <div class="fach-section">
+        <h3>Descargar</h3>
+        <div class="fach-format">
+          <button id="fach-fmt-jpg" class="active" onclick="fachSetFormat('jpg')">JPG</button>
+          <button id="fach-fmt-png" onclick="fachSetFormat('png')">PNG</button>
+        </div>
+        <button class="fach-btn primary" onclick="fachDescargar()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Descargar composición
+        </button>
+        <div class="fach-hint" id="fach-format-hint">
+          JPG · más chico, ideal para WhatsApp
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
 <!-- ═══ MODAL TRAZADO DE IMAGEN ══════════════════════════════════════════════ -->
 <div id="trace-modal">
   <div class="tm-box" style="max-width:1080px">
