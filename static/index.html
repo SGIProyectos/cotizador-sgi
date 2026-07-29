@@ -1323,7 +1323,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.13.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.14.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7875,6 +7875,7 @@ const _fach = {
   nightMode: false,     // true = simulación letrero encendido de noche
   iluminado: false,     // true si el letrero es luminoso (glow perimetral)
   watermark: true,      // marca de agua "SGI" en la esquina de la composición
+  cotasExport: false,   // agregar cotas (dimensiones) al archivo exportado
   realPxPerCm: null,    // si != null, escala 1:1 activa
   letreroAnchoCm: null, // ancho real cotizado del letrero (cm)
   measureMode: false,   // usuario está marcando (2 clicks pendientes)
@@ -7952,6 +7953,41 @@ function _fachRefreshSaveBtn() {
   if (btnPdf) btnPdf.style.display = quoteId ? '' : 'none';
 }
 
+// Re-toma snapshot del visor 3D actual sin cerrar el modal. Preserva
+// posiciones, escala, área marcada — sólo reemplaza el overlay + baseW/H.
+// Útil si el vendedor modificó el diseño (color/tipo/dimensiones) después
+// de abrir el modal.
+function fachActualizarDiseno() {
+  if (!_fach.photo) { alert("Cargá una foto primero."); return; }
+  if (typeof window.v3d_snapshot !== 'function') return;
+  const btn = document.getElementById('fach-btn-refresh');
+  const orig = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Capturando…'; }
+  const url = window.v3d_snapshot(2200, { night: _fach.nightMode });
+  if (!url) {
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+    alert("No se pudo capturar el diseño 3D.");
+    return;
+  }
+  const ov = new Image();
+  ov.onload = () => {
+    _fach.overlay = ov;
+    _fach.baseW = ov.width;
+    _fach.baseH = ov.height;
+    _fach.iluminado = _fachDetectIluminado();
+    // Re-leer letreroAnchoCm por si cambió la cotización
+    const anchoInp = parseFloat(document.getElementById("ancho-real")?.value);
+    if (anchoInp && anchoInp > 0) _fach.letreroAnchoCm = anchoInp;
+    fachUpdate('slider');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '✓ Actualizado';
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    }
+  };
+  ov.src = url;
+}
+
 // Serializa la foto actual a JPEG 0.85 con max 1600px. Devuelve base64.
 function _fachSerializePhoto() {
   if (!_fach.photo) return null;
@@ -7990,6 +8026,7 @@ async function fachGuardarEnCotizacion() {
       nightMode:  _fach.nightMode,
       iluminado:  _fach.iluminado,
       watermark:  _fach.watermark,
+      cotasExport:_fach.cotasExport,
     };
     const r = await fetch(`/api/quotes/${quoteId}/fachada`, {
       method: 'POST',
@@ -8049,6 +8086,7 @@ function _fachRehidratar(f) {
       _fach.nightMode      = !!f.nightMode;
       _fach.iluminado      = !!f.iluminado;
       _fach.watermark      = f.watermark !== false;
+      _fach.cotasExport    = !!f.cotasExport;
       _fach.photoHash      = _fachPhotoHash(img);
       _fach.escalaRehidratada = false;
       _fach.measureMode = false; _fach.measurePts = []; _fach.pendingRect = null;
@@ -8075,6 +8113,7 @@ function _fachRehidratar(f) {
       const oSl = document.getElementById('fach-op'); if (oSl) oSl.value = oPct;
       const oIn = document.getElementById('fach-op-val'); if (oIn) oIn.value = oPct;
       const wm = document.getElementById('fach-wm'); if (wm) wm.checked = _fach.watermark;
+      const ct = document.getElementById('fach-cotas'); if (ct) ct.checked = _fach.cotasExport;
       const bNight = document.getElementById('fach-btn-night');
       if (bNight) bNight.classList.toggle('active', _fach.nightMode);
 
@@ -8369,6 +8408,46 @@ function _fachDraw() {
   // Marca de agua SGI (esquina inferior derecha). Discreta pero visible
   // en la composición que va a WhatsApp/redes → refuerza branding.
   if (_fach.watermark) _fachDrawWatermark(ctx, cv);
+}
+
+// Cotas: dibuja una chip "ancho×alto cm" debajo de cada letrero. Usa el bbox
+// rotado (misma fórmula que la alerta del badge). Se llama SOLO en el flujo
+// de export (JPG/PNG/WhatsApp/PDF), NO en el preview normal — para no
+// entorpecer la edición pero incluir el dato en el archivo que va al cliente.
+function _fachDrawCotas(ctx, cv) {
+  if (!_fach.overlay || !_fach.realPxPerCm) return;
+  const wSign = _fach.baseW * _fach.scale;
+  const hSign = _fach.baseH * _fach.scale;
+  const cs = Math.abs(Math.cos(_fach.rot));
+  const sn = Math.abs(Math.sin(_fach.rot));
+  const bboxW = wSign * cs + hSign * sn;
+  const bboxH = wSign * sn + hSign * cs;
+  const wCm = Math.round(bboxW / _fach.realPxPerCm);
+  const hCm = Math.round(bboxH / _fach.realPxPerCm);
+  const txt = `${wCm} × ${hCm} cm`;
+  const fontPx = Math.max(15, cv.width * 0.014);
+
+  ctx.save();
+  ctx.font = `700 ${fontPx}px "SF Mono", "Roboto Mono", Consolas, monospace`;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  const padX = fontPx * 0.7;
+  const padY = fontPx * 0.4;
+  const tw = ctx.measureText(txt).width;
+  const boxW = tw + padX * 2;
+  const boxH = fontPx + padY * 2;
+
+  for (const p of _fach.positions) {
+    const cy = p.cy + bboxH / 2 + fontPx * 1.4;
+    const x = p.cx - boxW / 2;
+    // Chip semi-transparente negra con texto blanco (contraste garantizado)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.78)';
+    _fachRoundRect(ctx, x, cy - boxH / 2, boxW, boxH, fontPx * 0.3);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText(txt, p.cx, cy);
+  }
+  ctx.restore();
 }
 
 function _fachDrawWatermark(ctx, cv) {
@@ -8963,6 +9042,12 @@ function fachToggleWatermark(checked) {
   _fachDraw();
 }
 
+// Toggle sólo afecta el export — el preview no cambia (por eso no llamamos
+// _fachDraw). El vendedor lo prende una vez y se olvida.
+function fachToggleCotas(checked) {
+  _fach.cotasExport = !!checked;
+}
+
 function fachSetFormat(fmt) {
   _fach.format = fmt;
   document.getElementById('fach-fmt-jpg').classList.toggle('active', fmt === 'jpg');
@@ -8987,13 +9072,23 @@ function _fachBaseName() {
 }
 
 // Genera Blob de la composición actual. Callback recibe (blob, mime, ext).
+// Si `_fach.cotasExport` está activo, dibuja cotas SOLO en el archivo
+// (no persiste en el preview): pinta cotas → toBlob → redibuja normal.
 function _fachGenBlob(fmt, cb) {
   const cv = document.getElementById('fach-canvas');
   if (!cv || !_fach.photo) { cb(null); return; }
   const mime = fmt === 'jpg' ? 'image/jpeg' : 'image/png';
   const ext  = fmt === 'jpg' ? 'jpg' : 'png';
   const quality = fmt === 'jpg' ? 0.92 : undefined;
-  cv.toBlob(blob => cb(blob, mime, ext), mime, quality);
+  const addCotas = _fach.cotasExport;
+  if (addCotas) {
+    const ctx = cv.getContext('2d');
+    _fachDrawCotas(ctx, cv);
+  }
+  cv.toBlob(blob => {
+    if (addCotas) _fachDraw(); // restaurar preview sin cotas
+    cb(blob, mime, ext);
+  }, mime, quality);
 }
 
 function fachDescargar() {
@@ -10991,6 +11086,22 @@ window.v3d_snapshot = function(targetW = 2200, opts = {}) {
       </div>
 
       <div class="fach-section">
+        <h3>Diseño</h3>
+        <button class="fach-btn" id="fach-btn-refresh" onclick="fachActualizarDiseno()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+          Actualizar diseño
+        </button>
+        <div class="fach-hint">
+          Vuelve a capturar el diseño 3D actual (útil si cambiaste color,
+          tipo o medidas mientras el modal estaba abierto).
+        </div>
+      </div>
+
+      <div class="fach-section">
         <h3>Cotización</h3>
         <button class="fach-btn" id="fach-btn-save" onclick="fachGuardarEnCotizacion()"
                 style="display:none">
@@ -11017,6 +11128,10 @@ window.v3d_snapshot = function(targetW = 2200, opts = {}) {
         <label class="fach-wm-toggle">
           <input type="checkbox" id="fach-wm" checked onchange="fachToggleWatermark(this.checked)">
           <span>Marca de agua "SGI"</span>
+        </label>
+        <label class="fach-wm-toggle">
+          <input type="checkbox" id="fach-cotas" onchange="fachToggleCotas(this.checked)">
+          <span>Cotas en descarga</span>
         </label>
         <button class="fach-btn primary" onclick="fachDescargar()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
