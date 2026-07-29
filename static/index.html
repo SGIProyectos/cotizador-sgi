@@ -845,9 +845,40 @@ svg g.pieza-labels                 { pointer-events: none; }
   display: none; position: relative;
   box-shadow: 0 8px 40px rgba(0,0,0,.6);
   border-radius: 4px; overflow: hidden;
+  transform: translate(0, 0) scale(1);
+  transform-origin: 0 0;
+  transition: transform .05s linear;
 }
 #fach-canvas { display: block; max-width: 100%; max-height: 100%; cursor: grab; }
 #fach-canvas.dragging { cursor: grabbing; }
+#fach-canvas.panning  { cursor: move; }
+
+.fach-zoom-indicator {
+  position: absolute; bottom: 12px; left: 12px; z-index: 5;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,.1); border-radius: 20px;
+  padding: 5px 12px; font-size: 11px; font-family: var(--mono);
+  color: rgba(255,255,255,.8); pointer-events: none;
+  display: none;
+}
+.fach-zoom-indicator.visible { display: block; }
+.fach-zoom-controls {
+  display: flex; gap: 4px; margin-bottom: 8px;
+}
+.fach-zoom-controls button {
+  flex: 1; padding: 6px 0; border-radius: 7px; cursor: pointer;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
+  color: rgba(255,255,255,.75); font-size: 12px; font-weight: 600;
+  font-family: inherit; transition: .15s;
+}
+.fach-zoom-controls button:hover {
+  background: rgba(255,255,255,.08); color: #fff;
+}
+.fach-zoom-controls .zoom-val {
+  flex: 1.4; text-align: center; font-family: var(--mono);
+  color: var(--c-soft); background: rgba(44,197,236,.08);
+  border-color: rgba(44,197,236,.25);
+}
 
 #fach-drop {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -1195,7 +1226,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.6.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.6.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7728,7 +7759,11 @@ const _fach = {
   opacity: 1,
   baseW: 0, baseH: 0,   // dimensiones base del overlay (px del snapshot)
   format: 'jpg',
-  drag: null,           // {startX, startY, cx0, cy0}
+  drag: null,           // {sx, sy, cx0, cy0}
+  // Zoom + pan del stage (CSS transform sobre #fach-canvas-wrap)
+  zoom: 1,
+  tx: 0, ty: 0,         // offset del wrap dentro del stage (px de pantalla)
+  panDrag: null,        // {sx, sy, tx0, ty0}
 };
 
 function abrirFachada() {
@@ -7757,6 +7792,62 @@ function _resetFachadaUI() {
   document.getElementById('fach-scale-val').textContent = '100%';
   document.getElementById('fach-rot-val').textContent = '0°';
   document.getElementById('fach-op-val').textContent = '100%';
+  _fach.zoom = 1; _fach.tx = 0; _fach.ty = 0;
+  _fachApplyZoomTransform();
+}
+
+// Aplicar transform CSS al wrap (zoom + pan del stage)
+function _fachApplyZoomTransform() {
+  const wrap = document.getElementById('fach-canvas-wrap');
+  const ind  = document.getElementById('fach-zoom-indicator');
+  const btn  = document.getElementById('fach-zoom-btn');
+  if (!wrap) return;
+  wrap.style.transform = `translate(${_fach.tx}px, ${_fach.ty}px) scale(${_fach.zoom})`;
+  const pct = Math.round(_fach.zoom * 100) + '%';
+  if (ind) {
+    ind.textContent = pct;
+    ind.classList.toggle('visible', _fach.zoom !== 1);
+  }
+  if (btn) btn.textContent = pct;
+}
+
+// Zoom con origen en un punto del stage (screen coords). Ajusta tx/ty para que
+// el punto bajo el cursor no se mueva al hacer zoom.
+function _fachZoomAt(newZoom, screenX, screenY) {
+  newZoom = Math.max(0.5, Math.min(4, newZoom));
+  if (newZoom === _fach.zoom) return;
+  const wrap = document.getElementById('fach-canvas-wrap');
+  const stage = document.querySelector('#modal-fachada .fach-stage');
+  if (!wrap || !stage) return;
+  const stageRect = stage.getBoundingClientRect();
+  const wrapRect  = wrap.getBoundingClientRect();
+  // Punto pivote relativo al stage
+  const px = screenX - stageRect.left;
+  const py = screenY - stageRect.top;
+  // Posición actual del wrap dentro del stage antes del zoom
+  const wrapLeft = wrapRect.left - stageRect.left;
+  const wrapTop  = wrapRect.top  - stageRect.top;
+  const factor = newZoom / _fach.zoom;
+  // Nueva posición: mantener el punto bajo el cursor invariante
+  _fach.tx += (wrapLeft - px) * (factor - 1) + 0;
+  _fach.ty += (wrapTop  - py) * (factor - 1) + 0;
+  _fach.zoom = newZoom;
+  _fachApplyZoomTransform();
+}
+
+function fachZoomStep(dir) {
+  const stage = document.querySelector('#modal-fachada .fach-stage');
+  if (!stage) return;
+  const r = stage.getBoundingClientRect();
+  const cx = r.left + r.width / 2;
+  const cy = r.top  + r.height / 2;
+  const step = dir > 0 ? 1.25 : 1 / 1.25;
+  _fachZoomAt(_fach.zoom * step, cx, cy);
+}
+
+function fachZoomReset() {
+  _fach.zoom = 1; _fach.tx = 0; _fach.ty = 0;
+  _fachApplyZoomTransform();
 }
 
 // Cargar foto y capturar snapshot 3D
@@ -7878,6 +7969,13 @@ function fachUpdate() {
     }
 
     cv.addEventListener('mousedown', e => {
+      // Alt+click o botón medio → pan del stage (mueve la foto)
+      if (e.altKey || e.button === 1) {
+        _fach.panDrag = { sx: e.clientX, sy: e.clientY, tx0: _fach.tx, ty0: _fach.ty };
+        cv.classList.add('panning');
+        e.preventDefault();
+        return;
+      }
       const p = _clientToCanvas(e.clientX, e.clientY);
       if (!_hitOverlay(p.x, p.y)) return;
       _fach.drag = { sx: p.x, sy: p.y, cx0: _fach.cx, cy0: _fach.cy };
@@ -7886,6 +7984,12 @@ function fachUpdate() {
     });
 
     window.addEventListener('mousemove', e => {
+      if (_fach.panDrag) {
+        _fach.tx = _fach.panDrag.tx0 + (e.clientX - _fach.panDrag.sx);
+        _fach.ty = _fach.panDrag.ty0 + (e.clientY - _fach.panDrag.sy);
+        _fachApplyZoomTransform();
+        return;
+      }
       if (!_fach.drag) return;
       const p = _clientToCanvas(e.clientX, e.clientY);
       _fach.cx = _fach.drag.cx0 + (p.x - _fach.drag.sx);
@@ -7894,10 +7998,22 @@ function fachUpdate() {
     });
 
     window.addEventListener('mouseup', () => {
+      if (_fach.panDrag) {
+        _fach.panDrag = null;
+        cv.classList.remove('panning');
+      }
       if (!_fach.drag) return;
       _fach.drag = null;
       cv.classList.remove('dragging');
     });
+
+    // Rueda del mouse → zoom del stage con pivote en el cursor.
+    // preventDefault para bloquear scroll de página.
+    cv.addEventListener('wheel', e => {
+      e.preventDefault();
+      const step = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      _fachZoomAt(_fach.zoom * step, e.clientX, e.clientY);
+    }, { passive: false });
 
     // Doble-click: recentrar
     cv.addEventListener('dblclick', () => {
@@ -8347,6 +8463,7 @@ function _buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg) {
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(cxW, cyW, wallZ);
   mesh.receiveShadow = true;
+  mesh.userData.isWall = true;   // marca para ocultar en snapshot "En fachada"
   return mesh;
 }
 
@@ -9569,10 +9686,37 @@ window.v3d_snapshot = function(targetW = 1200) {
   S.traverse(o => { if (o.userData?.v3d && !grp) grp = o; });
   if (!grp) return null;
 
+  // ── Ocultar la pared ANTES de calcular bbox (para que el framing no la
+  //    incluya como aire vacío).
+  const hidden = [];
+  grp.traverse(o => {
+    if (o.userData?.isWall) { hidden.push([o, o.visible]); o.visible = false; }
+  });
+
+  // ── Atenuar emissiveIntensity de todos los materiales del grupo. En cajon_luz
+  //    la placa PVC lleva emissive alto (1.15) que satura la cara translúcida y
+  //    ahoga el detalle de la letra. Bajar a ~0.25 preserva el efecto luminoso
+  //    sin quemar el frente.
+  const emiSaved = [];
+  const _clampEmi = mat => {
+    if (!mat) return;
+    if (Array.isArray(mat)) { mat.forEach(_clampEmi); return; }
+    if (typeof mat.emissiveIntensity === 'number' && mat.emissiveIntensity > 0.3) {
+      emiSaved.push([mat, mat.emissiveIntensity]);
+      mat.emissiveIntensity = 0.25;
+    }
+  };
+  grp.traverse(o => { if (o.isMesh) _clampEmi(o.material); });
+
   const bb = new THREE.Box3().setFromObject(grp);
   const sz = bb.getSize(new THREE.Vector3());
   const ct = bb.getCenter(new THREE.Vector3());
-  if (sz.x <= 0 || sz.y <= 0) return null;
+  if (sz.x <= 0 || sz.y <= 0) {
+    // Restaurar antes de salir
+    hidden.forEach(([o, v]) => { o.visible = v; });
+    emiSaved.forEach(([m, v]) => { m.emissiveIntensity = v; });
+    return null;
+  }
 
   const aspect = sz.x / sz.y;
   const targetH = Math.round(targetW / aspect);
@@ -9593,17 +9737,16 @@ window.v3d_snapshot = function(targetW = 1200) {
   snapCam.lookAt(ct);
   snapCam.updateProjectionMatrix();
 
-  // Ocultar helpers (grid + plano de sombra) durante el snapshot
-  const hidden = [];
+  // Ocultar helpers de escena (grid + plano de sombra)
   S.traverse(o => {
-    if (o.userData?.v3d) return;              // el grupo 3D SÍ se renderiza
+    if (o.userData?.v3d) return;
     if (o.isGridHelper) { hidden.push([o, o.visible]); o.visible = false; }
     else if (o.isMesh && o.material?.isShadowMaterial) {
       hidden.push([o, o.visible]); o.visible = false;
     }
   });
 
-  // Guardar background y usar transparente
+  // Fondo transparente
   const bgOrig = S.background;
   S.background = null;
 
@@ -9611,9 +9754,9 @@ window.v3d_snapshot = function(targetW = 1200) {
     renderer.render(S, snapCam);
     return _snapCanvas.toDataURL('image/png');
   } finally {
-    // Restaurar TODO — incluso si el render lanzó
     S.background = bgOrig;
     hidden.forEach(([o, v]) => { o.visible = v; });
+    emiSaved.forEach(([m, v]) => { m.emissiveIntensity = v; });
   }
 };
 
@@ -9657,6 +9800,9 @@ window.v3d_snapshot = function(targetW = 1200) {
       <div id="fach-canvas-wrap">
         <canvas id="fach-canvas"></canvas>
       </div>
+
+      <!-- Indicador de zoom -->
+      <div class="fach-zoom-indicator" id="fach-zoom-indicator">100%</div>
     </div>
 
     <!-- PANEL derecho -->
@@ -9681,6 +9827,19 @@ window.v3d_snapshot = function(targetW = 1200) {
         </div>
         <div class="fach-hint">
           Arrastrá el letrero para moverlo. Doble-click para recentrar.
+        </div>
+      </div>
+
+      <div class="fach-section">
+        <h3>Zoom</h3>
+        <div class="fach-zoom-controls">
+          <button onclick="fachZoomStep(-1)" title="Alejar">−</button>
+          <button class="zoom-val" onclick="fachZoomReset()" id="fach-zoom-btn"
+                  title="Click para reset">100%</button>
+          <button onclick="fachZoomStep(1)" title="Acercar">+</button>
+        </div>
+        <div class="fach-hint">
+          Rueda del mouse sobre la foto para zoom. Con Alt+arrastrar podés mover la foto.
         </div>
       </div>
 
