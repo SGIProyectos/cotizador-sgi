@@ -1034,6 +1034,15 @@ svg g.pieza-labels                 { pointer-events: none; }
   margin: 8px 0; cursor: pointer;
 }
 .fach-wm-toggle input { accent-color: var(--c); cursor: pointer; }
+
+.fach-warn {
+  background: rgba(255, 180, 30, .08);
+  border: 1px solid rgba(255, 180, 30, .35);
+  color: #FFCC66; font-size: 11px; line-height: 1.4;
+  padding: 8px 10px; border-radius: 8px;
+  margin-bottom: 14px;
+}
+.fach-warn::before { content: '⚠  '; font-weight: 700; }
 .fach-scale-cm.excede {
   color: #ff3860;
 }
@@ -1323,7 +1332,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.14.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.14.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -8119,6 +8128,7 @@ function _fachRehidratar(f) {
 
       _fachRefreshDupBtn();
       _fachRefreshEscalaUI();
+      _fachWarnResolucion(img);
       fachUpdate('slider'); // re-calcula scale y dibuja
     };
     ov.src = snapUrl;
@@ -8215,6 +8225,25 @@ function fachZoomReset() {
   _fachApplyZoomTransform();
 }
 
+// Muestra un banner amarillo si la foto es chica (< 800px de ancho o
+// < 600px de alto). El PDF y las descargas van a salir pixelados —
+// vale la pena avisar antes de que el vendedor pierda tiempo.
+function _fachWarnResolucion(img) {
+  const banner = document.getElementById('fach-warn');
+  if (!banner) return;
+  const w = img?.width || 0, h = img?.height || 0;
+  const MIN_W = 800, MIN_H = 600;
+  if (w >= MIN_W && h >= MIN_H) {
+    banner.style.display = 'none';
+    banner.textContent = '';
+    return;
+  }
+  banner.textContent =
+    `Foto chica (${w}×${h} px). El PDF y las descargas pueden verse ` +
+    `pixelados — recomendamos ≥ ${MIN_W} px de ancho para uso comercial.`;
+  banner.style.display = '';
+}
+
 // Detecta si el letrero cotizado emite luz (impacta glow perimetral):
 //   - letras: cajon_luz / retro_halo / abierta_luz
 //   - caja:   siempre luminosa
@@ -8304,6 +8333,7 @@ function fachOnFile(file) {
         document.getElementById('fach-panel').classList.remove('hidden');
         _fachRefreshDupBtn();
         _fachRefreshEscalaUI();
+        _fachWarnResolucion(img);
         // fachUpdate('slider') re-computa scale usando el realPxPerCm rehidratado
         // (si aplica) — así el letrero arranca a 1:1 real, no al 25% default.
         fachUpdate('slider');
@@ -10904,10 +10934,12 @@ window.v3d_snapshot = function(targetW = 2200, opts = {}) {
           <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
         </svg>
         <div class="fach-drop-title">Click para subir foto del muro</div>
-        <div class="fach-drop-sub">JPG, PNG, WEBP</div>
+        <div class="fach-drop-sub">JPG, PNG, WEBP · en móvil: cámara o galería</div>
       </div>
+      <!-- accept="image/*" (en vez de tipos explicitos) hace que mobile Safari/
+           Chrome ofrezcan cámara + galería al vendedor en campo. -->
       <input type="file" id="fach-file-input"
-             accept="image/jpeg,image/png,image/webp,image/gif"
+             accept="image/*"
              style="display:none" onchange="fachOnFile(this.files[0]); this.value=''">
 
       <!-- Canvas composición -->
@@ -10951,6 +10983,8 @@ window.v3d_snapshot = function(targetW = 2200, opts = {}) {
 
     <!-- PANEL derecho -->
     <div class="fach-panel hidden" id="fach-panel">
+
+      <div class="fach-warn" id="fach-warn" style="display:none"></div>
 
       <div class="fach-section">
         <h3>Ajustar diseño</h3>
