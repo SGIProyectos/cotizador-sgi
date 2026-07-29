@@ -1226,7 +1226,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.6.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.6.2</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7863,7 +7863,10 @@ function fachOnFile(file) {
     img.onload = () => {
       _fach.photo = img;
       // Capturar snapshot 3D actual
-      const snapUrl = window.v3d_snapshot(1400);
+      // SSAA 2× internamente → bitmap real 4400 px. Downsample al dibujar
+      // en canvas 2D con smoothingQuality='high' da bordes limpios incluso al
+      // 300% del slider de tamaño.
+      const snapUrl = window.v3d_snapshot(2200);
       if (!snapUrl) {
         alert("No se pudo capturar el diseño 3D. Verifica que hayas cargado un SVG y calculado la cotización.");
         return;
@@ -7914,6 +7917,11 @@ function _fachDraw() {
   const cv = document.getElementById('fach-canvas');
   if (!cv || !_fach.photo) return;
   const ctx = cv.getContext('2d');
+  // Downsampling de alta calidad — con SSAA 2× en el snapshot, el overlay se
+  // dibuja downscaled ~2× y este filtro (Lanczos-like en Chrome/FF) da bordes
+  // muy limpios en las curvas de las letras.
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.clearRect(0, 0, cv.width, cv.height);
   ctx.drawImage(_fach.photo, 0, 0, cv.width, cv.height);
   if (_fach.overlay) {
@@ -8085,7 +8093,7 @@ function fachDescargar() {
   if (!cv || !_fach.photo) return;
   const mime = _fach.format === 'jpg' ? 'image/jpeg' : 'image/png';
   const ext  = _fach.format === 'jpg' ? 'jpg' : 'png';
-  const quality = _fach.format === 'jpg' ? 0.88 : undefined;
+  const quality = _fach.format === 'jpg' ? 0.92 : undefined;
 
   // Nombre: fachada-{cliente|fecha}
   let base = 'fachada';
@@ -9678,8 +9686,14 @@ function _getSnapRenderer() {
 }
 
 // Devuelve dataURL PNG con alpha del grupo 3D activo, framing tight.
-// targetW: ancho en px del bitmap (default 1200). El alto sigue la razón bbox.
-window.v3d_snapshot = function(targetW = 1200) {
+// targetW: ancho FINAL deseado del bitmap (default 2200). Internamente
+// renderiza a 2× ese valor para SSAA — el downsample al dibujar en canvas 2D
+// con smoothingQuality='high' produce bordes mucho más limpios que el MSAA
+// 4× nativo de WebGL, sobre todo en las curvas de las letras.
+window.v3d_snapshot = function(targetW = 2200) {
+  // Factor SSAA — subir a 3 si sigue viéndose pobre, con costo cuadrático de memoria.
+  const SSAA = 2;
+  const superW = targetW * SSAA;
   if (!S || !CAM) return null;
   // Ubicar el grupo activo (el que tiene userData.v3d)
   let grp = null;
@@ -9719,10 +9733,10 @@ window.v3d_snapshot = function(targetW = 1200) {
   }
 
   const aspect = sz.x / sz.y;
-  const targetH = Math.round(targetW / aspect);
+  const superH = Math.round(superW / aspect);
 
   const renderer = _getSnapRenderer();
-  renderer.setSize(targetW, targetH, false);
+  renderer.setSize(superW, superH, false);
   renderer.setClearColor(0x000000, 0);
 
   // Cámara ortográfica frontal centrada en el bbox, sin padding extra
