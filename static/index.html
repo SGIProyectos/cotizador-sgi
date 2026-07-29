@@ -1332,7 +1332,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.14.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.15.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -7866,7 +7866,8 @@ const _fach = {
   opacity: 1,
   baseW: 0, baseH: 0,   // dimensiones base del overlay (px del snapshot)
   format: 'jpg',
-  drag: null,           // {sx, sy, cx0, cy0, idx}
+  drag: null,           // {sx, sy, cx0, cy0, idx} — drag del letrero completo
+  handleDrag: null,     // {type, idx, cx, cy, sx, sy, scale0, rot0} — resize/rotación
   // Zoom + pan del stage (CSS transform sobre #fach-canvas-wrap)
   zoom: 1,
   tx: 0, ty: 0,         // offset del wrap dentro del stage (px de pantalla)
@@ -8435,9 +8436,126 @@ function _fachDraw() {
     }
   }
 
+  // Handles de edición (resize esquinas + rotación arriba). Solo en preview,
+  // no en export (por eso NO va en toBlob output — se pinta al final y
+  // _fachGenBlob NO llama _fachDraw, así el archivo sale limpio).
+  // Wait: _fachGenBlob usa el canvas actual sin re-dibujar. Los handles
+  // igualmente saldrían en el export. Solución: los skipeamos durante export.
+  if (!_fach._exporting) _fachDrawHandles(ctx, cv);
+
   // Marca de agua SGI (esquina inferior derecha). Discreta pero visible
   // en la composición que va a WhatsApp/redes → refuerza branding.
   if (_fach.watermark) _fachDrawWatermark(ctx, cv);
+}
+
+// Handles de edición: 4 cuadrados en esquinas del letrero (resize) + 1
+// círculo arriba conectado por línea (rotación). Editor visual "profesional"
+// que ahorra ir al slider. Se omiten durante drag/measure/oculto para no
+// entorpecer. Skipeados en export.
+function _fachDrawHandles(ctx, cv) {
+  if (!_fach.overlay || _fach.oculto || _fach.measureMode) return;
+  if (_fach.drag || _fach.panDrag) return;
+  const w = _fach.baseW * _fach.scale;
+  const h = _fach.baseH * _fach.scale;
+  const hz = Math.max(6, cv.width * 0.005);       // medio-tamaño del handle
+  const rotDist = Math.max(30, cv.width * 0.025); // separación del rot handle
+
+  ctx.save();
+  ctx.lineWidth = Math.max(1.5, cv.width * 0.0009);
+  for (const p of _fach.positions) {
+    ctx.save();
+    ctx.translate(p.cx, p.cy);
+    ctx.rotate(_fach.rot);
+    // Esquinas — cuadraditos blancos con borde oscuro
+    ctx.strokeStyle = 'rgba(0,0,0,.75)';
+    ctx.fillStyle   = 'rgba(255,255,255,.95)';
+    const cs = [[-w/2, -h/2], [w/2, -h/2], [w/2, h/2], [-w/2, h/2]];
+    for (const [x, y] of cs) {
+      ctx.fillRect(x - hz, y - hz, hz*2, hz*2);
+      ctx.strokeRect(x - hz, y - hz, hz*2, hz*2);
+    }
+    // Handle de rotación — línea + círculo arriba del centro superior
+    ctx.beginPath();
+    ctx.moveTo(0, -h/2);
+    ctx.lineTo(0, -h/2 - rotDist);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, -h/2 - rotDist, hz * 1.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// Drag activo sobre un handle: calcula nueva escala o rotación y sincroniza
+// con los sliders. Comparte scale/rot entre todas las positions (el modelo
+// es "misma copia N veces con ajuste común").
+function _fachHandleDragMove(p) {
+  const hd = _fach.handleDrag;
+  if (!hd) return;
+  if (hd.type === 'resize') {
+    // Ratio de distancias al centro (original vs actual). Proporcional.
+    const d0 = Math.hypot(hd.sx - hd.cx, hd.sy - hd.cy);
+    const d1 = Math.hypot(p.x - hd.cx, p.y - hd.cy);
+    if (d0 <= 0) return;
+    const ratio = d1 / d0;
+    // Aplicar como si viniera del slider — respeta clamping 10..300%
+    const scale100 = _fach.realPxPerCm && _fach.letreroAnchoCm
+      ? (_fach.letreroAnchoCm * _fach.realPxPerCm) / _fach.baseW
+      : (_fach._initScale || 1);
+    const newScale = hd.scale0 * ratio;
+    let sPct = Math.round((newScale / scale100) * 100);
+    sPct = Math.max(10, Math.min(300, sPct));
+    document.getElementById('fach-scale').value = sPct;
+    document.getElementById('fach-scale-val').value = sPct;
+    fachUpdate('slider');
+  } else if (hd.type === 'rot') {
+    const a0 = Math.atan2(hd.sy - hd.cy, hd.sx - hd.cx);
+    const a1 = Math.atan2(p.y - hd.cy, p.x - hd.cx);
+    let newRot = hd.rot0 + (a1 - a0);
+    let rDeg = Math.round(newRot * 180 / Math.PI);
+    // Wrap a -180..180 para sync con el slider
+    rDeg = ((rDeg + 180) % 360 + 360) % 360 - 180;
+    document.getElementById('fach-rot').value = rDeg;
+    document.getElementById('fach-rot-val').value = rDeg;
+    fachUpdate('slider');
+  }
+}
+
+// Hit-test contra handles (esquinas + rotación). Devuelve el primero que
+// golpea o null. Tolerancia = 1.4× tamaño del handle (más fácil agarrar).
+function _hitHandle(x, y) {
+  if (!_fach.overlay || _fach.oculto || _fach.measureMode) return null;
+  const cv = document.getElementById('fach-canvas');
+  const w = _fach.baseW * _fach.scale;
+  const h = _fach.baseH * _fach.scale;
+  const hz = Math.max(6, cv.width * 0.005) * 1.4;
+  const rotDist = Math.max(30, cv.width * 0.025);
+  const c = Math.cos(_fach.rot), s = Math.sin(_fach.rot);
+  for (let i = _fach.positions.length - 1; i >= 0; i--) {
+    const p = _fach.positions[i];
+    // Rotación primero (queda arriba, sin conflicto con esquina superior)
+    {
+      const lx = 0, ly = -h/2 - rotDist;
+      const gx = p.cx + lx * c - ly * s;
+      const gy = p.cy + lx * s + ly * c;
+      if (Math.hypot(x - gx, y - gy) <= hz * 1.3) {
+        return { type: 'rot', idx: i };
+      }
+    }
+    // Esquinas
+    const cs4 = [[-w/2, -h/2, 'nw'], [w/2, -h/2, 'ne'],
+                 [w/2, h/2, 'se'],   [-w/2, h/2, 'sw']];
+    for (const [lx, ly, corner] of cs4) {
+      const gx = p.cx + lx * c - ly * s;
+      const gy = p.cy + lx * s + ly * c;
+      if (Math.abs(x - gx) <= hz && Math.abs(y - gy) <= hz) {
+        return { type: 'resize', idx: i, corner };
+      }
+    }
+  }
+  return null;
 }
 
 // Cotas: dibuja una chip "ancho×alto cm" debajo de cada letrero. Usa el bbox
@@ -8970,6 +9088,21 @@ function _fachRefreshEscalaUI() {
         e.preventDefault();
         return;
       }
+      // Handles de edición (resize esquinas / rotación) — chequear ANTES del
+      // hit-test del letrero (los handles quedan encima).
+      const h = _hitHandle(p.x, p.y);
+      if (h) {
+        const pos = _fach.positions[h.idx];
+        _fach.handleDrag = {
+          type: h.type, idx: h.idx, corner: h.corner,
+          sx: p.x, sy: p.y,
+          cx: pos.cx, cy: pos.cy,
+          scale0: _fach.scale, rot0: _fach.rot,
+        };
+        cv.classList.add('dragging');
+        e.preventDefault();
+        return;
+      }
       const idx = _hitOverlayIdx(p.x, p.y);
       if (idx < 0) return;
       const pos = _fach.positions[idx];
@@ -8985,6 +9118,11 @@ function _fachRefreshEscalaUI() {
         _fachApplyZoomTransform();
         return;
       }
+      if (_fach.handleDrag) {
+        const p = _clientToCanvas(e.clientX, e.clientY);
+        _fachHandleDragMove(p);
+        return;
+      }
       if (!_fach.drag) return;
       const p = _clientToCanvas(e.clientX, e.clientY);
       const pos = _fach.positions[_fach.drag.idx];
@@ -8997,6 +9135,10 @@ function _fachRefreshEscalaUI() {
       if (_fach.panDrag) {
         _fach.panDrag = null;
         cv.classList.remove('panning');
+      }
+      if (_fach.handleDrag) {
+        _fach.handleDrag = null;
+        cv.classList.remove('dragging');
       }
       if (!_fach.drag) return;
       _fach.drag = null;
@@ -9014,12 +9156,24 @@ function _fachRefreshEscalaUI() {
     // Doble-click: recentrar (todos los letreros, distribuidos si hay >1)
     cv.addEventListener('dblclick', () => { fachRecentrar(); });
 
-    // Touch (móvil)
+    // Touch (móvil) — replica mismo flujo que mouse: handles primero, drag después
     cv.addEventListener('touchstart', e => {
       if (!e.touches[0]) return;
       const t = e.touches[0];
       const p = _clientToCanvas(t.clientX, t.clientY);
       if (_fach.measureMode) { _fachAreaClick(p.x, p.y); e.preventDefault(); return; }
+      const h = _hitHandle(p.x, p.y);
+      if (h) {
+        const pos = _fach.positions[h.idx];
+        _fach.handleDrag = {
+          type: h.type, idx: h.idx, corner: h.corner,
+          sx: p.x, sy: p.y,
+          cx: pos.cx, cy: pos.cy,
+          scale0: _fach.scale, rot0: _fach.rot,
+        };
+        e.preventDefault();
+        return;
+      }
       const idx = _hitOverlayIdx(p.x, p.y);
       if (idx < 0) return;
       const pos = _fach.positions[idx];
@@ -9028,9 +9182,11 @@ function _fachRefreshEscalaUI() {
     }, { passive: false });
 
     cv.addEventListener('touchmove', e => {
-      if (!_fach.drag || !e.touches[0]) return;
+      if (!e.touches[0]) return;
       const t = e.touches[0];
       const p = _clientToCanvas(t.clientX, t.clientY);
+      if (_fach.handleDrag) { _fachHandleDragMove(p); e.preventDefault(); return; }
+      if (!_fach.drag) return;
       const pos = _fach.positions[_fach.drag.idx];
       pos.cx = _fach.drag.cx0 + (p.x - _fach.drag.sx);
       pos.cy = _fach.drag.cy0 + (p.y - _fach.drag.sy);
@@ -9038,7 +9194,10 @@ function _fachRefreshEscalaUI() {
       e.preventDefault();
     }, { passive: false });
 
-    cv.addEventListener('touchend', () => { _fach.drag = null; });
+    cv.addEventListener('touchend', () => {
+      _fach.drag = null;
+      _fach.handleDrag = null;
+    });
 
     // Drag & drop de archivo sobre la stage
     const stage = document.querySelector('#modal-fachada .fach-stage');
@@ -9102,21 +9261,23 @@ function _fachBaseName() {
 }
 
 // Genera Blob de la composición actual. Callback recibe (blob, mime, ext).
-// Si `_fach.cotasExport` está activo, dibuja cotas SOLO en el archivo
-// (no persiste en el preview): pinta cotas → toBlob → redibuja normal.
+// Antes de toBlob: re-dibuja en modo _exporting (skipea handles de edición)
+// y agrega cotas si el toggle está activo. Después restaura preview normal.
 function _fachGenBlob(fmt, cb) {
   const cv = document.getElementById('fach-canvas');
   if (!cv || !_fach.photo) { cb(null); return; }
   const mime = fmt === 'jpg' ? 'image/jpeg' : 'image/png';
   const ext  = fmt === 'jpg' ? 'jpg' : 'png';
   const quality = fmt === 'jpg' ? 0.92 : undefined;
-  const addCotas = _fach.cotasExport;
-  if (addCotas) {
+  _fach._exporting = true;
+  _fachDraw(); // redraw sin handles
+  if (_fach.cotasExport) {
     const ctx = cv.getContext('2d');
     _fachDrawCotas(ctx, cv);
   }
   cv.toBlob(blob => {
-    if (addCotas) _fachDraw(); // restaurar preview sin cotas
+    _fach._exporting = false;
+    _fachDraw(); // restaurar preview con handles
     cb(blob, mime, ext);
   }, mime, quality);
 }
