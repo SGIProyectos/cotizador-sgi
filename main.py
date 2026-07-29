@@ -38,7 +38,7 @@ from catalog_data import (
     catalog_to_dict,
 )
 from excel_gen import generar_xlsx
-from pdf_gen import generar_pdf, generar_pdf_entrega, generar_pdf_ot
+from pdf_gen import generar_pdf, generar_pdf_entrega, generar_pdf_fachada, generar_pdf_ot
 from plano_gen import generar_plano_cliente, generar_plano_corte, generar_plano_taller
 
 BASE = Path(__file__).parent
@@ -1094,6 +1094,43 @@ async def api_pdf(quote_id: str, cliente: str = "", notas: str = ""):
     pdf_bytes = generar_pdf(result, meta)
     filename  = f"Cotizacion_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
 
+    return FileResponse(
+        path=_write_tmp(pdf_bytes, filename),
+        filename=filename,
+        media_type="application/pdf",
+    )
+
+
+@app.post("/api/pdf/fachada/{quote_id}")
+async def api_pdf_fachada(
+    quote_id: str,
+    image: UploadFile = File(...),
+    espacio_cm: str = Form(""),
+    letrero_cm: str = Form(""),
+    nota: str = Form(""),
+):
+    """Genera un PDF con la composición 'En fachada' + encabezado de la
+    cotización. Recibe la imagen final del canvas 2D como multipart (PNG/JPEG).
+    Los meta opcionales se muestran bajo la imagen."""
+    result = _ensure_quote_in_memory(quote_id)
+    meta   = _get_meta(quote_id)
+    if not result:
+        raise HTTPException(404, "Cotización no encontrada")
+    if image.content_type not in ("image/jpeg", "image/png", "image/webp"):
+        raise HTTPException(400, "Formato de imagen no soportado (JPEG/PNG/WEBP)")
+
+    _meta_con_cliente(meta)
+    image_bytes = await image.read()
+    if len(image_bytes) > 12 * 1024 * 1024:  # 12 MB defensivo
+        raise HTTPException(413, "Imagen demasiado grande (máx 12 MB)")
+
+    fachada_meta = {}
+    if espacio_cm: fachada_meta["espacio_cm"] = espacio_cm
+    if letrero_cm: fachada_meta["letrero_cm"] = letrero_cm
+    if nota:       fachada_meta["nota"] = nota
+
+    pdf_bytes = generar_pdf_fachada(result, meta, image_bytes, fachada_meta or None)
+    filename  = f"Fachada_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
     return FileResponse(
         path=_write_tmp(pdf_bytes, filename),
         filename=filename,

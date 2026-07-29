@@ -13,6 +13,7 @@ from reportlab.platypus import (
     Flowable,
     Frame,
     HRFlowable,
+    Image,
     KeepTogether,
     NextPageTemplate,
     PageBreak,
@@ -1184,5 +1185,91 @@ def _dims_caja(result) -> tuple[float, float]:
         return (s + r) / 2, (s - r) / 2
     except Exception:
         return 0.0, 0.0
+
+
+# ─── 5. SIMULACIÓN EN FACHADA ────────────────────────────────────────────────
+
+def generar_pdf_fachada(result, meta: dict, image_bytes: bytes,
+                        fachada_meta: dict | None = None) -> bytes:
+    """PDF de 1 página con la composición del simulador 'En fachada'
+    + encabezado de la cotización. Para adjuntar a la cotización o entregar
+    al cliente como preview visual.
+
+    - `image_bytes`: PNG/JPEG de la composición (canvas exportado por el
+      frontend, ya incluye foto + letrero + rect + marca de agua).
+    - `fachada_meta`: opcional; dict con `espacio_cm` (str "500x200"),
+      `letrero_cm` (str "260x60"), etc. Para el resumen bajo la imagen.
+    """
+    buf = io.BytesIO()
+    doc = _doc_base(buf, "Simulación en fachada")
+    st  = _estilos()
+    elements = []
+
+    empresa = meta.get("empresa", "SGI Impresión y Diseño")
+    elements.append(_header(empresa, "SIMULACIÓN EN FACHADA", st))
+    elements.append(Spacer(1, 0.25*cm))
+
+    # Info general — mismo grid que las demás salidas
+    folio   = meta.get("folio", "---")
+    fecha   = datetime.now().strftime("%d/%m/%Y")
+    cliente = meta.get("cliente") or "—"
+    tipo_label = {"letras_3d": "Letras 3D (Canal)", "letras_planas": "Letras Planas",
+                  "caja_luz":  "Caja de Luz"}.get(result.tipo, result.tipo)
+    elements.append(_info_grid([
+        ["Folio:",    folio,      "Cliente:", cliente],
+        ["Fecha:",    fecha,      "Tipo:",    tipo_label],
+    ], st))
+    elements.append(Spacer(1, 0.35*cm))
+
+    # Imagen composición — ajustar a espacio disponible manteniendo aspecto.
+    # Espacio útil vertical estimado: ~19 cm después de header/info/footer/margins.
+    MAX_W = PW
+    MAX_H = 19 * cm
+    try:
+        from reportlab.lib.utils import ImageReader
+        ir = ImageReader(io.BytesIO(image_bytes))
+        iw, ih = ir.getSize()
+        if iw <= 0 or ih <= 0:
+            raise ValueError("Imagen sin dimensiones")
+        aspect = iw / ih
+        # Fit dentro de MAX_W × MAX_H manteniendo aspecto
+        w = MAX_W
+        h = w / aspect
+        if h > MAX_H:
+            h = MAX_H
+            w = h * aspect
+        img_flow = Image(io.BytesIO(image_bytes), width=w, height=h)
+        img_flow.hAlign = "CENTER"
+        elements.append(img_flow)
+    except Exception:
+        log.exception("No se pudo insertar imagen de fachada en PDF")
+        elements.append(_p("(Imagen no disponible)", S_SMALL))
+
+    elements.append(Spacer(1, 0.35*cm))
+
+    # Resumen bajo imagen: espacio pared + medida real del letrero (si se pasó)
+    if fachada_meta:
+        rows = []
+        if fachada_meta.get("espacio_cm"):
+            rows.append(["Espacio disponible:", fachada_meta["espacio_cm"]])
+        if fachada_meta.get("letrero_cm"):
+            rows.append(["Medida del letrero:", fachada_meta["letrero_cm"]])
+        if fachada_meta.get("nota"):
+            rows.append(["Nota:", fachada_meta["nota"]])
+        if rows:
+            elements.append(_info_grid(rows +
+                ([["", "", "", ""]] if len(rows) < 2 else []), st))
+            elements.append(Spacer(1, 0.3*cm))
+
+    # Pie discreto
+    elements.append(_p(
+        "Simulación visual sobre foto del cliente. Colores, iluminación y "
+        "acabados pueden variar del resultado final por condiciones de la "
+        "pared, encendido del letrero y calidad de la foto de referencia.",
+        S_SMALL
+    ))
+
+    doc.build(elements)
+    return buf.getvalue()
 
 
