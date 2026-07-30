@@ -1357,7 +1357,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.18.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.18.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -9614,7 +9614,6 @@ import { SVGLoader }     from 'three/addons/loaders/SVGLoader.js';
 import { EffectComposer }  from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass }      from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass }      from 'three/addons/postprocessing/OutputPass.js';
 
 // ─── estado de escena ───────────────────────────────────────────────────────
 let S, CAM, REN, CTR, AID, COMP;
@@ -9688,9 +9687,6 @@ function initScene(canvas) {
   COMP.setSize(W, H);
   COMP.addPass(new RenderPass(S, CAM));
   COMP.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.65, 0.55, 0.55));
-  // OutputPass convierte de linear a sRGB — sin esto la escena entera se ve
-  // negra excepto los colores blancos (bug conocido de three.js con composer).
-  COMP.addPass(new OutputPass());
 
   const loop = () => { AID = requestAnimationFrame(loop); CTR.update(); COMP.render(); };
   loop();
