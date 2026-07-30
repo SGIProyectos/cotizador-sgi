@@ -1351,7 +1351,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.16.2</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.16.3</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -3721,9 +3721,19 @@ function colorizePaths(svgEl, paths) {
   // Capas de anotación de renders previos (badges numerados, cuadro de corte)
   svgEl.querySelectorAll("g.pieza-labels, g.cuadro-corte").forEach(g => g.remove());
 
-  // Reset all shapes to neutral
+  // Detectar si el SVG ya trae colores definidos (logos, imágenes) vs es
+  // line-art (fill="none" — típico de diseños Illustrator para cotizar
+  // letras individuales). Si ya trae colores, PRESERVARLOS en el preview —
+  // sólo agregamos el stroke coloreado como anotación de pieza. Sin esto,
+  // un logo como casel_final.svg (rojos + grises + blancos) quedaba
+  // invisible porque lo pintábamos con overlay al 20% de opacidad.
+  const hasOriginalFills = paths.some(p =>
+    p.fill && p.fill !== 'none' && p.fill !== 'currentColor' && p.fill !== 'transparent'
+  );
+
+  // Reset all shapes to neutral (fill sólo si el SVG NO trae colores propios)
   domPaths.forEach(el => {
-    el.style.fill        = "none";
+    if (!hasOriginalFills) el.style.fill = "none";
     el.style.stroke      = "rgba(180,180,180,0.35)";
     el.style.strokeWidth = "1";
     el.style.strokeDasharray = "";
@@ -3751,18 +3761,18 @@ function colorizePaths(svgEl, paths) {
       if (!el) return;
       const isCaja = useId ? (p.svg_id === cajaId) : (p === cajaPath);
       if (isCaja) {
-        // Contorno de caja — gris
-        el.style.fill        = "rgba(120,120,120,0.08)";
+        // Contorno de caja — gris (siempre transparente para ver el diseño)
+        if (!hasOriginalFills) el.style.fill = "rgba(120,120,120,0.08)";
         el.style.stroke      = "#888";
         el.style.strokeWidth = "1.5";
       } else if (p.is_closed && p.area_px > 0) {
         // Vinil de corte / diseño interno — azul (spec roadmap)
-        el.style.fill        = "rgba(52,152,219,0.22)";
+        if (!hasOriginalFills) el.style.fill = "rgba(52,152,219,0.22)";
         el.style.stroke      = "#3498db";
         el.style.strokeWidth = "1.5";
       } else {
         // Trazos abiertos / problemáticos — rojo punteado (alerta)
-        el.style.fill            = "none";
+        if (!hasOriginalFills) el.style.fill = "none";
         el.style.stroke          = "#e74c3c";
         el.style.strokeWidth     = "1.5";
         el.style.strokeDasharray = "4 3";
@@ -3809,26 +3819,28 @@ function colorizePaths(svgEl, paths) {
 
   } else {
     // Letras 3D / planas: paleta naranja-cálida (cara material) por letra
-    // para distinguirlas individualmente sin perder el "naranja = cara" del spec
+    // para distinguirlas individualmente sin perder el "naranja = cara" del spec.
+    // Si el SVG ya trae colores (logo), preservamos y sólo agregamos stroke
+    // coloreado como anotación (sin taparlo con overlay al 20%).
     let colorIdx = 0;
     paths.forEach((p, i) => {
       const el = getEl(p, i);
       if (!el) return;
       if (p.is_closed && p.es_hueco) {
         // Hueco / placa de fondo — gris tenue, no se cotiza ni se numera
-        el.style.fill        = "rgba(140,140,140,0.10)";
+        if (!hasOriginalFills) el.style.fill = "rgba(140,140,140,0.10)";
         el.style.stroke      = "#9aa2ab";
         el.style.strokeWidth = "1";
         el.style.strokeDasharray = "5 4";
       } else if (p.is_closed) {
         const c = PATH_PALETTE[colorIdx % PATH_PALETTE.length];
         colorIdx++;
-        el.style.fill        = c + "33";
+        if (!hasOriginalFills) el.style.fill = c + "33";
         el.style.stroke      = c;
         el.style.strokeWidth = "1.5";
       } else {
         // Trazo abierto = alerta — no se cortará en producción
-        el.style.fill            = "none";
+        if (!hasOriginalFills) el.style.fill = "none";
         el.style.stroke          = "#e74c3c";
         el.style.strokeWidth     = "1.2";
         el.style.strokeDasharray = "3 3";
