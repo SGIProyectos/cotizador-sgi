@@ -1357,7 +1357,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.18.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.17.2</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -9611,12 +9611,9 @@ async function fachCompartir() {
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SVGLoader }     from 'three/addons/loaders/SVGLoader.js';
-import { EffectComposer }  from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass }      from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
 // ─── estado de escena ───────────────────────────────────────────────────────
-let S, CAM, REN, CTR, AID, COMP;
+let S, CAM, REN, CTR, AID;
 let _explodeGroups = null;   // { frontGrp, depthSvg, exploded }
 let _cajaLedRefs = [];       // [{ mat, mBack, light, wattsFactor }] LEDs de caja para animar
 const LDR = new SVGLoader();
@@ -9679,16 +9676,7 @@ function initScene(canvas) {
   sp.receiveShadow = true;
   S.add(sp);
 
-  // Post-processing: bloom real para que los letreros luminosos brillen con
-  // halo natural (se atenúa cuando la letra queda de canto, se abre al mirarla
-  // de frente). Reemplaza el hack de sprite billboard "pegado" que se veía
-  // saturado. threshold 0.55 = pixels con luminancia >55% florecen.
-  COMP = new EffectComposer(REN);
-  COMP.setSize(W, H);
-  COMP.addPass(new RenderPass(S, CAM));
-  COMP.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.65, 0.55, 0.55));
-
-  const loop = () => { AID = requestAnimationFrame(loop); CTR.update(); COMP.render(); };
+  const loop = () => { AID = requestAnimationFrame(loop); CTR.update(); REN.render(S, CAM); };
   loop();
 }
 
@@ -9822,7 +9810,6 @@ window._v3dResize = function() {
     CAM.aspect = w / h;
     CAM.updateProjectionMatrix();
     REN.setSize(w, h);
-    if (COMP) COMP.setSize(w, h);
   }
 };
 
@@ -10238,31 +10225,25 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
         const cx = bb.x0 + bb.w / 2;
         const cy = bb.y0 + bb.h / 2;
 
-        // Sprite radial residual: muy sutil (opacity 0.15, 1.3× letra) — sirve
-        // como fallback de halo si el bloom no está activo, y contribuye a
-        // luminancia del framebuffer para que el bloom pass tenga más área que
-        // florecer alrededor de la cara. Antes era el efecto principal (0.7 /
-        // 2.2×) y saturaba. Ahora bloom hace el trabajo pesado.
+        // Sprite radial — 2.2x el tamaño de la letra para halo generoso
         const spriteMat = new THREE.SpriteMaterial({
           map: glowTex,
           color: 0xfff2c0,
           transparent: true,
-          opacity: 0.15,
+          opacity: 0.7,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         });
-        const glowSize = Math.max(bb.w, bb.h) * 1.3;
+        const glowSize = Math.max(bb.w, bb.h) * 2.2;
         const sprite = new THREE.Sprite(spriteMat);
         sprite.scale.set(glowSize, glowSize, 1);
-        sprite.position.set(cx, cy, depthSvg + 1.0 / sf);
+        sprite.position.set(cx, cy, depthSvg + 1.0 / sf);   // 1 cm delante de la cara
         sprite.renderOrder = 3;
         frontGrp.add(sprite);
 
-        // PointLight cálida — ilumina físicamente la pared/muro (bloom es
-        // screen-space, no ilumina otros objetos). Bajada 8→3.5 para no sumar
-        // sobreexposición encima del bloom.
-        const pl = new THREE.PointLight(0xffdc80, 3.5, depthSvg * 20, 1.4);
-        pl.position.set(cx, cy, depthSvg + 4.0 / sf);
+        // PointLight cálida — ilumina físicamente la escena delante de la letra
+        const pl = new THREE.PointLight(0xffdc80, 8, depthSvg * 20, 1.4);
+        pl.position.set(cx, cy, depthSvg + 4.0 / sf);   // 4 cm delante
         frontGrp.add(pl);
       }
 
