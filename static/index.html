@@ -1357,7 +1357,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.17.2</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.17.3</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -10182,8 +10182,8 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       const shrink   = 0.2 / sf;
       const pvcMat = new THREE.MeshPhongMaterial({
         color: 0xfff6d8,
-        emissive: new THREE.Color(0xffdc70),
-        emissiveIntensity: 1.15,
+        emissive: new THREE.Color(0xffe8b8),
+        emissiveIntensity: 0.75,
         specular: 0x221100, shininess: 12,
         side: THREE.DoubleSide,
       });
@@ -10225,25 +10225,28 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
         const cx = bb.x0 + bb.w / 2;
         const cy = bb.y0 + bb.h / 2;
 
-        // Sprite radial — 2.2x el tamaño de la letra para halo generoso
+        // Sprite radial — 1.5x el tamaño de la letra, opacity 0.30. Antes era
+        // 2.2x/0.7 y se veia como "sticker luminoso pegado" al frente. Ahora
+        // es un halo discreto que suma un poco de resplandor sin gritar.
         const spriteMat = new THREE.SpriteMaterial({
           map: glowTex,
           color: 0xfff2c0,
           transparent: true,
-          opacity: 0.7,
+          opacity: 0.30,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         });
-        const glowSize = Math.max(bb.w, bb.h) * 2.2;
+        const glowSize = Math.max(bb.w, bb.h) * 1.5;
         const sprite = new THREE.Sprite(spriteMat);
         sprite.scale.set(glowSize, glowSize, 1);
-        sprite.position.set(cx, cy, depthSvg + 1.0 / sf);   // 1 cm delante de la cara
+        sprite.position.set(cx, cy, depthSvg + 1.0 / sf);
         sprite.renderOrder = 3;
         frontGrp.add(sprite);
 
-        // PointLight cálida — ilumina físicamente la escena delante de la letra
-        const pl = new THREE.PointLight(0xffdc80, 8, depthSvg * 20, 1.4);
-        pl.position.set(cx, cy, depthSvg + 4.0 / sf);   // 4 cm delante
+        // PointLight blanco cálido — ilumina físicamente muro/cerchas. Bajada
+        // 8 -> 4 y color 0xffdc80 -> 0xffe8b8 (menos ámbar, más natural).
+        const pl = new THREE.PointLight(0xffe8b8, 4, depthSvg * 20, 1.4);
+        pl.position.set(cx, cy, depthSvg + 4.0 / sf);
         frontGrp.add(pl);
       }
 
