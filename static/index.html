@@ -1279,8 +1279,8 @@ svg g.pieza-labels                 { pointer-events: none; }
   <div class="home-blob cian"></div>
   <div class="home-blob magenta"></div>
 
-  <button class="btn-pill pos-return-btn" onclick="volverAPos()" title="Volver al sistema POS"
-          style="display:none;position:absolute;top:16px;right:20px;z-index:10;
+  <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS"
+          style="position:absolute;top:16px;right:20px;z-index:10;
                  background:#2A3441;border-color:#3A4557;padding:8px 14px;font-size:13px">
     ← Volver a POS
   </button>
@@ -1357,9 +1357,9 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.17.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.17.2</small></h1>
         <div style="display:flex;gap:6px">
-          <button class="btn-pill pos-return-btn" onclick="volverAPos()" title="Volver al sistema POS" style="display:none;background:#2A3441;border-color:#3A4557">
+          <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
           </button>
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
@@ -1760,8 +1760,8 @@ svg g.pieza-labels                 { pointer-events: none; }
       <div class="tab" onclick="switchTab('corte')">Corte</div>
       <div class="tab" onclick="switchTab('catalog'); loadCatalog()">📦 Catálogo</div>
       <div class="tab" onclick="switchTab('admin'); adminLoad()">Admin</div>
-      <button class="btn-pill pos-return-btn" onclick="volverAPos()" title="Volver al sistema POS"
-              style="display:none;background:#2A3441;border-color:#3A4557;margin-left:auto">
+      <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS"
+              style="background:#2A3441;border-color:#3A4557;margin-left:auto">
         ← Volver a POS
       </button>
     </nav>
@@ -7426,15 +7426,9 @@ window.addEventListener("DOMContentLoaded", () => {
   else if (location.hash === "#corte") { homeCerrar(); switchTab("corte"); }
   else if (location.hash === "#admin") { homeCerrar(); switchTab("admin"); adminLoad(); }
 
-  const params = new URLSearchParams(location.search);
-  if (params.get("from") === "pos") sessionStorage.setItem("sgi_from_pos", "1");
-  if (sessionStorage.getItem("sgi_from_pos") === "1") {
-    document.querySelectorAll(".pos-return-btn").forEach(b => b.style.display = "");
-  }
 });
 
 function volverAPos() {
-  sessionStorage.removeItem("sgi_from_pos");
   window.location.href = "https://sgi-pos.onrender.com/";
 }
 
