@@ -1344,11 +1344,14 @@ svg g.pieza-labels                 { pointer-events: none; }
 
 <div class="app">
 
+  <!-- Backdrop del sidebar mobile (click cierra) -->
+  <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
+
   <!-- ══════════════════ SIDEBAR ══════════════════ -->
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.16.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.16.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -1734,6 +1737,13 @@ svg g.pieza-labels                 { pointer-events: none; }
   <!-- ══════════════════ CONTENIDO PRINCIPAL ══════════════════ -->
   <main class="main">
     <nav class="tabs">
+      <button class="hamburger" id="hamburger" onclick="toggleSidebar()" title="Menú"
+              aria-label="Abrir menú">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.4" stroke-linecap="round">
+          <path d="M3 6h18M3 12h18M3 18h18"/>
+        </svg>
+      </button>
       <div class="tab active" onclick="switchTab('svg')">Vista SVG</div>
       <div class="tab" onclick="switchTab('result')">Cotización</div>
       <div class="tab" onclick="switchTab('3d')">Vista 3D</div>
@@ -2928,6 +2938,8 @@ function handleDrop(e) {
 function handleFile(e) {
   const file = e.target.files[0];
   if (file) uploadSVG(file);
+  // Mobile: cerrar sidebar para que el user vea la preview del SVG cargado
+  if (window.matchMedia("(max-width: 980px)").matches) toggleSidebar(false);
 }
 
 async function uploadSVG(file) {
@@ -5154,6 +5166,19 @@ function switchTab(name) {
   document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
   document.getElementById("tab-"+name).classList.add("active");
   if (name === "3d") requestAnimationFrame(() => window._v3dResize?.());
+  // Mobile: al cambiar de tab, cerrar el sidebar si estaba abierto
+  if (window.matchMedia("(max-width: 980px)").matches) toggleSidebar(false);
+}
+
+// Sidebar mobile toggle. Sin arg: alterna. Con arg boolean: fuerza estado.
+// Al abrir, agrega .open al sidebar + backdrop; al cerrar, lo quita.
+function toggleSidebar(force) {
+  const sb = document.querySelector(".sidebar");
+  const bd = document.getElementById("sidebar-backdrop");
+  if (!sb || !bd) return;
+  const open = force === undefined ? !sb.classList.contains("open") : !!force;
+  sb.classList.toggle("open", open);
+  bd.classList.toggle("open", open);
 }
 
 function showToast(msg, type) {
@@ -7902,6 +7927,7 @@ const _fach = {
   iluminado: false,     // true si el letrero es luminoso (glow perimetral)
   watermark: true,      // marca de agua "SGI" en la esquina de la composición
   cotasExport: false,   // agregar cotas (dimensiones) al archivo exportado
+  cotasPreview: false,  // mostrar cotas también en el preview (edición)
   aspect: 'original',   // 'original' | '1:1' | '9:16' | '4:5'
   matchTint: false,     // auto-tintar overlay al tono medio de la foto
   photoTint: null,      // {r,g,b} promedio de la foto (para match tint)
@@ -8087,6 +8113,7 @@ async function fachGuardarEnCotizacion() {
       iluminado:  _fach.iluminado,
       watermark:  _fach.watermark,
       cotasExport:_fach.cotasExport,
+      cotasPreview:_fach.cotasPreview,
       aspect:     _fach.aspect,
       matchTint:  _fach.matchTint,
     };
@@ -8149,6 +8176,7 @@ function _fachRehidratar(f) {
       _fach.iluminado      = !!f.iluminado;
       _fach.watermark      = f.watermark !== false;
       _fach.cotasExport    = !!f.cotasExport;
+      _fach.cotasPreview   = !!f.cotasPreview;
       _fach.aspect         = f.aspect || 'original';
       _fach.matchTint      = !!f.matchTint;
       _fach.photoHash      = _fachPhotoHash(img);
@@ -8179,6 +8207,7 @@ function _fachRehidratar(f) {
       const oIn = document.getElementById('fach-op-val'); if (oIn) oIn.value = oPct;
       const wm = document.getElementById('fach-wm'); if (wm) wm.checked = _fach.watermark;
       const ct = document.getElementById('fach-cotas'); if (ct) ct.checked = _fach.cotasExport;
+      const cp = document.getElementById('fach-cotas-prev'); if (cp) cp.checked = _fach.cotasPreview;
       const ti = document.getElementById('fach-tint');  if (ti) ti.checked = _fach.matchTint;
       fachSetAspect(_fach.aspect || 'original');
       const bNight = document.getElementById('fach-btn-night');
@@ -8497,6 +8526,12 @@ function _fachDraw() {
       ctx.arc(pt.x, pt.y, dotR, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+
+  // Cotas del letrero visibles en preview (opcional). En export siempre se
+  // controlan aparte con _fach.cotasExport (se pintan desde _fachGenBlob).
+  if (!_fach._exporting && _fach.cotasPreview && _fach.overlay) {
+    _fachDrawCotas(ctx, cv);
   }
 
   // Handles de edición (resize esquinas + rotación arriba). Solo en preview,
@@ -9298,6 +9333,12 @@ function fachToggleWatermark(checked) {
 // _fachDraw). El vendedor lo prende una vez y se olvida.
 function fachToggleCotas(checked) {
   _fach.cotasExport = !!checked;
+}
+
+// Toggle afecta el preview — sí redibujamos para ver el cambio en vivo.
+function fachToggleCotasPreview(checked) {
+  _fach.cotasPreview = !!checked;
+  _fachDraw();
 }
 
 // Match tono foto: sí afecta el preview (para verificar visualmente si mejora).
@@ -11437,6 +11478,10 @@ window.v3d_snapshot = function(targetW = 2200, opts = {}) {
         <label class="fach-wm-toggle">
           <input type="checkbox" id="fach-wm" checked onchange="fachToggleWatermark(this.checked)">
           <span>Marca de agua "SGI"</span>
+        </label>
+        <label class="fach-wm-toggle">
+          <input type="checkbox" id="fach-cotas-prev" onchange="fachToggleCotasPreview(this.checked)">
+          <span>Mostrar cotas del letrero</span>
         </label>
         <label class="fach-wm-toggle">
           <input type="checkbox" id="fach-cotas" onchange="fachToggleCotas(this.checked)">
