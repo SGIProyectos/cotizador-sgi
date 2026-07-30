@@ -1351,7 +1351,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.16.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.16.2</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
@@ -8188,12 +8188,11 @@ function _fachRehidratar(f) {
       // Preparar canvas
       const cv = document.getElementById('fach-canvas');
       cv.width = img.width; cv.height = img.height;
-      cv.style.maxWidth = '100%'; cv.style.maxHeight = '100%';
-      cv.style.width = 'auto'; cv.style.height = 'auto';
 
       document.getElementById('fach-drop').style.display = 'none';
       document.getElementById('fach-canvas-wrap').style.display = 'block';
       document.getElementById('fach-panel').classList.remove('hidden');
+      requestAnimationFrame(() => _fachFitCanvas());
 
       // Sincronizar UI de sliders con el estado cargado
       const sPct = Math.round((_fach.scale / (_fach._initScale || 1)) * 100);
@@ -8347,6 +8346,33 @@ function _fachDetectIluminado() {
   return ['cajon_luz', 'retro_halo', 'abierta_luz'].includes(tipoC);
 }
 
+// Calcula tamaño display del canvas para que la foto entre completa en el
+// stage manteniendo aspect ratio. Necesario porque max-width/max-height:100%
+// del CSS no siempre funciona en flexbox mobile — el navegador puede dejar
+// el canvas a tamaño natural (foto de 2000+ px queda recortada por overflow).
+function _fachFitCanvas() {
+  const cv = document.getElementById('fach-canvas');
+  const stage = document.querySelector('#modal-fachada .fach-stage');
+  if (!cv || !stage || !_fach.photo) return;
+  const rect = stage.getBoundingClientRect();
+  const pad = 40; // padding del stage (20px cada lado)
+  const availW = Math.max(200, rect.width  - pad);
+  const availH = Math.max(200, rect.height - pad);
+  const imgAsp = _fach.photo.width / _fach.photo.height;
+  let dw, dh;
+  if (availW / availH > imgAsp) {
+    dh = availH;
+    dw = dh * imgAsp;
+  } else {
+    dw = availW;
+    dh = dw / imgAsp;
+  }
+  cv.style.width  = Math.round(dw) + 'px';
+  cv.style.height = Math.round(dh) + 'px';
+  cv.style.maxWidth = 'none';
+  cv.style.maxHeight = 'none';
+}
+
 // Cargar foto y capturar snapshot 3D
 function fachOnFile(file) {
   if (!file) return;
@@ -8410,15 +8436,14 @@ function fachOnFile(file) {
         const cv = document.getElementById('fach-canvas');
         cv.width = img.width;
         cv.height = img.height;
-        // CSS: ajustar al viewport respetando ratio (max 100% del stage)
-        cv.style.maxWidth = '100%';
-        cv.style.maxHeight = '100%';
-        cv.style.width = 'auto';
-        cv.style.height = 'auto';
 
         document.getElementById('fach-drop').style.display = 'none';
         document.getElementById('fach-canvas-wrap').style.display = 'block';
         document.getElementById('fach-panel').classList.remove('hidden');
+        // Fit del canvas al stage — DESPUÉS de mostrar el wrap (necesita
+        // dimensiones reales del stage). requestAnimationFrame asegura el
+        // layout ya se aplicó antes de leer rect.
+        requestAnimationFrame(() => _fachFitCanvas());
         _fachRefreshDupBtn();
         _fachRefreshEscalaUI();
         _fachWarnResolucion(img);
@@ -9312,6 +9337,16 @@ function _fachRefreshEscalaUI() {
         if (f) fachOnFile(f);
       });
     }
+
+    // Re-fit del canvas al redimensionar / rotar el celular. Solo cuando el
+    // modal está abierto y hay foto — evita trabajo innecesario.
+    let _fachResizeTimer = null;
+    window.addEventListener('resize', () => {
+      const m = document.getElementById('modal-fachada');
+      if (!m || !m.classList.contains('open') || !_fach.photo) return;
+      clearTimeout(_fachResizeTimer);
+      _fachResizeTimer = setTimeout(() => _fachFitCanvas(), 120);
+    });
 
     // Esc: si está en modo marcado, cancelar marcado. Si no, cerrar modal.
     document.addEventListener('keydown', e => {
