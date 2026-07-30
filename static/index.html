@@ -1351,8 +1351,11 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.16.3</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.17.0</small></h1>
         <div style="display:flex;gap:6px">
+          <button id="btn-back-to-pos" class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="display:none;background:#2A3441;border-color:#3A4557">
+            ← POS
+          </button>
           <button class="btn-pill" onclick="abrirDashboard()" title="Dashboard de resultados">
             <svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>
             Dashboard
@@ -7412,7 +7415,19 @@ window.addEventListener("DOMContentLoaded", () => {
   else if (location.hash === "#historial") { homeCerrar(); abrirHistorial(); }
   else if (location.hash === "#corte") { homeCerrar(); switchTab("corte"); }
   else if (location.hash === "#admin") { homeCerrar(); switchTab("admin"); adminLoad(); }
+
+  const params = new URLSearchParams(location.search);
+  if (params.get("from") === "pos") sessionStorage.setItem("sgi_from_pos", "1");
+  if (sessionStorage.getItem("sgi_from_pos") === "1") {
+    const b = document.getElementById("btn-back-to-pos");
+    if (b) b.style.display = "";
+  }
 });
+
+function volverAPos() {
+  sessionStorage.removeItem("sgi_from_pos");
+  window.location.href = "https://sgi-pos.onrender.com/";
+}
 
 async function reabrirCotizacion(qid) {
   const btn = event?.target;
