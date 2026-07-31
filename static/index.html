@@ -1367,7 +1367,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.19.2</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.19.3</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -9662,7 +9662,11 @@ function initScene(canvas) {
   const H = canvas.offsetHeight || 560;
 
   S   = new THREE.Scene();
-  S.background = new THREE.Color(0xf0f2f5);
+  // Fondo OSCURO — sin contraste no se perciben los cajones luminosos como
+  // "prendidos". Antes era 0xf0f2f5 (casi blanco): el cara blanco puro se
+  // veia "gris" porque no habia referencia oscura. Ahora los blancos
+  // brillan de verdad y los colores saturan como acrilico backlit real.
+  S.background = new THREE.Color(0x0F1319);
 
   CAM = new THREE.PerspectiveCamera(45, W / H, 0.1, 8000);
 
