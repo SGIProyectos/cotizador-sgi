@@ -1367,7 +1367,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.19.3</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.19.4</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -10315,44 +10315,47 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       const wallZ = -thickSvg - wallThickSvg / 2;
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
-      // ── LEDs POR DELANTE de la cara con additive blending ────────────
-      // Al ser la cara opaca, no se pueden ver LEDs "por dentro". Solución:
-      // rendearlos POR DELANTE con additive blending — brillan SOBRE la
-      // cara como hotspots. Cantidad por altura (regla similar a abierta_luz):
-      //   3 LEDs si ≤6 cm, 4 si ≤12 cm, 5 si ≤20 cm, 6 si más.
-      // También un halo Sprite billboard DETRAS de cada letra tintado con
-      // el color de la cara — le da glow al muro alrededor.
-      const ledMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.85,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      const ledSize = Math.max(1.4 / sf, depthSvg * 0.14);  // ~1.4 cm mínimo
-      const ledZ    = depthSvg + 0.05 / sf;   // apenas delante de la cara
+      // ── Hotspots de LED (sprites difuminados) + halo del color ───────
+      // Antes: esferas blancas duras — se veian como stickers, no como
+      // luz difundida a traves de acrilico. Ahora: sprites con gradiente
+      // radial suave (bright center → fade transparente), additive con
+      // opacidad moderada (0.40). En cara roja: los hotspots empujan el
+      // rojo hacia (255, 102, 102) = rosado — natural. En cara blanca:
+      // apenas se notan (ya esta al maximo). En cara oscura: se ven mas.
+      // Cantidad por altura: 3 si ≤6 cm, 4 si ≤12 cm, 5 si ≤20 cm, 6 si más.
       const glowTex = _glowTexture();
+      const ledSize = Math.max(3.5 / sf, depthSvg * 0.30);  // 3.5 cm min — bien difuso
+      const ledZ    = depthSvg + 0.05 / sf;
       for (const info of infoPorLetra) {
         const { shape, bbox: bb } = info;
         if (bb.w <= 0 || bb.h <= 0) continue;
         const hCm = bb.h * sf;
         const nLeds = hCm >= 20 ? 6 : hCm >= 12 ? 5 : hCm >= 6 ? 4 : 3;
-        const radioSeg = ledSize * 0.30;
+        const radioSeg = ledSize * 0.15;  // más pequeño para permitir más spots
 
         let positions = _puntosDentroShape(shape, bb, nLeds, radioSeg);
         if (positions.length === 0) {
           positions = [[bb.x0 + bb.w / 2, bb.y0 + bb.h / 2]];
         }
         for (const [px, py] of positions) {
-          const geom = new THREE.SphereGeometry(ledSize * 0.5, 12, 8);
-          const m = new THREE.Mesh(geom, ledMat);
-          m.position.set(px, py, ledZ);
-          m.renderOrder = 3;
-          frontGrp.add(m);
+          // Sprite propio por hotspot (cada uno con SU material — no compartir
+          // porque scale/position son por-sprite y el material rige color+op).
+          const spotMat = new THREE.SpriteMaterial({
+            map: glowTex,
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.40,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          });
+          const spot = new THREE.Sprite(spotMat);
+          spot.scale.set(ledSize, ledSize, 1);
+          spot.position.set(px, py, ledZ);
+          spot.renderOrder = 3;
+          frontGrp.add(spot);
         }
 
-        // Halo Sprite tintado con el color de la cara — glow del color
-        // spilling al muro. Va al mountGrp (se queda con el muro al explode).
+        // Halo tintado del color de la cara — spillage al muro
         const cx = bb.x0 + bb.w / 2;
         const cy = bb.y0 + bb.h / 2;
         const haloMat = new THREE.SpriteMaterial({
@@ -10370,7 +10373,6 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
         sprite.renderOrder = -1;
         mountGrp.add(sprite);
 
-        // PointLight blanca central — rebote sobre muro y cerchas
         const pl = new THREE.PointLight(0xffffff, 5, depthSvg * 20, 1.4);
         pl.position.set(cx, cy, depthSvg + 4.0 / sf);
         frontGrp.add(pl);
