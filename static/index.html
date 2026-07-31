@@ -1357,7 +1357,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.18.3</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.18.4-debug</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -10120,19 +10120,15 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
     let mFrontPath = null;
     if (!isAbierta) {
       if (isCajon) {
-        // Cara SIEMPRE blanca emissive translúcida — cara acrílica blanca
-        // lechosa (color del SVG es irrelevante, sería un vinil por delante).
-        // Emissive alto (0.85) para que la cara SE VEA prendida, no gris.
-        // Opacity moderada (0.55) para dejar pasar el glow de la PVC blanca
-        // de atrás y los hotspots de los LEDs — se leen como puntos más
-        // brillantes que el fondo homogéneo.
-        mFrontPath = new THREE.MeshPhongMaterial({
-          color: 0xffffff,
-          emissive: new THREE.Color(0xffffff),
-          emissiveIntensity: 0.85,
-          transparent: true, opacity: 0.55,
-          depthWrite: false,
-          specular: new THREE.Color(0x888888), shininess: 100,
+        // DEBUG v1.18.4: cara ROSA FLUORESCENTE puro para probar si esta
+        // rama de codigo realmente se ejecuta. Si el usuario ve rosa -> mi
+        // codigo corre, el problema anterior era del emissive/opacity. Si
+        // sigue viendo gris -> otra parte del codigo pinta la cara y esta
+        // rama nunca se hit.
+        console.log('[DEBUG cajon] mFrontPath created for isCajon path');
+        mFrontPath = new THREE.MeshBasicMaterial({
+          color: 0xff00ff,   // magenta puro, imposible de confundir
+          transparent: false, opacity: 1.0,
           side: THREE.DoubleSide,
         });
       } else if (useRealColors) {
