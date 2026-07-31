@@ -778,6 +778,16 @@ svg g.pieza-labels                 { pointer-events: none; }
 
 /* ── VISTA 3D ── */
 #tab-3d { padding: 0 !important; overflow: hidden; }
+.cara-swatch {
+  width: 26px; height: 26px; border-radius: 50%; padding: 0;
+  border: 2px solid #2A3441; cursor: pointer;
+  transition: transform .12s, border-color .12s, box-shadow .12s;
+}
+.cara-swatch:hover { transform: scale(1.15); border-color: #6D8298; }
+.cara-swatch.active {
+  border-color: #F07A1C;
+  box-shadow: 0 0 0 2px rgba(240,122,28,.35);
+}
 #visor3d-wrap {
   width: 100%; height: 100%; position: relative;
   background: #0B0E13; display: flex; flex-direction: column;
@@ -1357,7 +1367,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.18.4-debug</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.19.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -1836,6 +1846,29 @@ svg g.pieza-labels                 { pointer-events: none; }
             </svg>
             En fachada
           </button>
+        </div>
+        <div id="cara-palette" style="display:none;padding:8px 12px;background:#0F1319;
+             border-bottom:1px solid #1E2530;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:11px;color:#8a94a6;font-weight:600;letter-spacing:.06em;
+                       text-transform:uppercase">Cara acrílica:</span>
+          <button class="cara-swatch active" data-hex="ffffff" onclick="v3dSetCaraColor(0xffffff)"
+                  title="Blanco lechoso" style="background:#ffffff"></button>
+          <button class="cara-swatch" data-hex="2a6acc" onclick="v3dSetCaraColor(0x2a6acc)"
+                  title="Azul" style="background:#2a6acc"></button>
+          <button class="cara-swatch" data-hex="cc2a2a" onclick="v3dSetCaraColor(0xcc2a2a)"
+                  title="Rojo" style="background:#cc2a2a"></button>
+          <button class="cara-swatch" data-hex="e9c31c" onclick="v3dSetCaraColor(0xe9c31c)"
+                  title="Ámbar" style="background:#e9c31c"></button>
+          <button class="cara-swatch" data-hex="2ea34d" onclick="v3dSetCaraColor(0x2ea34d)"
+                  title="Verde" style="background:#2ea34d"></button>
+          <button class="cara-swatch" data-hex="f07a1c" onclick="v3dSetCaraColor(0xf07a1c)"
+                  title="Naranja" style="background:#f07a1c"></button>
+          <button class="cara-swatch" data-hex="8a2be2" onclick="v3dSetCaraColor(0x8a2be2)"
+                  title="Morado" style="background:#8a2be2"></button>
+          <button class="cara-swatch" data-hex="ff69b4" onclick="v3dSetCaraColor(0xff69b4)"
+                  title="Rosa" style="background:#ff69b4"></button>
+          <button class="cara-swatch" data-hex="1a1a1a" onclick="v3dSetCaraColor(0x1a1a1a)"
+                  title="Negro (opaco)" style="background:#1a1a1a;border-color:#444"></button>
         </div>
         <canvas id="visor3d-canvas" style="display:none"></canvas>
         <div id="visor3d-empty">
@@ -9616,6 +9649,8 @@ import { SVGLoader }     from 'three/addons/loaders/SVGLoader.js';
 let S, CAM, REN, CTR, AID;
 let _explodeGroups = null;   // { frontGrp, depthSvg, exploded }
 let _cajaLedRefs = [];       // [{ mat, mBack, light, wattsFactor }] LEDs de caja para animar
+let _v3dCaraColor = 0xffffff;  // color de la cara del cajón (blanco lechoso default)
+let _v3dLastArgs  = null;      // args de la última llamada a v3d_render (para rebuild)
 const LDR = new SVGLoader();
 
 function initScene(canvas) {
@@ -9708,16 +9743,27 @@ function mkMat(color, { trans = false, opac = 1, spec = 0x222222, shin = 40, sid
 // ─── API pública ─────────────────────────────────────────────────────────────
 window._v3dReady = true;
 
-window.v3d_render = function({ svgText, depthCm, tipo, tipoConstruccion,
-                               realWidthCm, viewboxW, viewboxH,
-                               alturaLetraCm, maxLetterHeightPx, artboardWCm,
-                               capaMaterials, incluyeBase, incluyeLuz, capasOrden }) {
+window.v3d_render = function(args) {
+  // Guardar args para poder re-renderizar con el mismo dataset cuando el
+  // usuario cambia el color de la cara desde la paleta.
+  _v3dLastArgs = args;
+  const { svgText, depthCm, tipo, tipoConstruccion,
+          realWidthCm, viewboxW, viewboxH,
+          alturaLetraCm, maxLetterHeightPx, artboardWCm,
+          capaMaterials, incluyeBase, incluyeLuz, capasOrden } = args;
   const canvas = document.getElementById('visor3d-canvas');
   const empty  = document.getElementById('visor3d-empty');
   if (!canvas) return;
 
   canvas.style.display = 'block';
   if (empty) empty.style.display = 'none';
+
+  // Mostrar paleta de colores de cara sólo cuando aplica (cajón de luz).
+  const palette = document.getElementById('cara-palette');
+  if (palette) {
+    const show = (tipo === 'letras' && tipoConstruccion === 'cajon_luz');
+    palette.style.display = show ? 'flex' : 'none';
+  }
 
   if (!REN) initScene(canvas);
   clearMeshes();
@@ -9800,6 +9846,15 @@ window.v3d_setView = function(view) {
     CTR.update();
     if (p < 1) requestAnimationFrame(go);
   })(performance.now());
+};
+
+window.v3dSetCaraColor = function(hex) {
+  _v3dCaraColor = hex;
+  document.querySelectorAll('.cara-swatch').forEach(b => {
+    const h = parseInt(b.dataset.hex, 16);
+    b.classList.toggle('active', h === hex);
+  });
+  if (_v3dLastArgs) window.v3d_render(_v3dLastArgs);
 };
 
 window._v3dResize = function() {
@@ -10120,16 +10175,17 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
     let mFrontPath = null;
     if (!isAbierta) {
       if (isCajon) {
-        // DEBUG v1.18.4: cara ROSA FLUORESCENTE puro para probar si esta
-        // rama de codigo realmente se ejecuta. Si el usuario ve rosa -> mi
-        // codigo corre, el problema anterior era del emissive/opacity. Si
-        // sigue viendo gris -> otra parte del codigo pinta la cara y esta
-        // rama nunca se hit.
-        console.log('[DEBUG cajon] mFrontPath created for isCajon path');
+        // Cara del cajón — MeshBasicMaterial (no phong) porque la combinación
+        // phong+emissive+transparent renderiza gris por bug de blending en
+        // three.js. Basic va SIEMPRE a full color × alpha, es lo que
+        // reproduce el look "acrílico luminoso" del reference. Color desde
+        // paleta configurable por el usuario (_v3dCaraColor). Blanco =
+        // lechoso; azul/rojo/ámbar/etc = acrílico teñido; negro = opaco.
         mFrontPath = new THREE.MeshBasicMaterial({
-          color: 0xff00ff,   // magenta puro, imposible de confundir
-          transparent: false, opacity: 1.0,
+          color: _v3dCaraColor,
+          transparent: true, opacity: 0.55,
           side: THREE.DoubleSide,
+          depthWrite: false,
         });
       } else if (useRealColors) {
         const fill = svgPath.userData?.style?.fill;
