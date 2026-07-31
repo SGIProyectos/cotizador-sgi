@@ -1357,7 +1357,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.18.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.18.2</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -9644,7 +9644,7 @@ function initScene(canvas) {
   CTR.maxDistance = 2000;
 
   // Iluminación
-  S.add(new THREE.AmbientLight(0xffffff, 0.85));
+  S.add(new THREE.AmbientLight(0xffffff, 1.00));
 
   const sun = new THREE.DirectionalLight(0xffffff, 1.2);
   sun.position.set(80, 140, 90);
@@ -10120,16 +10120,17 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
     let mFrontPath = null;
     if (!isAbierta) {
       if (isCajon) {
-        // Cara SIEMPRE blanca emissive translúcida — un cajón de luz real
-        // tiene cara de acrílico blanco lechoso, el color del SVG es irrelevante
-        // (representaría un vinil por delante, no el material de la cara).
-        // Emissive + translúcido = "glow" natural, la placa PVC emissive y
-        // los LEDs individuales adentro se ven a través como hotspots.
+        // Cara SIEMPRE blanca emissive translúcida — cara acrílica blanca
+        // lechosa (color del SVG es irrelevante, sería un vinil por delante).
+        // Emissive alto (0.85) para que la cara SE VEA prendida, no gris.
+        // Opacity moderada (0.55) para dejar pasar el glow de la PVC blanca
+        // de atrás y los hotspots de los LEDs — se leen como puntos más
+        // brillantes que el fondo homogéneo.
         mFrontPath = new THREE.MeshPhongMaterial({
           color: 0xffffff,
           emissive: new THREE.Color(0xffffff),
-          emissiveIntensity: 0.40,
-          transparent: true, opacity: 0.72,
+          emissiveIntensity: 0.85,
+          transparent: true, opacity: 0.55,
           depthWrite: false,
           specular: new THREE.Color(0x888888), shininess: 100,
           side: THREE.DoubleSide,
