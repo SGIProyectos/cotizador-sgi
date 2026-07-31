@@ -1367,7 +1367,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.19.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.19.2</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -10176,17 +10176,15 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
     let mFrontPath = null;
     if (!isAbierta) {
       if (isCajon) {
-        // Cara del cajón — MeshBasicMaterial dominante (opacity 0.80). La
-        // combinación phong+emissive+transparent renderiza gris por bug de
-        // blending; basic va a full color × alpha directo. Opacity 0.80 =
-        // color puro predomina, sólo 20% deja pasar el glow blanco de la
-        // PVC de atrás y los LEDs — suficiente para que los hotspots se
-        // lean como puntos más brillantes sin apagar el color.
+        // Cara del cajón — MeshBasicMaterial OPACA (opacity 1.0). Cualquier
+        // translucidez introduce blending con sRGB pipeline que ensucia el
+        // color a gris. Opaca = color exactamente lo que decimos. Los LEDs
+        // se rendrean POR DELANTE con additive blending (más abajo) para
+        // que se lean como hotspots brillantes sobre la cara, sin necesidad
+        // de translucidez.
         mFrontPath = new THREE.MeshBasicMaterial({
           color: _v3dCaraColor,
-          transparent: true, opacity: 0.80,
           side: THREE.DoubleSide,
-          depthWrite: false,
         });
       } else if (useRealColors) {
         const fill = svgPath.userData?.style?.fill;
@@ -10313,18 +10311,23 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       const wallZ = -thickSvg - wallThickSvg / 2;
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
-      // ── LEDs individuales dentro del cajón ────────────────────────────
-      // Cantidad por altura de la letra (misma regla que abierta_luz):
+      // ── LEDs POR DELANTE de la cara con additive blending ────────────
+      // Al ser la cara opaca, no se pueden ver LEDs "por dentro". Solución:
+      // rendearlos POR DELANTE con additive blending — brillan SOBRE la
+      // cara como hotspots. Cantidad por altura (regla similar a abierta_luz):
       //   3 LEDs si ≤6 cm, 4 si ≤12 cm, 5 si ≤20 cm, 6 si más.
-      // Cada LED = esferita blanca MeshBasicMaterial (no responde a luces,
-      // siempre se ve brillante) montada sobre la placa PVC, apuntando al
-      // frente. Se ven a través de la cara acrílica translúcida (opacity
-      // 0.65) como HOTSPOTS más brillantes que el fondo emissive general.
-      // Además, una PointLight blanca central por letra rebota luz sobre
-      // el muro y las cerchas para lectura de escena.
-      const ledMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      // También un halo Sprite billboard DETRAS de cada letra tintado con
+      // el color de la cara — le da glow al muro alrededor.
+      const ledMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
       const ledSize = Math.max(1.4 / sf, depthSvg * 0.14);  // ~1.4 cm mínimo
-      const ledZ    = ledSize * 0.55;   // sentado sobre la PVC del fondo
+      const ledZ    = depthSvg + 0.05 / sf;   // apenas delante de la cara
+      const glowTex = _glowTexture();
       for (const info of infoPorLetra) {
         const { shape, bbox: bb } = info;
         if (bb.w <= 0 || bb.h <= 0) continue;
@@ -10340,11 +10343,30 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
           const geom = new THREE.SphereGeometry(ledSize * 0.5, 12, 8);
           const m = new THREE.Mesh(geom, ledMat);
           m.position.set(px, py, ledZ);
+          m.renderOrder = 3;
           frontGrp.add(m);
         }
 
+        // Halo Sprite tintado con el color de la cara — glow del color
+        // spilling al muro. Va al mountGrp (se queda con el muro al explode).
         const cx = bb.x0 + bb.w / 2;
         const cy = bb.y0 + bb.h / 2;
+        const haloMat = new THREE.SpriteMaterial({
+          map: glowTex,
+          color: _v3dCaraColor,
+          transparent: true,
+          opacity: 0.45,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        const glowSize = Math.max(bb.w, bb.h) * 1.9;
+        const sprite = new THREE.Sprite(haloMat);
+        sprite.scale.set(glowSize, glowSize, 1);
+        sprite.position.set(cx, cy, -thickSvg - 0.5 / sf);
+        sprite.renderOrder = -1;
+        mountGrp.add(sprite);
+
+        // PointLight blanca central — rebote sobre muro y cerchas
         const pl = new THREE.PointLight(0xffffff, 5, depthSvg * 20, 1.4);
         pl.position.set(cx, cy, depthSvg + 4.0 / sf);
         frontGrp.add(pl);
