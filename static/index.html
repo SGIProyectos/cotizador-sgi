@@ -1367,7 +1367,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.19.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.19.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -1847,8 +1847,9 @@ svg g.pieza-labels                 { pointer-events: none; }
             En fachada
           </button>
         </div>
-        <div id="cara-palette" style="display:none;padding:8px 12px;background:#0F1319;
-             border-bottom:1px solid #1E2530;align-items:center;gap:8px;flex-wrap:wrap">
+        <div id="cara-palette" style="display:none;position:absolute;top:12px;right:12px;z-index:10;
+             padding:8px 12px;background:rgba(15,19,25,.9);border:1px solid #1E2530;
+             border-radius:10px;backdrop-filter:blur(8px);align-items:center;gap:8px;flex-wrap:wrap">
           <span style="font-size:11px;color:#8a94a6;font-weight:600;letter-spacing:.06em;
                        text-transform:uppercase">Cara acrílica:</span>
           <button class="cara-swatch active" data-hex="ffffff" onclick="v3dSetCaraColor(0xffffff)"
@@ -10175,15 +10176,15 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
     let mFrontPath = null;
     if (!isAbierta) {
       if (isCajon) {
-        // Cara del cajón — MeshBasicMaterial (no phong) porque la combinación
-        // phong+emissive+transparent renderiza gris por bug de blending en
-        // three.js. Basic va SIEMPRE a full color × alpha, es lo que
-        // reproduce el look "acrílico luminoso" del reference. Color desde
-        // paleta configurable por el usuario (_v3dCaraColor). Blanco =
-        // lechoso; azul/rojo/ámbar/etc = acrílico teñido; negro = opaco.
+        // Cara del cajón — MeshBasicMaterial dominante (opacity 0.80). La
+        // combinación phong+emissive+transparent renderiza gris por bug de
+        // blending; basic va a full color × alpha directo. Opacity 0.80 =
+        // color puro predomina, sólo 20% deja pasar el glow blanco de la
+        // PVC de atrás y los LEDs — suficiente para que los hotspots se
+        // lean como puntos más brillantes sin apagar el color.
         mFrontPath = new THREE.MeshBasicMaterial({
           color: _v3dCaraColor,
-          transparent: true, opacity: 0.55,
+          transparent: true, opacity: 0.80,
           side: THREE.DoubleSide,
           depthWrite: false,
         });
@@ -10285,7 +10286,7 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       const pvcMat = new THREE.MeshPhongMaterial({
         color: 0xffffff,
         emissive: new THREE.Color(0xffffff),
-        emissiveIntensity: 0.85,
+        emissiveIntensity: 1.20,
         specular: 0x222222, shininess: 12,
         side: THREE.DoubleSide,
       });
