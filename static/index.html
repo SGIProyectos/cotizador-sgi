@@ -1357,7 +1357,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.18.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.18.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -9863,7 +9863,7 @@ function _cilindroCabe(shape, cx, cy, radio) {
 // al centro por región.
 function _puntosDentroShape(shape, bb, n, radioSeg) {
   const cx = bb.x0 + bb.w / 2, cy = bb.y0 + bb.h / 2;
-  const nCells = 14;
+  const nCells = 16;
   const cand = [];
   for (let iy = 0; iy < nCells; iy++) {
     for (let ix = 0; ix < nCells; ix++) {
@@ -9875,19 +9875,46 @@ function _puntosDentroShape(shape, bb, n, radioSeg) {
       }
     }
   }
+  if (cand.length === 0) return [];
   const pts = [];
   if (n === 4) {
+    // Un punto por cuadrante — uso: separadores de esquina en retro_halo.
     for (let q = 0; q < 4; q++) {
       const opts = cand.filter(c => c.q === q).sort((a, b) => b.d - a.d);
       if (opts.length) pts.push([opts[0].x, opts[0].y]);
     }
-  } else {
+    return pts;
+  }
+  if (n === 2) {
     const izq = cand.filter(c => c.x <  cx).sort((a, b) => (cx - b.x) - (cx - a.x));
     const der = cand.filter(c => c.x >= cx).sort((a, b) => (b.x - cx) - (a.x - cx));
     if (izq.length) pts.push([izq[0].x, izq[0].y]);
     if (der.length) pts.push([der[0].x, der[0].y]);
+    return pts;
   }
-  return pts;
+  // n = 3, 5, 6, … : farthest-first sampling. El bug histórico devolvía
+  // solo 2 puntos (fallthrough al else de arriba) — por eso los LEDs de
+  // abierta_luz y cajon_luz se veían como 1-2 focos en vez del N pedido.
+  if (cand.length <= n) return cand.map(c => [c.x, c.y]);
+  const start = cand.reduce((a, b) => a.d < b.d ? a : b);
+  const chosen = [start];
+  const chosenSet = new Set([start]);
+  while (chosen.length < n) {
+    let best = null, bestD = -1;
+    for (const c of cand) {
+      if (chosenSet.has(c)) continue;
+      let minD = Infinity;
+      for (const p of chosen) {
+        const d = Math.hypot(c.x - p.x, c.y - p.y);
+        if (d < minD) minD = d;
+      }
+      if (minD > bestD) { bestD = minD; best = c; }
+    }
+    if (!best) break;
+    chosen.push(best);
+    chosenSet.add(best);
+  }
+  return chosen.map(c => [c.x, c.y]);
 }
 
 // ─── textura de gradiente radial (para halos/glow) ──────────────────────────
@@ -10019,7 +10046,11 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
     plana:       { face: 0x3d8bcd, cercha: 0x2360b0, fTrans: false, fOpac: 1.0  },
   };
   const cfg = paleta[isPlana ? 'plana' : (tipoConstruccion || 'cajon_luz')] || paleta.cajon_luz;
-  const mCercha = mkMat(cfg.cercha, { spec: 0x667788, shin: 55 });
+  // Cercha NEGRA en cajón — sella el interior visualmente para que la cara
+  // translúcida iluminada y los LEDs contrasten sobre un fondo oscuro. En
+  // otros tipos, usar el color de la paleta como siempre.
+  const _cerchaBase = (tipoConstruccion === 'cajon_luz') ? 0x1a1a1a : cfg.cercha;
+  const mCercha = mkMat(_cerchaBase, { spec: 0x444444, shin: 40 });
   const mFacePal = cfg.face != null
     ? mkMat(cfg.face, { trans: cfg.fTrans, opac: cfg.fOpac, spec: 0xaaaacc, shin: 90 })
     : null;
@@ -10088,13 +10119,28 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
     //   sino: palette.
     let mFrontPath = null;
     if (!isAbierta) {
-      if (useRealColors) {
+      if (isCajon) {
+        // Cara SIEMPRE blanca emissive translúcida — un cajón de luz real
+        // tiene cara de acrílico blanco lechoso, el color del SVG es irrelevante
+        // (representaría un vinil por delante, no el material de la cara).
+        // Emissive + translúcido = "glow" natural, la placa PVC emissive y
+        // los LEDs individuales adentro se ven a través como hotspots.
+        mFrontPath = new THREE.MeshPhongMaterial({
+          color: 0xffffff,
+          emissive: new THREE.Color(0xffffff),
+          emissiveIntensity: 0.40,
+          transparent: true, opacity: 0.72,
+          depthWrite: false,
+          specular: new THREE.Color(0x888888), shininess: 100,
+          side: THREE.DoubleSide,
+        });
+      } else if (useRealColors) {
         const fill = svgPath.userData?.style?.fill;
         const col  = (fill && fill !== 'none') ? new THREE.Color(fill) : new THREE.Color(0x888888);
         mFrontPath = new THREE.MeshPhongMaterial({
           color: col,
-          transparent: isCajon, opacity: isCajon ? 0.65 : 1.0,
-          depthWrite: !isCajon,
+          transparent: false, opacity: 1.0,
+          depthWrite: true,
           specular: new THREE.Color(0x444444), shininess: 60,
           side: THREE.DoubleSide,
         });
@@ -10223,7 +10269,7 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       // Además, una PointLight blanca central por letra rebota luz sobre
       // el muro y las cerchas para lectura de escena.
       const ledMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-      const ledSize = Math.max(0.9 / sf, depthSvg * 0.10);
+      const ledSize = Math.max(1.4 / sf, depthSvg * 0.14);  // ~1.4 cm mínimo
       const ledZ    = ledSize * 0.55;   // sentado sobre la PVC del fondo
       for (const info of infoPorLetra) {
         const { shape, bbox: bb } = info;
