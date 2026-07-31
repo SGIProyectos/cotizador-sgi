@@ -1357,7 +1357,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.17.3</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.18.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -10178,13 +10178,16 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       // Placa PVC emissive con la forma de cada letra (5 mm), 2 mm menos por
       // lado para embonar dentro de la cercha. Va al mountGrp — queda con el
       // muro cuando explotamos. La letra (frontGrp) se despega del PVC.
+      // Emissive BLANCO (era ámbar) — el LED moderno es blanco frío, y así
+      // los LEDs individuales adentro se leen como "hotspots" sobre un
+      // fondo homogéneo brillante (mismo look que un cajón real).
       const thickSvg = 0.5 / sf;
       const shrink   = 0.2 / sf;
       const pvcMat = new THREE.MeshPhongMaterial({
-        color: 0xfff6d8,
-        emissive: new THREE.Color(0xffe8b8),
-        emissiveIntensity: 0.75,
-        specular: 0x221100, shininess: 12,
+        color: 0xffffff,
+        emissive: new THREE.Color(0xffffff),
+        emissiveIntensity: 0.85,
+        specular: 0x222222, shininess: 12,
         side: THREE.DoubleSide,
       });
       const pvcExt = { depth: thickSvg, bevelEnabled: false };
@@ -10210,42 +10213,39 @@ function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
       const wallZ = -thickSvg - wallThickSvg / 2;
       mountGrp.add(_buildGraniteWall(bbSvg, sf, wallZ, wallThickSvg));
 
-      // ── Emisión de luz al frente (efecto bloom + iluminación física) ────
-      // Combinamos dos técnicas:
-      //   1) Sprite billboard con textura gradient radial — siempre mira a
-      //      la cámara. Se ve como "resplandor" difuso alrededor de la letra
-      //      sin importar el ángulo. Additive blending = suma al fondo.
-      //   2) PointLight real al frente — ilumina la escena de verdad
-      //      (muros, tornillos, cerchas). La luz "toca" objetos reales.
-      // Ambos van en frontGrp: se mueven con la letra en el explode.
-      const glowTex = _glowTexture();
+      // ── LEDs individuales dentro del cajón ────────────────────────────
+      // Cantidad por altura de la letra (misma regla que abierta_luz):
+      //   3 LEDs si ≤6 cm, 4 si ≤12 cm, 5 si ≤20 cm, 6 si más.
+      // Cada LED = esferita blanca MeshBasicMaterial (no responde a luces,
+      // siempre se ve brillante) montada sobre la placa PVC, apuntando al
+      // frente. Se ven a través de la cara acrílica translúcida (opacity
+      // 0.65) como HOTSPOTS más brillantes que el fondo emissive general.
+      // Además, una PointLight blanca central por letra rebota luz sobre
+      // el muro y las cerchas para lectura de escena.
+      const ledMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const ledSize = Math.max(0.9 / sf, depthSvg * 0.10);
+      const ledZ    = ledSize * 0.55;   // sentado sobre la PVC del fondo
       for (const info of infoPorLetra) {
-        const bb = info.bbox;
+        const { shape, bbox: bb } = info;
         if (bb.w <= 0 || bb.h <= 0) continue;
+        const hCm = bb.h * sf;
+        const nLeds = hCm >= 20 ? 6 : hCm >= 12 ? 5 : hCm >= 6 ? 4 : 3;
+        const radioSeg = ledSize * 0.30;
+
+        let positions = _puntosDentroShape(shape, bb, nLeds, radioSeg);
+        if (positions.length === 0) {
+          positions = [[bb.x0 + bb.w / 2, bb.y0 + bb.h / 2]];
+        }
+        for (const [px, py] of positions) {
+          const geom = new THREE.SphereGeometry(ledSize * 0.5, 12, 8);
+          const m = new THREE.Mesh(geom, ledMat);
+          m.position.set(px, py, ledZ);
+          frontGrp.add(m);
+        }
+
         const cx = bb.x0 + bb.w / 2;
         const cy = bb.y0 + bb.h / 2;
-
-        // Sprite radial — 1.5x el tamaño de la letra, opacity 0.30. Antes era
-        // 2.2x/0.7 y se veia como "sticker luminoso pegado" al frente. Ahora
-        // es un halo discreto que suma un poco de resplandor sin gritar.
-        const spriteMat = new THREE.SpriteMaterial({
-          map: glowTex,
-          color: 0xfff2c0,
-          transparent: true,
-          opacity: 0.30,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-        });
-        const glowSize = Math.max(bb.w, bb.h) * 1.5;
-        const sprite = new THREE.Sprite(spriteMat);
-        sprite.scale.set(glowSize, glowSize, 1);
-        sprite.position.set(cx, cy, depthSvg + 1.0 / sf);
-        sprite.renderOrder = 3;
-        frontGrp.add(sprite);
-
-        // PointLight blanco cálido — ilumina físicamente muro/cerchas. Bajada
-        // 8 -> 4 y color 0xffdc80 -> 0xffe8b8 (menos ámbar, más natural).
-        const pl = new THREE.PointLight(0xffe8b8, 4, depthSvg * 20, 1.4);
+        const pl = new THREE.PointLight(0xffffff, 5, depthSvg * 20, 1.4);
         pl.position.set(cx, cy, depthSvg + 4.0 / sf);
         frontGrp.add(pl);
       }
