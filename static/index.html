@@ -321,6 +321,17 @@ select option { background: var(--k2); color: var(--txt); }
   border-radius: 7px; padding: 4px 9px; font-size: 11px; margin-top: 7px; color: #C6CFDA; line-height: 1.4;
 }
 
+/* Chip de estimación en vivo (encima del CTA calcular).
+   No es sticky — vive al final del scroll del sidebar y el btn-calc queda pegado abajo. */
+.chip-live {
+  margin: 10px 0 0; padding: 9px 11px;
+  background: #10151D; border: 1px solid var(--k4); border-radius: 9px;
+  border-left: 3px solid var(--c-soft);
+}
+.chip-live-r1 { font-size: 12px; font-weight: 600; color: var(--txt); line-height: 1.35; }
+.chip-live-r2 { font-size: 15px; font-weight: 700; color: #F6C063; margin-top: 3px; font-family: var(--mono); line-height: 1.2; }
+.chip-live-r3 { font-size: 10px; color: var(--txt2); margin-top: 3px; line-height: 1.3; font-style: italic; }
+
 /* resumen de configuración (paso 3) */
 .cfg-resumen { margin-top: 10px; background: #10151D; border: 1px solid var(--k4); border-radius: 9px; padding: 9px 11px; }
 .cfg-resumen .r1 { font-size: 12.5px; font-weight: 600; color: var(--txt); }
@@ -1367,7 +1378,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.19.5</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.20.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -1745,6 +1756,15 @@ svg g.pieza-labels                 { pointer-events: none; }
           z-index:200;max-height:180px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,.4)">
         </div>
       </div>
+    </div>
+
+    <!-- Chip de estimación en vivo (sin backend, feedback continuo tipo joaco.lab).
+         Se recalcula al mover altura/ancho/tipo. Es aproximación (no cuenta LEDs
+         ni materiales reales) — el desglose real sigue viniendo del botón. -->
+    <div id="chip-estimacion" class="chip-live">
+      <div class="chip-live-r1" id="chip-live-dims">Sube un SVG para ver el estimado</div>
+      <div class="chip-live-r2" id="chip-live-precio"></div>
+      <div class="chip-live-r3" id="chip-live-sub"></div>
     </div>
 
     <button class="btn-calc" id="btn-calc" onclick="calcular()" disabled>
@@ -2645,7 +2665,109 @@ function setTipo(tipo, btn) {
     const svgEl = document.getElementById("svg-preview-box")?.querySelector("svg");
     if (svgEl) colorizePaths(svgEl, svgPathsRaw);
   }
+  updateEstimacionLive();
 }
+
+// ─── Chip de estimación en vivo (arriba del CTA) ─────────────────────────────
+// Objetivo: feedback continuo estilo joaco.lab — el usuario ve algo cambiar
+// cuando toca sliders, sin llamar al backend. Es APROXIMACIÓN:
+//   precio ≈ altura × precio_cm × multiplicador × n_piezas
+// No cuenta LEDs, fuente, pegamento, IVA, MO, instalación. El desglose real
+// sigue viniendo de /api/cotizar (botón calcular).
+function _multiplicadorPorTipo(tipoCons) {
+  const m = catalog?.precios_base?.multiplicadores || {};
+  const map = {
+    cajon_luz:   m.acrilico_con_luz_std ?? 4.5,
+    retro_halo:  m.aluminio_con_luz     ?? 2.5,
+    sin_luz:     m.aluminio_sin_luz     ?? 2.0,
+    abierta_luz: m.aluminio_con_luz     ?? 2.5,
+  };
+  return map[tipoCons] ?? 4.5;
+}
+
+function _piezasRealesCount() {
+  // Mismo filtro que el motor de cotización (cotizar_letras/planas):
+  // solo piezas cerradas y no-hueco cuentan como letras/piezas facturables.
+  if (!svgPathsRaw || !svgPathsRaw.length) return 0;
+  const reales = svgPathsRaw.filter(p => p.is_closed && !p.es_hueco).length;
+  return reales || svgPathsRaw.filter(p => p.is_closed).length || svgPathsRaw.length;
+}
+
+function _alturaEstimada() {
+  // Prioridad: altura manual → altura auto (max_pieza_height_px × scale).
+  const manual = parseFloat(document.getElementById("altura-letra")?.value);
+  if (manual > 0) return manual;
+  // Auto: usa la escala derivada del ancho real (si se conoce).
+  const anchoReal = parseFloat(document.getElementById("ancho-real")?.value) || 0;
+  if (anchoReal > 0 && svgViewboxW > 0 && svgMaxHeightPx > 0) {
+    const sf = anchoReal / svgViewboxW;
+    return svgMaxHeightPx * sf;
+  }
+  return 0;
+}
+
+function updateEstimacionLive() {
+  const r1 = document.getElementById("chip-live-dims");
+  const r2 = document.getElementById("chip-live-precio");
+  const r3 = document.getElementById("chip-live-sub");
+  if (!r1 || !r2 || !r3) return;
+
+  if (!svgPathsRaw || !svgPathsRaw.length) {
+    r1.textContent = "Sube un SVG para ver el estimado";
+    r2.textContent = "";
+    r3.textContent = "";
+    return;
+  }
+
+  const anchoReal = parseFloat(document.getElementById("ancho-real")?.value) || 0;
+  const altura    = _alturaEstimada();
+  const nPiezas   = _piezasRealesCount();
+
+  // Línea 1 — dimensiones
+  const dimsTxt = (anchoReal > 0 && altura > 0)
+    ? `📐 ${anchoReal.toFixed(1)} × ${altura.toFixed(1)} cm · ${nPiezas} pieza${nPiezas === 1 ? "" : "s"}`
+    : `📐 ${nPiezas} pieza${nPiezas === 1 ? "" : "s"} · falta ancho/altura`;
+  r1.textContent = dimsTxt;
+
+  // Línea 2 — precio estimado (solo letras/planas, la caja usa margen sobre costo real)
+  if (tipoActual === "caja") {
+    r2.textContent = "—";
+    r3.textContent = "cajas se calculan por costo real + margen · pulsa calcular";
+    return;
+  }
+  if (!(altura > 0 && anchoReal > 0)) {
+    r2.textContent = "—";
+    r3.textContent = "faltan datos para estimar precio";
+    return;
+  }
+  const tipoCons = document.getElementById("tipo-construccion")?.value || "cajon_luz";
+  const precio_cm = catalog?.precios_base?.precio_cm || 10;
+  const mult      = _multiplicadorPorTipo(tipoCons);
+  const bruto     = altura * precio_cm * mult * nPiezas;
+  r2.textContent = `💰 ~$${bruto.toLocaleString("es-MX", { maximumFractionDigits: 0 })} MXN`;
+  r3.textContent = `estimado bruto (${nPiezas} × ${altura.toFixed(1)}cm × $${precio_cm} × ×${mult}) — pulsa calcular para desglose real`;
+}
+
+// Listeners de inputs que afectan el chip. Se registran una vez, en DOMContentLoaded.
+(function _wireEstimacionLive() {
+  const ids = ["ancho-real", "altura-letra", "tipo-construccion"];
+  const attach = () => {
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && !el._chipWired) {
+        el.addEventListener("input",  updateEstimacionLive);
+        el.addEventListener("change", updateEstimacionLive);
+        el._chipWired = true;
+      }
+    });
+    updateEstimacionLive();
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", attach);
+  } else {
+    attach();
+  }
+})();
 
 // ─── SELECCIÓN DE CARA CAJA (dos niveles: base + acabado) ────────────────────
 function onBaseCaraCajaChange(base) {
@@ -2973,6 +3095,7 @@ function onTipoConstruccionChange() {
   }
   _filterMatCaraByTipo(tipo);
   actualizarAsesor();
+  updateEstimacionLive();
 }
 
 // ─── SUBIR SVG ───────────────────────────────────────────────────────────────
@@ -3053,6 +3176,7 @@ async function uploadSVG(file) {
     document.getElementById("btn-calc").disabled = false;
 
     actualizarAsesor(true);   // actualiza sidebar, path cards y asesor
+    updateEstimacionLive();
     switchTab("svg");
     showToast(`SVG cargado: ${data.paths.length} paths detectados`, "ok");
     openCfgModal();
@@ -5264,6 +5388,7 @@ async function loadCatalog(force=false) {
     populateLedsCaja();
     populateVinilCercha();
     populateVinilesCaja();
+    updateEstimacionLive();   // ya hay precio_cm y multiplicadores → refresca el chip
   } catch(e) {
     showToast("Error cargando catálogo", "err");
   }
@@ -6159,6 +6284,10 @@ document.addEventListener("DOMContentLoaded", () => {
   if (ajusteSection) ajusteSection.style.display = "";
   // Sincronizar multiplicador con el tipo de construcción por defecto al cargar
   onTipoConstruccionChange();
+  // Precarga del catálogo al arranque: el chip de estimación en vivo necesita
+  // precio_cm y multiplicadores desde el primer segundo, sin esperar al usuario
+  // a que abra el modal de configuración o el tab Catálogo.
+  loadCatalog().catch(() => {});
 });
 
 // ─── PREVIEW FÓRMULA EN TIEMPO REAL ──────────────────────────────────────────
