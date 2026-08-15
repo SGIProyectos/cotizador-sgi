@@ -6,7 +6,7 @@
 <title>Cotizador SGI – Letras y Anuncios</title>
 <style>
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 /* ══════════ SGI · tema oscuro premium con tintas CMYK ══════════
    Cian  = acciones e interacción   Magenta = destacados / selección
@@ -42,6 +42,29 @@
   --ok:      #41C983;
   --sans:'IBM Plex Sans',system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:'IBM Plex Mono',ui-monospace,'Cascadia Mono','SF Mono',Menlo,monospace;
+
+  /* ── SGI Design v2 (mockup nuevo) ── prefijo --n- para coexistir con tokens legacy */
+  --n-bg:#0A0B0D;          /* fondo raíz */
+  --n-chrome:#0D0F12;      /* topbar / tabbar / chromes */
+  --n-panel:#101317;       /* sidebars */
+  --n-raise:#15181D;       /* superficie card */
+  --n-raise-2:#1A1E24;     /* hover */
+  --n-line:rgba(255,255,255,.06);
+  --n-line-2:rgba(255,255,255,.09);
+  --n-line-3:rgba(255,255,255,.14);
+  --n-tx:#EDEFF2;
+  --n-tx-2:#A6ADB8;
+  --n-tx-3:#79818D;
+  --n-tx-4:#5C636E;
+  --n-accent:#FFB224;
+  --n-accent-2:#FFC95C;
+  --n-accent-dim:rgba(255,178,36,.14);
+  --n-ok:#5ED6A4;
+  --n-s1:4px; --n-s2:8px; --n-s3:12px; --n-s4:16px; --n-s5:20px; --n-s6:24px; --n-s8:32px;
+  --n-r:8px; --n-r-lg:10px; --n-r-xl:14px;
+  --n-t:200ms cubic-bezier(.2,.6,.2,1);
+  --n-mono:'JetBrains Mono',ui-monospace,monospace;
+  --n-lift:inset 0 1px 0 rgba(255,255,255,.04);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { height: 100%; }
@@ -1282,6 +1305,89 @@ svg g.pieza-labels                 { pointer-events: none; }
   }
 }
 
+/* ══════════════════════════════════════════════════════════
+   SGI Design v2 — shell / topbar / tabbar
+   Etapa 1 del rediseño. Convive con el layout .app viejo
+   mediante la envoltura .sgi-shell que agrupa topbar + tabbar
+   + .sgi-work (contenedor de las 3 columnas existentes).
+   ══════════════════════════════════════════════════════════ */
+.sgi-shell{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;background:var(--n-bg)}
+.sgi-work{flex:1;display:flex;min-height:0;overflow:hidden}
+.sgi-shell .app{flex:1;height:auto;min-height:0}  /* .app existente ya es display:flex 100vh — dentro del shell heredamos */
+
+/* Topbar horizontal — 48px de alto, full width */
+.topbar{height:48px;flex:none;display:flex;align-items:center;gap:var(--n-s3);padding:0 var(--n-s4);
+  background:var(--n-chrome);border-bottom:1px solid var(--n-line);position:relative;z-index:40;
+  font-family:var(--sans);color:var(--n-tx);font-size:13px}
+.brand{display:flex;align-items:center;gap:var(--n-s2);cursor:pointer;user-select:none}
+.brand__mark{width:22px;height:22px;border-radius:6px;background:linear-gradient(160deg,#2A2E36,#15181D);
+  border:1px solid var(--n-line-2);display:flex;align-items:center;justify-content:center;box-shadow:var(--n-lift)}
+.brand__name{font-size:12.5px;font-weight:600;letter-spacing:-.01em;color:var(--n-tx)}
+.brand__v{font-size:10px;font-weight:500;color:var(--n-tx-3);margin-left:4px;font-family:var(--n-mono)}
+.crumbs{display:flex;align-items:center;gap:var(--n-s2);font-size:12.5px;color:var(--n-tx-3);
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.crumbs b{font-weight:500;color:var(--n-tx)}
+.crumbs .sep{color:var(--n-tx-4)}
+.topbar__spacer{flex:1}
+.state{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--n-tx-2);
+  background:rgba(255,255,255,.03);border:1px solid var(--n-line);padding:3px 8px 3px 6px;border-radius:99px}
+.state i{width:5px;height:5px;border-radius:99px;background:var(--n-ok);display:block}
+.tp-btn{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--n-tx-2);
+  background:transparent;border:1px solid var(--n-line);border-radius:var(--n-r);padding:6px 10px;
+  cursor:pointer;transition:var(--n-t);font-family:var(--sans)}
+.tp-btn:hover{background:rgba(255,255,255,.04);color:var(--n-tx);border-color:var(--n-line-2)}
+.tp-btn svg{opacity:.8}
+.avatar{width:24px;height:24px;border-radius:99px;background:linear-gradient(160deg,#3A3F49,#22262C);
+  border:1px solid var(--n-line-2);font-size:10.5px;font-weight:600;color:var(--n-tx-2);
+  display:flex;align-items:center;justify-content:center;font-family:var(--sans)}
+
+/* Dropdown Exportar (4 PDFs + Excel) */
+.exp-wrap{position:relative}
+.exp-menu{position:absolute;top:calc(100% + 6px);right:0;min-width:220px;background:var(--n-raise);
+  border:1px solid var(--n-line-2);border-radius:var(--n-r);padding:4px;
+  box-shadow:0 12px 32px rgba(0,0,0,.55),var(--n-lift);z-index:60;display:none}
+.exp-wrap.is-open .exp-menu{display:block}
+.exp-item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;font-size:12.5px;
+  color:var(--n-tx-2);background:transparent;border:none;border-radius:6px;cursor:pointer;
+  transition:var(--n-t);font-family:var(--sans);text-align:left}
+.exp-item:hover{background:rgba(255,255,255,.04);color:var(--n-tx)}
+.exp-item .exp-k{font-family:var(--n-mono);font-size:10px;color:var(--n-tx-4);margin-left:auto}
+
+/* Tabbar — 40px, debajo del topbar */
+.tabbar{height:40px;flex:none;display:flex;align-items:stretch;gap:2px;padding:0 var(--n-s3);
+  background:var(--n-chrome);border-bottom:1px solid var(--n-line);position:relative;z-index:30;
+  font-family:var(--sans)}
+.tabbar .tb-tab{position:relative;display:flex;align-items:center;gap:7px;padding:0 11px;font-size:12.5px;
+  font-weight:450;color:var(--n-tx-3);transition:color var(--n-t);background:transparent;border:none;cursor:pointer}
+.tabbar .tb-tab svg{opacity:.7;transition:var(--n-t)}
+.tabbar .tb-tab:hover{color:var(--n-tx-2)}
+.tabbar .tb-tab.is-active{color:var(--n-tx);font-weight:500}
+.tabbar .tb-tab.is-active svg{opacity:1;color:var(--n-accent)}
+.tabbar .tb-tab.is-active::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;height:1.5px;
+  background:var(--n-accent);border-radius:2px 2px 0 0;box-shadow:0 0 12px rgba(255,178,36,.5)}
+.tabbar__spacer{flex:1}
+.tabbar .more{position:relative;display:flex;align-items:center}
+.tabbar .more__btn{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--n-tx-3);padding:5px 9px;
+  background:transparent;border:none;cursor:pointer;font-family:var(--sans);transition:var(--n-t);border-radius:6px}
+.tabbar .more__btn:hover{color:var(--n-tx);background:rgba(255,255,255,.04)}
+.tabbar .more__btn svg{transition:transform var(--n-t)}
+.tabbar .more.is-open .more__btn svg{transform:rotate(180deg)}
+.tabbar .menu{position:absolute;top:calc(100% - 2px);right:0;min-width:240px;background:var(--n-raise);
+  border:1px solid var(--n-line-2);border-radius:var(--n-r);padding:4px;
+  box-shadow:0 12px 32px rgba(0,0,0,.55),var(--n-lift);z-index:60;display:none}
+.tabbar .more.is-open .menu{display:block}
+.tabbar .menu__label{font-size:10px;font-weight:600;color:var(--n-tx-4);text-transform:uppercase;
+  letter-spacing:.08em;padding:6px 10px 4px}
+.tabbar .menu__item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;font-size:12.5px;
+  color:var(--n-tx-2);background:transparent;border:none;border-radius:6px;cursor:pointer;
+  transition:var(--n-t);font-family:var(--sans);text-align:left}
+.tabbar .menu__item:hover{background:rgba(255,255,255,.04);color:var(--n-tx)}
+.tabbar .menu__item .k{font-family:var(--n-mono);font-size:10px;color:var(--n-tx-4);margin-left:auto}
+
+/* Ocultar el sidebar-header viejo y la <nav.tabs> vieja: su contenido migró
+   al topbar/tabbar nuevos. Los inputs y el JS de switchTab siguen vivos. */
+.sgi-shell .sidebar-header{display:none}
+.sgi-shell .main > .tabs{display:none}
 </style>
 <script type="importmap">
 {
@@ -1369,6 +1475,97 @@ svg g.pieza-labels                 { pointer-events: none; }
   </div>
 </div>
 
+<!-- ══════════════════ SGI SHELL v2 (topbar + tabbar + work) ══════════════════ -->
+<div class="sgi-shell">
+
+  <!-- ══ TOPBAR ══ -->
+  <header class="topbar">
+    <div class="brand" onclick="homeAbrir()" title="Volver a la pantalla de inicio">
+      <div class="brand__mark">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
+      </div>
+      <span class="brand__name">SGI Cotizador</span>
+      <span class="brand__v" id="brand-version">v1.21.0</span>
+    </div>
+    <div class="crumbs" id="topbar-crumbs">
+      <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
+    </div>
+    <div class="topbar__spacer"></div>
+    <span class="state" id="topbar-state" style="display:none"><i></i>Guardado</span>
+    <button class="tp-btn" onclick="volverAPos()" title="Volver al sistema POS">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7.5 2.5 3.5 6l4 3.5"/></svg>
+      POS
+    </button>
+    <button class="tp-btn" onclick="abrirDashboard()" title="Dashboard">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 10V5.5M5.5 10V2.5M9 10V6.5"/></svg>
+      Dashboard
+    </button>
+    <button class="tp-btn" onclick="abrirHistorial()" title="Historial de cotizaciones">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="6" r="4.2"/><path d="M6 3.6V6l1.7 1"/></svg>
+      Historial
+    </button>
+    <div class="exp-wrap" id="exp-wrap">
+      <button class="tp-btn" onclick="document.getElementById('exp-wrap').classList.toggle('is-open')" title="Exportar documentos">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 1.5v6m0 0L3.6 5.1M6 7.5l2.4-2.4M1.8 8.4v1.2a.9.9 0 0 0 .9.9h6.6a.9.9 0 0 0 .9-.9V8.4"/></svg>
+        Exportar
+      </button>
+      <div class="exp-menu">
+        <button class="exp-item" onclick="_expClose();_expPDF('pdf')">Cotización (PDF) <span class="exp-k">Cliente</span></button>
+        <button class="exp-item" onclick="_expClose();_expPDF('ot')">Orden de Trabajo <span class="exp-k">Taller</span></button>
+        <button class="exp-item" onclick="_expClose();_expPDF('entrega')">Acta de Entrega <span class="exp-k">Garantía</span></button>
+        <button class="exp-item" onclick="_expClose();_expPDF('plano')">Plano Cliente <span class="exp-k">Medidas</span></button>
+        <button class="exp-item" onclick="_expClose();_expPDF('plano-taller')">Plano Taller <span class="exp-k">BOM</span></button>
+        <button class="exp-item" onclick="_expClose();_expXLSX()">Excel <span class="exp-k">XLSX</span></button>
+      </div>
+    </div>
+    <div class="avatar" title="SGI">SG</div>
+  </header>
+
+  <!-- ══ TABBAR — 3 primarias + Administración overflow ══ -->
+  <nav class="tabbar" id="sgi-tabbar">
+    <button class="tb-tab is-active" data-sgi-tab="svg" onclick="switchTab('svg')">
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="10" height="10" rx="2"/><path d="M2 5.5h10M5.5 5.5V12"/></svg>
+      Diseño
+    </button>
+    <button class="tb-tab" data-sgi-tab="result" onclick="switchTab('result')">
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2.5 11.5V6M6.2 11.5V2.5M9.9 11.5V8"/></svg>
+      Cotización
+    </button>
+    <button class="tb-tab" data-sgi-tab="3d" onclick="switchTab('3d')">
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M7 1.5 12 4v6l-5 2.5L2 10V4l5-2.5zM2 4l5 2.5m0 0L12 4m-5 2.5V12"/></svg>
+      Vista 3D
+    </button>
+    <div class="tabbar__spacer"></div>
+    <div class="more" id="sgi-more">
+      <button class="more__btn" onclick="document.getElementById('sgi-more').classList.toggle('is-open')">
+        Administración
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3.4 5.6 7 9.1l3.6-3.5"/></svg>
+      </button>
+      <div class="menu">
+        <div class="menu__label">Herramientas</div>
+        <button class="menu__item" data-sgi-tab="rec" onclick="_sgiCloseMore();switchTab('rec')">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="5"/><path d="M7 4v3l1.8 1"/></svg>
+          Recomendaciones
+        </button>
+        <button class="menu__item" data-sgi-tab="corte" onclick="_sgiCloseMore();switchTab('corte')">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="4" cy="10" r="1.6"/><circle cx="10" cy="10" r="1.6"/><path d="M5.2 8.9 10.4 3M8.8 8.9 3.6 3"/></svg>
+          Plan de corte
+        </button>
+        <button class="menu__item" data-sgi-tab="catalog" onclick="_sgiCloseMore();switchTab('catalog');loadCatalog()">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2.5" width="10" height="9" rx="1.5"/><path d="M5 2.5v9"/></svg>
+          Catálogo de materiales
+        </button>
+        <button class="menu__item" data-sgi-tab="admin" onclick="_sgiCloseMore();switchTab('admin');adminLoad()">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="2.1"/><path d="M7 1.8v1.4M7 10.8v1.4M12.2 7h-1.4M3.2 7H1.8M10.7 3.3l-1 1M4.3 9.7l-1 1M10.7 10.7l-1-1M4.3 4.3l-1-1"/></svg>
+          Parámetros y márgenes
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ══ WORK: aquí vive el <div class="app"> viejo con sidebar + main + inspector ══ -->
+  <div class="sgi-work">
+
 <div class="app">
 
   <!-- Backdrop del sidebar mobile (click cierra) -->
@@ -1378,7 +1575,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.20.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.21.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -2267,7 +2464,10 @@ svg g.pieza-labels                 { pointer-events: none; }
           onclick="toggleInspector()" title="Mostrar ajustes de precio">
     ⚙ <span>Precio</span>
   </button>
-</div>
+</div><!-- /.app -->
+
+  </div><!-- /.sgi-work -->
+</div><!-- /.sgi-shell -->
 
 <!-- ══════════════════ MODAL EDICIÓN ══════════════════ -->
 <div class="modal-overlay" id="modal-overlay">
@@ -5344,13 +5544,47 @@ function planasCerrarModal() {
 
 // ─── HELPERS UI ──────────────────────────────────────────────────────────────
 function switchTab(name) {
+  // Nav vieja (oculta con CSS, se mantiene por si algún código legacy consulta .tab.active)
   const names = ["svg","result","3d","rec","corte","catalog","admin"];
-  document.querySelectorAll(".tab").forEach((t,i) => t.classList.toggle("active", names[i] === name));
+  document.querySelectorAll("nav.tabs > .tab").forEach((t,i) => t.classList.toggle("active", names[i] === name));
+  // Nav nueva (topbar tabbar): sincroniza .tb-tab.is-active por data-sgi-tab
+  document.querySelectorAll(".tabbar [data-sgi-tab]").forEach(t => {
+    t.classList.toggle("is-active", t.dataset.sgiTab === name);
+  });
   document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-  document.getElementById("tab-"+name).classList.add("active");
+  document.getElementById("tab-"+name)?.classList.add("active");
   if (name === "3d") requestAnimationFrame(() => window._v3dResize?.());
   // Mobile: al cambiar de tab, cerrar el sidebar si estaba abierto
   if (window.matchMedia("(max-width: 980px)").matches) toggleSidebar(false);
+}
+function _sgiCloseMore(){ document.getElementById("sgi-more")?.classList.remove("is-open"); }
+function _expClose(){ document.getElementById("exp-wrap")?.classList.remove("is-open"); }
+// Cerrar dropdowns al hacer click fuera
+document.addEventListener("click", function(e){
+  const m = document.getElementById("sgi-more");
+  if (m && !m.contains(e.target)) m.classList.remove("is-open");
+  const x = document.getElementById("exp-wrap");
+  if (x && !x.contains(e.target)) x.classList.remove("is-open");
+});
+// Actualiza el crumb con el cliente cuando se escribe
+document.addEventListener("DOMContentLoaded", function(){
+  const cl = document.getElementById("cliente-input");
+  const cr = document.getElementById("topbar-cliente");
+  if (cl && cr) {
+    const sync = () => { cr.textContent = (cl.value || "").trim() || "Nueva"; };
+    cl.addEventListener("input", sync);
+    sync();
+  }
+});
+// Exportar: reutiliza los endpoints existentes usando el último quote_id
+function _expPDF(kind){
+  if (!quoteId) { showToast("Primero calcula una cotización", "warn"); return; }
+  const map = { pdf:"pdf", ot:"ot", entrega:"entrega", plano:"plano", "plano-taller":"plano-taller" };
+  window.open("/api/" + (map[kind] || "pdf") + "/" + quoteId, "_blank");
+}
+function _expXLSX(){
+  if (!quoteId) { showToast("Primero calcula una cotización", "warn"); return; }
+  window.open("/api/excel/" + quoteId, "_blank");
 }
 
 // Sidebar mobile toggle. Sin arg: alterna. Con arg boolean: fuerza estado.
