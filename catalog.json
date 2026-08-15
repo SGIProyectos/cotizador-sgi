@@ -1226,5 +1226,451 @@
       "masa_kg": 0.19,
       "T_ref_min": 0.0
     }
+  },
+  "neon_perfiles": [
+    {
+      "id": "mini-blanco",
+      "nombre": "Neón Mini 6mm",
+      "color": "Blanco cálido",
+      "precio_m": 180,
+      "watts_m": 8,
+      "altura_min_cm": 5,
+      "activo": true
+    },
+    {
+      "id": "mini-azul",
+      "nombre": "Neón Mini 6mm",
+      "color": "Azul",
+      "precio_m": 200,
+      "watts_m": 8,
+      "altura_min_cm": 5,
+      "activo": true
+    },
+    {
+      "id": "mini-rojo",
+      "nombre": "Neón Mini 6mm",
+      "color": "Rojo",
+      "precio_m": 200,
+      "watts_m": 8,
+      "altura_min_cm": 5,
+      "activo": true
+    },
+    {
+      "id": "mini-verde",
+      "nombre": "Neón Mini 6mm",
+      "color": "Verde",
+      "precio_m": 200,
+      "watts_m": 8,
+      "altura_min_cm": 5,
+      "activo": true
+    },
+    {
+      "id": "std-blanco",
+      "nombre": "Neón Estándar 12mm",
+      "color": "Blanco cálido",
+      "precio_m": 240,
+      "watts_m": 12,
+      "altura_min_cm": 10,
+      "activo": true
+    },
+    {
+      "id": "std-blancof",
+      "nombre": "Neón Estándar 12mm",
+      "color": "Blanco frío",
+      "precio_m": 240,
+      "watts_m": 12,
+      "altura_min_cm": 10,
+      "activo": true
+    },
+    {
+      "id": "std-azul",
+      "nombre": "Neón Estándar 12mm",
+      "color": "Azul",
+      "precio_m": 260,
+      "watts_m": 12,
+      "altura_min_cm": 10,
+      "activo": true
+    },
+    {
+      "id": "std-rojo",
+      "nombre": "Neón Estándar 12mm",
+      "color": "Rojo",
+      "precio_m": 260,
+      "watts_m": 12,
+      "altura_min_cm": 10,
+      "activo": true
+    },
+    {
+      "id": "std-rosa",
+      "nombre": "Neón Estándar 12mm",
+      "color": "Rosa",
+      "precio_m": 280,
+      "watts_m": 12,
+      "altura_min_cm": 10,
+      "activo": true
+    },
+    {
+      "id": "std-morado",
+      "nombre": "Neón Estándar 12mm",
+      "color": "Morado",
+      "precio_m": 280,
+      "watts_m": 12,
+      "altura_min_cm": 10,
+      "activo": true
+    },
+    {
+      "id": "std-amarillo",
+      "nombre": "Neón Estándar 12mm",
+      "color": "Amarillo",
+      "precio_m": 260,
+      "watts_m": 12,
+      "altura_min_cm": 10,
+      "activo": true
+    },
+    {
+      "id": "std-verde",
+      "nombre": "Neón Estándar 12mm",
+      "color": "Verde",
+      "precio_m": 260,
+      "watts_m": 12,
+      "altura_min_cm": 10,
+      "activo": true
+    },
+    {
+      "id": "std-rgb",
+      "nombre": "Neón Estándar 12mm",
+      "color": "RGB",
+      "precio_m": 420,
+      "watts_m": 14,
+      "altura_min_cm": 10,
+      "activo": true
+    },
+    {
+      "id": "prem-blanco",
+      "nombre": "Neón Premium 16mm",
+      "color": "Blanco cálido",
+      "precio_m": 340,
+      "watts_m": 16,
+      "altura_min_cm": 15,
+      "activo": true
+    },
+    {
+      "id": "prem-rgb",
+      "nombre": "Neón Premium 16mm",
+      "color": "RGB direccionable",
+      "precio_m": 580,
+      "watts_m": 18,
+      "altura_min_cm": 15,
+      "activo": true
+    }
+  ],
+  "neon_params": {
+    "cable_m": 2.5,
+    "acces_m": 35,
+    "consumibles_pct": 0.08,
+    "fuente_factor": 0.8,
+    "m_por_min": 0.6,
+    "tarifa_hora": 180,
+    "merma": 0.05,
+    "margen": 0.35,
+    "desperdicio_umbral_cm": 30,
+    "fuentes": [
+      {
+        "id": "f60",
+        "nombre": "Fuente 60W",
+        "watts": 60,
+        "precio": 280,
+        "tipo": "fuente",
+        "activo": true
+      },
+      {
+        "id": "f100",
+        "nombre": "Fuente 100W estándar",
+        "watts": 100,
+        "precio": 380,
+        "tipo": "fuente",
+        "activo": true
+      },
+      {
+        "id": "f150",
+        "nombre": "Fuente 150W",
+        "watts": 150,
+        "precio": 520,
+        "tipo": "fuente",
+        "activo": true
+      },
+      {
+        "id": "f200",
+        "nombre": "Fuente 200W",
+        "watts": 200,
+        "precio": 680,
+        "tipo": "fuente",
+        "activo": true
+      },
+      {
+        "id": "f300",
+        "nombre": "Fuente 300W",
+        "watts": 300,
+        "precio": 980,
+        "tipo": "fuente",
+        "activo": true
+      },
+      {
+        "id": "ad12",
+        "nombre": "Adaptador 12V 5A (60W)",
+        "watts": 60,
+        "precio": 150,
+        "tipo": "adaptador",
+        "activo": true
+      },
+      {
+        "id": "ad24",
+        "nombre": "Adaptador 24V 3A (72W)",
+        "watts": 72,
+        "precio": 220,
+        "tipo": "adaptador",
+        "activo": true
+      },
+      {
+        "id": "p9v",
+        "nombre": "Pila 9V (portátil)",
+        "watts": 9,
+        "precio": 80,
+        "tipo": "pila",
+        "activo": true
+      },
+      {
+        "id": "plit",
+        "nombre": "Batería Li-ion recargable",
+        "watts": 40,
+        "precio": 450,
+        "tipo": "pila",
+        "activo": true
+      }
+    ],
+    "consumibles": [
+      {
+        "id": "ca-loctite",
+        "nombre": "Cianoacrilato Loctite 401",
+        "precio": 120,
+        "unidad": "pza",
+        "activo": true
+      },
+      {
+        "id": "ca-3m",
+        "nombre": "Cianoacrilato 3M",
+        "precio": 95,
+        "unidad": "pza",
+        "activo": true
+      },
+      {
+        "id": "ca-kola",
+        "nombre": "Kola Loka (genérico)",
+        "precio": 35,
+        "unidad": "pza",
+        "activo": true
+      },
+      {
+        "id": "sold-est",
+        "nombre": "Soldadura estaño 60/40 1mm",
+        "precio": 180,
+        "unidad": "rollo",
+        "activo": true
+      },
+      {
+        "id": "flux",
+        "nombre": "Flux para soldadura",
+        "precio": 80,
+        "unidad": "pza",
+        "activo": true
+      },
+      {
+        "id": "termo",
+        "nombre": "Termofit 3mm surtido",
+        "precio": 120,
+        "unidad": "juego",
+        "activo": true
+      }
+    ],
+    "bases": [
+      {
+        "id": "acr-3-tr",
+        "nombre": "Acrílico transparente 3mm",
+        "tipo_precio": "lamina",
+        "lamina_w": 120,
+        "lamina_h": 240,
+        "precio_lamina": 2450,
+        "activo": true
+      },
+      {
+        "id": "acr-6-tr",
+        "nombre": "Acrílico transparente 6mm",
+        "tipo_precio": "lamina",
+        "lamina_w": 120,
+        "lamina_h": 240,
+        "precio_lamina": 4030,
+        "activo": true
+      },
+      {
+        "id": "acr-3-neg",
+        "nombre": "Acrílico negro 3mm",
+        "tipo_precio": "lamina",
+        "lamina_w": 120,
+        "lamina_h": 240,
+        "precio_lamina": 2590,
+        "activo": true
+      },
+      {
+        "id": "acr-6-neg",
+        "nombre": "Acrílico negro 6mm",
+        "tipo_precio": "lamina",
+        "lamina_w": 120,
+        "lamina_h": 240,
+        "precio_lamina": 4180,
+        "activo": true
+      },
+      {
+        "id": "mdf-6-crudo",
+        "nombre": "MDF 6mm crudo",
+        "tipo_precio": "pieza",
+        "precio_m2": 280,
+        "activo": true
+      },
+      {
+        "id": "mdf-6-pint",
+        "nombre": "MDF 6mm pintado",
+        "tipo_precio": "pieza",
+        "precio_m2": 520,
+        "activo": true
+      },
+      {
+        "id": "mdf-9-pint",
+        "nombre": "MDF 9mm pintado",
+        "tipo_precio": "pieza",
+        "precio_m2": 680,
+        "activo": true
+      },
+      {
+        "id": "pvc-3",
+        "nombre": "PVC espumado 3mm",
+        "tipo_precio": "lamina",
+        "lamina_w": 120,
+        "lamina_h": 240,
+        "precio_lamina": 1090,
+        "activo": true
+      },
+      {
+        "id": "pvc-6",
+        "nombre": "PVC espumado 6mm",
+        "tipo_precio": "lamina",
+        "lamina_w": 120,
+        "lamina_h": 240,
+        "precio_lamina": 1790,
+        "activo": true
+      },
+      {
+        "id": "trov-3",
+        "nombre": "Trovicel 3mm",
+        "tipo_precio": "lamina",
+        "lamina_w": 120,
+        "lamina_h": 240,
+        "precio_lamina": 980,
+        "activo": true
+      },
+      {
+        "id": "aluco-3",
+        "nombre": "Alucobond 3mm",
+        "tipo_precio": "lamina",
+        "lamina_w": 120,
+        "lamina_h": 240,
+        "precio_lamina": 3600,
+        "activo": true
+      },
+      {
+        "id": "sin-base",
+        "nombre": "Sin base (solo neón)",
+        "tipo_precio": "pieza",
+        "precio_m2": 0,
+        "activo": true
+      }
+    ],
+    "formas": [
+      {
+        "id": "rect",
+        "nombre": "Rectangular",
+        "factor_area": 1.0,
+        "corte_m": 0
+      },
+      {
+        "id": "silueta",
+        "nombre": "Silueta / calada",
+        "factor_area": 0.85,
+        "corte_m": 35
+      },
+      {
+        "id": "redondeada",
+        "nombre": "Rectangular c/ esquinas",
+        "factor_area": 0.98,
+        "corte_m": 12
+      }
+    ],
+    "soporte_precio": 180,
+    "urgencias": [
+      {
+        "id": "normal",
+        "nombre": "Normal",
+        "dias": "7–10 días",
+        "mult": 1.0
+      },
+      {
+        "id": "rapido",
+        "nombre": "Rápido",
+        "dias": "4–5 días",
+        "mult": 1.2
+      },
+      {
+        "id": "express",
+        "nombre": "Express",
+        "dias": "48–72 hrs",
+        "mult": 1.45
+      }
+    ],
+    "fab3d": {
+      "filamento_mxn_g": 0.6,
+      "filamento_dens_g": 1.24,
+      "peso_gr_m": 55,
+      "horas_m_por_hora": 4.5,
+      "horas_mxn_hora": 25,
+      "anclo_precio": 8,
+      "puente_precio": 12,
+      "tiras_led": [
+        {
+          "id": "led4",
+          "mm": 4
+        },
+        {
+          "id": "led6",
+          "mm": 6
+        },
+        {
+          "id": "led8",
+          "mm": 8
+        },
+        {
+          "id": "led12",
+          "mm": 12
+        },
+        {
+          "id": "led16",
+          "mm": 16
+        }
+      ],
+      "canal_default": {
+        "ancho_mm": 16,
+        "alto_mm": 20,
+        "pared_mm": 1.6
+      },
+      "signflex3d_url": "https://signflex3d.com/generador.html"
+    }
   }
 }

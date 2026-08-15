@@ -1,7 +1,10 @@
+import copy
 import json
 import logging
 import os
 from pathlib import Path
+
+from neon_calculator import NEON_PARAMS_DEFAULTS, NEON_PERFILES_DEFAULTS
 
 log = logging.getLogger("cotizador.catalog")
 
@@ -1281,6 +1284,15 @@ ICF_CONFIG = {
 }
 
 
+# ─── NEÓN LED (perfiles + parámetros) ────────────────────────────────────────
+# Defaults viven en neon_calculator.py (para que el motor sea autocontenido y
+# testeable sin este módulo). Aquí solo se hace la copia mutable que actúa
+# como estado del catálogo — editable desde /api/catalog y persistida en
+# catalog.json como el resto. Deep-copy para no mutar los defaults del motor.
+NEON_PERFILES: list[dict] = copy.deepcopy(NEON_PERFILES_DEFAULTS)
+NEON_PARAMS:   dict       = copy.deepcopy(NEON_PARAMS_DEFAULTS)
+
+
 # ─── PERSISTENCIA DEL CATÁLOGO ───────────────────────────────────────────────
 
 def catalog_to_dict() -> dict:
@@ -1314,6 +1326,8 @@ def catalog_to_dict() -> dict:
             },
             "canonica": dict(ICF_CONFIG["canonica"]),
         },
+        "neon_perfiles": copy.deepcopy(NEON_PERFILES),
+        "neon_params":   copy.deepcopy(NEON_PARAMS),
     }
 
 
@@ -1384,6 +1398,38 @@ def catalog_apply(raw: dict):
         TUBULARES.update(raw["tubulares"])
     if "icf" in raw:
         _apply_icf(raw["icf"])
+    if isinstance(raw.get("neon_perfiles"), list):
+        NEON_PERFILES.clear()
+        NEON_PERFILES.extend(copy.deepcopy(raw["neon_perfiles"]))
+    if isinstance(raw.get("neon_params"), dict):
+        _apply_neon_params(raw["neon_params"], full_replace=True)
+
+
+def _apply_neon_params(raw: dict, *, full_replace: bool) -> None:
+    """Aplica overrides al dict NEON_PARAMS in-place.
+    - full_replace=True (desde catalog_apply): reemplaza cada key top-level y
+      el sub-dict fab3d completos.
+    - full_replace=False (desde _catalog_merge): fusiona preservando defaults
+      no presentes en `raw` — así se conservan campos nuevos añadidos al motor
+      cuando el catalog.json es viejo."""
+    if not isinstance(raw, dict):
+        return
+    for k, v in raw.items():
+        if k == "fab3d":
+            continue
+        if full_replace or k not in NEON_PARAMS:
+            NEON_PARAMS[k] = copy.deepcopy(v)
+        elif isinstance(v, list):
+            # listas del catálogo (fuentes, consumibles, bases, formas, urgencias)
+            # se reemplazan completas — el frontend siempre manda la lista viva.
+            NEON_PARAMS[k] = copy.deepcopy(v)
+        else:
+            NEON_PARAMS[k] = v
+    if isinstance(raw.get("fab3d"), dict):
+        if full_replace:
+            NEON_PARAMS["fab3d"] = copy.deepcopy(raw["fab3d"])
+        else:
+            NEON_PARAMS["fab3d"].update(copy.deepcopy(raw["fab3d"]))
 
 
 def _apply_icf(raw: dict) -> None:
@@ -1538,6 +1584,18 @@ def _catalog_merge(raw: dict):
                 TUBULARES[tid] = tdata
     if "icf" in raw:
         _apply_icf(raw["icf"])
+    if isinstance(raw.get("neon_perfiles"), list):
+        # perfiles: merge por id (preserva perfiles nuevos del código no en JSON)
+        raw_by_id = {p["id"]: p for p in raw["neon_perfiles"] if "id" in p}
+        for perfil in NEON_PERFILES:
+            if perfil.get("id") in raw_by_id:
+                perfil.update(raw_by_id[perfil["id"]])
+        existing = {p.get("id") for p in NEON_PERFILES}
+        for perfil in raw["neon_perfiles"]:
+            if perfil.get("id") not in existing:
+                NEON_PERFILES.append(copy.deepcopy(perfil))
+    if isinstance(raw.get("neon_params"), dict):
+        _apply_neon_params(raw["neon_params"], full_replace=False)
 
 
 def catalog_load():

@@ -32,12 +32,15 @@ from calculator import (
 )
 from catalog_data import (
     GRUAS,
+    NEON_PARAMS,
+    NEON_PERFILES,
     catalog_apply,
     catalog_load,
     catalog_save,
     catalog_to_dict,
 )
 from excel_gen import generar_xlsx
+from neon_calculator import NeonQuoteResult, cotizar_neon
 from pdf_gen import generar_pdf, generar_pdf_entrega, generar_pdf_fachada, generar_pdf_ot
 from plano_gen import generar_plano_cliente, generar_plano_corte, generar_plano_taller
 
@@ -454,6 +457,46 @@ class CajaRequest(_InstMixin):
     cliente: str = ""
     notas: str = ""
 
+class NeonRequest(_InstMixin):
+    """Cotización de neón LED. A diferencia de letras/caja/planas, este endpoint
+    no depende de `session_id` — el frontend calcula Lm en el browser con
+    getTotalLength() (svgDetection.js) y manda todo por payload. Persiste
+    `svg_text` en la DB igual que los otros tipos, para reabrir el visor luego."""
+    # Longitud de neón y agrupación por color
+    lm: float = 0.0
+    uniones: int = 0
+    perfil_id: str = ""                # id del catálogo NEON_PERFILES
+    tramos: list[dict] = []            # [{perfil_id, Lm}] para multi-color
+    fuente_id: str = ""                # id de NEON_PARAMS.fuentes; "" = auto-dimensionar
+    # Dimensiones (para desperdicio de lámina, área base)
+    ancho_cm: float = 0.0
+    alto_cm: float = 0.0
+    # Modo de fabricación
+    modo_fabricacion: str = "lamina"   # "lamina" | "3d"
+    # Base (modo lámina)
+    base_id: str = "acr-3-tr"          # id de NEON_PARAMS.bases
+    forma_id: str = "rect"             # id de NEON_PARAMS.formas
+    incluir_soporte: bool = True
+    cobrar_desperdicio: bool = True
+    corte_extra: float = 0.0
+    # 3D (modo Signflex-style)
+    canal_ancho_mm: float = 0.0
+    canal_alto_mm: float = 0.0
+    canal_pared_mm: float = 0.0
+    gramos_override: float = 0.0       # 0 = auto por sección o fallback g/m
+    horas_imp_override: float = 0.0    # 0 = auto por horas_m_por_hora
+    anclajes: int = 0
+    puentes: int = 0
+    tira_led_mm: float = 0.0
+    # Comercial
+    urgencia_id: str = "normal"        # id de NEON_PARAMS.urgencias
+    mano_obra_override: float = 0.0    # 0 = auto por m_por_min + tarifa_hora
+    # Persistencia
+    svg_text: str = ""
+    cliente: str = ""
+    notas: str = ""
+
+
 class PlanasRequest(_InstMixin):
     session_id: str
     real_width_cm: float
@@ -479,6 +522,25 @@ class PlanasRequest(_InstMixin):
 
 # ─── INSTALACIÓN / MANO DE OBRA ──────────────────────────────────────────────
 
+def _apply_instalacion_neon(result: NeonQuoteResult, req: "NeonRequest") -> NeonQuoteResult:
+    """Instalación para cotizaciones de neón. La MO ya viene calculada dentro
+    del motor (horas × tarifa_hora), así que NO agregamos mo_total como línea
+    aparte — el mano_obra_override del request es lo que se puede pasar al motor.
+    Solo aplicamos viáticos + grúa + extras si el usuario activó instalación."""
+    if req.inst_activa:
+        grua = next((g for g in GRUAS if g["id"] == req.inst_grua_id), {"precio_dia": 0})
+        costo_grua = round(grua["precio_dia"] * req.inst_dias_grua, 2)
+        result.inst_activa     = True
+        result.inst_lugar      = req.inst_lugar
+        result.inst_viaticos   = round(req.inst_viaticos, 2)
+        result.inst_grua       = req.inst_grua_id
+        result.inst_costo_grua = costo_grua
+        result.inst_extras     = round(req.inst_extras, 2)
+        result.inst_total      = round(req.inst_viaticos + costo_grua + req.inst_extras, 2)
+    result.precio_final = round(result.precio_venta_sugerido + result.inst_total, 2)
+    return result
+
+
 def _apply_instalacion(result: QuoteResult, req: _InstMixin) -> QuoteResult:
     # Para caja_luz la MO se inyecta dentro de cotizar_caja (entra al costo y
     # el margen se aplica). NO la duplicamos como línea separada — eso causaría
@@ -501,17 +563,24 @@ def _apply_instalacion(result: QuoteResult, req: _InstMixin) -> QuoteResult:
 
 # ─── HELPERS DE PERSISTENCIA ─────────────────────────────────────────────────
 
-_QUOTE_FIELDS = {f.name for f in dataclasses.fields(QuoteResult)}
+_QUOTE_FIELDS      = {f.name for f in dataclasses.fields(QuoteResult)}
+_NEON_QUOTE_FIELDS = {f.name for f in dataclasses.fields(NeonQuoteResult)}
 
 
 def _load_quote_from_db(quote_id: str) -> bool:
-    """Carga una cotización de SQLite al caché en memoria. Devuelve True si se encontró."""
+    """Carga una cotización de SQLite al caché en memoria. Devuelve True si se encontró.
+    Selecciona el dataclass por `tipo` (neon usa NeonQuoteResult, el resto QuoteResult)."""
     row = db.get_quote(quote_id)
     if not row:
         return False
     try:
         result_data = json.loads(row["result_json"])
-        result = QuoteResult(**{k: v for k, v in result_data.items() if k in _QUOTE_FIELDS})
+        if row.get("tipo") == "neon":
+            result = NeonQuoteResult(**{k: v for k, v in result_data.items()
+                                         if k in _NEON_QUOTE_FIELDS})
+        else:
+            result = QuoteResult(**{k: v for k, v in result_data.items()
+                                     if k in _QUOTE_FIELDS})
         try:
             fecha_display = datetime.strptime(row["fecha"], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y")
         except ValueError:
@@ -717,6 +786,164 @@ async def api_cotizar_planas(req: PlanasRequest):
     _save_to_db(qid, folio, "letras_planas", result, req, store["bytes"])
 
     return _result_to_dict(result, qid)
+
+
+# ─── COTIZAR NEÓN LED ────────────────────────────────────────────────────────
+
+def _neon_result_to_dict(r: NeonQuoteResult, qid: str) -> dict:
+    """Response del endpoint /api/cotizar/neon. Estructura análoga a los
+    otros tipos pero con campos específicos de neón — el frontend detecta
+    tipo=='neon' y renderiza el desglose adecuado."""
+    with _state_lock:
+        meta = _quote_store.get(qid + "_meta", {})
+    return {
+        "quote_id":         qid,
+        "folio":            meta.get("folio", ""),
+        "tipo":             r.tipo,
+        "modo_fabricacion": r.modo_fabricacion,
+        "neon": {
+            "lm":            round(r.lm, 2),
+            "uniones":       r.uniones,
+            "watts_total":   round(r.watts_total, 2),
+            "num_fuentes":   r.num_fuentes,
+            "fuente_nombre": r.fuente_nombre,
+            "fuente_watts":  r.fuente_watts,
+            "fuente_tipo":   r.fuente_tipo,
+        },
+        "dimensiones": {
+            "ancho_cm": round(r.ancho_cm, 2),
+            "alto_cm":  round(r.alto_cm, 2),
+            "area_m2":  round(r.area_m2, 4),
+            "perim_m":  round(r.perim_m, 2),
+        },
+        "base": {
+            "material":            r.base_mat,
+            "tipo":                r.base_tipo,
+            "forma":               r.base_forma,
+            "importe":             r.importe_base,
+            "importe_auto":        r.importe_base_auto,
+            "desperdicio_m2":      r.desperdicio_m2,
+            "desperdicio_tira_cm": round(r.desperdicio_tira_cm, 1),
+            "importe_desperdicio": r.importe_desperdicio,
+        },
+        "fab3d": {
+            "gramos":           r.gramos,
+            "gramos_auto":      r.gramos_auto,
+            "horas_imp":        r.horas_imp,
+            "horas_imp_auto":   r.horas_imp_auto,
+            "anclajes":         r.anclajes,
+            "puentes":          r.puentes,
+            "tira_led_mm":      r.tira_led_mm,
+            "canal_ancho_mm":   r.canal_ancho_mm,
+            "canal_alto_mm":    r.canal_alto_mm,
+            "canal_pared_mm":   r.canal_pared_mm,
+            "importe_filamento": r.importe_filamento,
+            "importe_impresion": r.importe_impresion,
+            "importe_anclajes":  r.importe_anclajes,
+            "importe_puentes":   r.importe_puentes,
+        },
+        "insumos": r.insumos,
+        "totales": {
+            "total_insumos":  r.total_insumos,
+            "horas":          r.horas,
+            "mano_obra":      r.mano_obra,
+            "mano_obra_auto": r.mano_obra_auto,
+            "costo_directo":  r.costo_directo,
+            "merma":          r.merma,
+            "margen":         r.margen,
+            "urgencia_mult":  r.urgencia_mult,
+            "subtotal":       r.subtotal,
+            "precio":         r.precio,
+            "iva":            r.iva,
+            "precio_iva":     r.precio_iva,
+        },
+        "instalacion": {
+            "activa":     r.inst_activa,
+            "lugar":      r.inst_lugar,
+            "viaticos":   r.inst_viaticos,
+            "grua":       r.inst_grua,
+            "costo_grua": r.inst_costo_grua,
+            "extras":     r.inst_extras,
+            "total":      r.inst_total,
+        },
+        "precio_final": r.precio_final,
+    }
+
+
+@app.post("/api/cotizar/neon")
+async def api_cotizar_neon(req: NeonRequest):
+    # Resolver referencias por id contra el catálogo vivo
+    perfil = next((p for p in NEON_PERFILES if p.get("id") == req.perfil_id), None)
+    fuente = (next((f for f in (NEON_PARAMS.get("fuentes") or [])
+                    if f.get("id") == req.fuente_id), None)
+              if req.fuente_id else None)
+    base_mat = next((b for b in (NEON_PARAMS.get("bases") or [])
+                     if b.get("id") == req.base_id), None)
+    forma    = next((f for f in (NEON_PARAMS.get("formas") or [])
+                     if f.get("id") == req.forma_id), None)
+    urgencia = next((u for u in (NEON_PARAMS.get("urgencias") or [])
+                     if u.get("id") == req.urgencia_id),
+                    {"mult": 1.0})
+
+    # Tramos multi-color: cada uno tiene su perfil_id → resolver contra catálogo
+    tramos_resueltos: list[dict] = []
+    for t in (req.tramos or []):
+        pf_id = t.get("perfil_id") or t.get("perfilId")
+        pf = next((p for p in NEON_PERFILES if p.get("id") == pf_id), None)
+        lm_t = float(t.get("Lm") or t.get("lm") or 0)
+        if pf and lm_t > 0:
+            tramos_resueltos.append({"perfil": pf, "Lm": lm_t})
+
+    base_cfg: dict = {
+        "material":           base_mat or {"nombre": "Sin base", "precio_m2": 0},
+        "forma":              forma    or {"nombre": "Rectangular", "factor_area": 1, "corte_m": 0},
+        "modo_fabricacion":   req.modo_fabricacion,
+        "incluir_soporte":    req.incluir_soporte,
+        "cobrar_desperdicio": req.cobrar_desperdicio,
+        "corte_extra":        req.corte_extra,
+        "fab3d": {
+            "canal_ancho_mm":    req.canal_ancho_mm,
+            "canal_alto_mm":     req.canal_alto_mm,
+            "canal_pared_mm":    req.canal_pared_mm,
+            "gramos_override":   req.gramos_override,
+            "horas_imp_override": req.horas_imp_override,
+            "anclajes":          req.anclajes,
+            "puentes":           req.puentes,
+            "tira_led_mm":       req.tira_led_mm,
+        },
+    }
+
+    try:
+        result = cotizar_neon(
+            Lm=req.lm, uniones=req.uniones,
+            perfil=perfil, tramos=tramos_resueltos or None,
+            fuente=fuente,
+            dimensiones={"ancho_cm": req.ancho_cm, "alto_cm": req.alto_cm},
+            base=base_cfg, params=NEON_PARAMS,
+            urgencia_mult=float(urgencia.get("mult", 1.0)),
+            mano_obra_override=(req.mano_obra_override if req.mano_obra_override > 0 else None),
+        )
+    except Exception as e:
+        log.exception("Error cotizando neón")
+        raise HTTPException(500, f"Error en cálculo: {e}") from e
+
+    _apply_instalacion_neon(result, req)
+
+    folio = db.next_folio()
+    qid   = str(uuid.uuid4())
+    with _state_lock:
+        _quote_store[qid] = result
+        _quote_store[qid + "_meta"] = {
+            "cliente": req.cliente,
+            "notas":   req.notas,
+            "fecha":   datetime.now().strftime("%d/%m/%Y"),
+            "folio":   folio,
+            "tipo":    "neon",
+        }
+        _quote_touch[qid] = time.time()
+    _save_to_db(qid, folio, "neon", result, req, req.svg_text or "")
+
+    return _neon_result_to_dict(result, qid)
 
 
 # ─── HISTORIAL DE COTIZACIONES ───────────────────────────────────────────────
@@ -1509,7 +1736,10 @@ class CatalogPayload(BaseModel):
     vinilos_cercha:     list | None = None
     tipos_construccion: dict | None = None
     gruas:              list | None = None
+    tubulares:          dict | None = None
     icf:                dict | None = None
+    neon_perfiles:      list | None = None
+    neon_params:        dict | None = None
 
 
 @app.post("/api/catalog")
