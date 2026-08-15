@@ -1388,6 +1388,510 @@ svg g.pieza-labels                 { pointer-events: none; }
    al topbar/tabbar nuevos. Los inputs y el JS de switchTab siguen vivos. */
 .sgi-shell .sidebar-header{display:none}
 .sgi-shell .main > .tabs{display:none}
+
+/* ══════════════════════════════════════════════════════════
+   SGI Design v2 — SIDEBAR restyle (Etapa 2)
+   Reescribe visualmente los paneles del sidebar sin tocar HTML
+   ni IDs. Los selectores son .sgi-shell .sidebar ... para ganar
+   sobre el CSS legacy con especificidad limpia.
+   ══════════════════════════════════════════════════════════ */
+.sgi-shell .sidebar{
+  background:var(--n-panel);
+  border-right:1px solid var(--n-line);
+  width:340px;min-width:340px;
+  font-family:var(--sans);color:var(--n-tx);
+  padding-bottom:0;
+}
+.sgi-shell .sidebar .panel{
+  margin:0;
+  background:transparent;
+  border:none;border-top:1px solid var(--n-line);
+  border-radius:0;
+  padding:var(--n-s4) var(--n-s4) var(--n-s3);
+  box-shadow:none;
+}
+.sgi-shell .sidebar .panel:first-of-type{border-top:none}
+.sgi-shell .sidebar .panel h3{
+  font-size:10.5px;font-weight:600;
+  color:var(--n-tx-4);
+  letter-spacing:.08em;text-transform:uppercase;
+  margin:0 0 var(--n-s3);
+  padding:0;
+  border:none;background:none;
+  line-height:1;
+}
+.sgi-shell .sidebar label{
+  display:block;
+  font-size:11.5px;font-weight:500;
+  color:var(--n-tx-3);
+  margin-top:var(--n-s3);margin-bottom:6px;
+  text-transform:none;letter-spacing:0;
+}
+.sgi-shell .sidebar .panel > label:first-of-type,
+.sgi-shell .sidebar .panel > *:first-child + label{margin-top:0}
+.sgi-shell .sidebar input[type="text"],
+.sgi-shell .sidebar input[type="number"],
+.sgi-shell .sidebar input[type="search"],
+.sgi-shell .sidebar select,
+.sgi-shell .sidebar textarea{
+  width:100%;
+  background:var(--n-raise);
+  border:1px solid var(--n-line-2);
+  border-radius:var(--n-r);
+  padding:8px 10px;
+  font-size:13px;font-family:var(--sans);
+  color:var(--n-tx);
+  transition:var(--n-t);
+  box-shadow:var(--n-lift);
+  outline:none;
+}
+.sgi-shell .sidebar input:hover,
+.sgi-shell .sidebar select:hover{border-color:var(--n-line-3)}
+.sgi-shell .sidebar input:focus,
+.sgi-shell .sidebar select:focus{
+  border-color:var(--n-accent);
+  box-shadow:0 0 0 3px var(--n-accent-dim),var(--n-lift);
+}
+.sgi-shell .sidebar select{
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%2379818D' stroke-width='1.5' stroke-linecap='round'><path d='M3.5 5 6 7.5 8.5 5'/></svg>");
+  background-repeat:no-repeat;background-position:right 10px center;
+  padding-right:28px;
+}
+
+/* Tipo de anuncio: 3 pills tipo segmented control */
+.sgi-shell .sidebar .tipo-btns{
+  display:grid;grid-template-columns:1fr 1fr 1fr;
+  background:var(--n-raise);
+  border:1px solid var(--n-line-2);
+  border-radius:var(--n-r);
+  padding:3px;gap:2px;
+  box-shadow:var(--n-lift);
+}
+.sgi-shell .sidebar .tipo-btn{
+  padding:7px 8px;font-size:12px;font-weight:500;
+  color:var(--n-tx-3);
+  background:transparent;border:none;border-radius:6px;
+  cursor:pointer;transition:var(--n-t);
+  font-family:var(--sans);
+  letter-spacing:0;text-transform:none;
+}
+.sgi-shell .sidebar .tipo-btn:hover{color:var(--n-tx-2);background:rgba(255,255,255,.03)}
+.sgi-shell .sidebar .tipo-btn.active{
+  color:var(--n-bg);background:var(--n-accent);
+  box-shadow:var(--n-lift),0 1px 2px rgba(0,0,0,.3);
+}
+
+/* Drop zone SVG */
+.sgi-shell .sidebar .drop-zone{
+  background:var(--n-raise);
+  border:1px dashed var(--n-line-3);
+  border-radius:var(--n-r);
+  padding:var(--n-s4) var(--n-s3);
+  transition:var(--n-t);
+  color:var(--n-tx-3);
+}
+.sgi-shell .sidebar .drop-zone .icon{font-size:20px;margin-bottom:6px;opacity:.6}
+.sgi-shell .sidebar .drop-zone p{font-size:11.5px;line-height:1.4}
+.sgi-shell .sidebar .drop-zone:hover,
+.sgi-shell .sidebar .drop-zone.drag-over{
+  border-color:var(--n-accent);
+  background:var(--n-accent-dim);
+  color:var(--n-tx);
+}
+.sgi-shell .sidebar .drop-zone.ok{
+  border-style:solid;border-color:rgba(94,214,164,.4);
+  background:rgba(94,214,164,.06);
+  color:var(--n-ok);
+}
+
+/* Botones de link ("opciones avanzadas", "ajustes avanzados", "convertir imagen") */
+.sgi-shell .sidebar .btn-link{
+  background:transparent;border:none;
+  color:var(--n-tx-3);font-size:11.5px;font-weight:500;
+  padding:6px 0;cursor:pointer;
+  transition:var(--n-t);font-family:var(--sans);
+  text-decoration:none;
+}
+.sgi-shell .sidebar .btn-link:hover{color:var(--n-accent-2)}
+
+/* Botones pill genéricos (Clientes, etc.) */
+.sgi-shell .sidebar .btn-pill{
+  background:var(--n-raise);
+  border:1px solid var(--n-line-2);
+  border-radius:6px;
+  color:var(--n-tx-2);
+  font-size:11px;font-weight:500;
+  padding:4px 8px;cursor:pointer;
+  transition:var(--n-t);font-family:var(--sans);
+}
+.sgi-shell .sidebar .btn-pill:hover{background:var(--n-raise-2);color:var(--n-tx);border-color:var(--n-line-3)}
+
+/* Info tags */
+.sgi-shell .sidebar .info-tag{
+  display:block;
+  background:rgba(255,255,255,.03);
+  border:1px solid var(--n-line);
+  border-radius:6px;
+  padding:6px 9px;
+  color:var(--n-tx-2);
+  font-size:11px;line-height:1.45;
+  margin-top:6px;
+}
+
+/* Chip estimación en vivo — restyle */
+.sgi-shell .sidebar .chip-live{
+  margin:0;padding:var(--n-s3) var(--n-s4);
+  background:var(--n-chrome);
+  border:none;border-top:1px solid var(--n-line);
+  border-left:none;border-radius:0;
+}
+.sgi-shell .sidebar .chip-live-r1{
+  font-size:11px;font-weight:500;color:var(--n-tx-3);
+  text-transform:uppercase;letter-spacing:.05em;
+}
+.sgi-shell .sidebar .chip-live-r2{
+  font-size:22px;font-weight:600;color:var(--n-accent);
+  margin-top:2px;font-family:var(--n-mono);
+  font-variant-numeric:tabular-nums;line-height:1.15;
+  letter-spacing:-.01em;
+}
+.sgi-shell .sidebar .chip-live-r3{
+  font-size:10.5px;color:var(--n-tx-4);
+  margin-top:3px;font-style:normal;line-height:1.35;
+}
+
+/* CTA Calcular — CTA principal amber */
+.sgi-shell .sidebar .btn-calc{
+  position:sticky;bottom:0;
+  margin:0;padding:14px;
+  border:none;border-top:1px solid var(--n-line);
+  background:var(--n-accent);
+  color:var(--n-bg);
+  font-size:13.5px;font-weight:600;
+  letter-spacing:0;text-transform:none;
+  border-radius:0;
+  box-shadow:0 -10px 20px -6px rgba(0,0,0,.6),var(--n-lift);
+  transition:var(--n-t);
+  font-family:var(--sans);
+}
+.sgi-shell .sidebar .btn-calc:hover:not(:disabled){
+  background:var(--n-accent-2);
+}
+.sgi-shell .sidebar .btn-calc:disabled{
+  background:var(--n-raise-2);
+  color:var(--n-tx-4);
+  filter:none;cursor:not-allowed;
+}
+
+/* Optgroups en selects */
+.sgi-shell .sidebar select optgroup{
+  background:var(--n-chrome);color:var(--n-tx-3);
+  font-size:10.5px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.05em;
+}
+.sgi-shell .sidebar select option{
+  background:var(--n-raise);color:var(--n-tx);
+  padding:6px;
+}
+
+/* Cliente dropdown */
+.sgi-shell .sidebar #cliente-dropdown{
+  background:var(--n-raise) !important;
+  border:1px solid var(--n-line-2) !important;
+  box-shadow:0 12px 32px rgba(0,0,0,.55),var(--n-lift) !important;
+  border-radius:var(--n-r) !important;
+  overflow:hidden;
+}
+
+/* Panel de asesor */
+.sgi-shell .sidebar #panel-asesor{
+  background:rgba(255,178,36,.04);
+  border-top:1px solid var(--n-accent-dim);
+  border-bottom:1px solid var(--n-accent-dim);
+}
+.sgi-shell .sidebar #panel-asesor h3{color:var(--n-accent-2)}
+
+/* ══════════════════════════════════════════════════════════
+   SGI Design v2 — MAIN + VISTAS restyle (Etapa 3)
+   ══════════════════════════════════════════════════════════ */
+.sgi-shell .main{
+  background:var(--n-bg);
+}
+.sgi-shell .tab-content{
+  padding:var(--n-s5) var(--n-s6);
+  font-family:var(--sans);
+  color:var(--n-tx);
+}
+
+/* Toggle 2D/3D en tab Diseño (arriba a la derecha) */
+.sgi-shell #tab-svg > div:first-child{
+  padding:0 !important;margin:0 0 var(--n-s3) !important;
+}
+.sgi-shell #btn-view-2d,
+.sgi-shell #btn-view-3d{
+  padding:5px 12px !important;
+  font-size:11.5px !important;
+  font-weight:500 !important;
+  background:var(--n-raise) !important;
+  color:var(--n-tx-3) !important;
+  border:1px solid var(--n-line-2) !important;
+  border-radius:6px 0 0 6px !important;
+  transition:var(--n-t) !important;
+  font-family:var(--sans);
+}
+.sgi-shell #btn-view-3d{border-radius:0 6px 6px 0 !important;border-left:none !important}
+.sgi-shell #btn-view-2d:hover,
+.sgi-shell #btn-view-3d:hover{background:var(--n-raise-2) !important;color:var(--n-tx) !important}
+/* Activo: fondo accent (el JS actualiza inline styles, hay que forzar con !important) */
+.sgi-shell #btn-view-2d[style*="background:#1a3a6a"],
+.sgi-shell #btn-view-2d[style*="background:#fff"],
+.sgi-shell #btn-view-3d[style*="background:#1a3a6a"],
+.sgi-shell #btn-view-3d[style*="background:#fff"]{
+  background:var(--n-accent) !important;
+  color:var(--n-bg) !important;
+  border-color:var(--n-accent) !important;
+  font-weight:600 !important;
+}
+
+/* SVG preview box (tab Diseño) */
+.sgi-shell #svg-preview-box{
+  background:var(--n-panel);
+  border:1px solid var(--n-line);
+  border-radius:var(--n-r-lg);
+  padding:var(--n-s5);
+  min-height:400px;
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;
+  box-shadow:var(--n-lift);
+}
+.sgi-shell .svg-empty{
+  text-align:center;color:var(--n-tx-4);
+}
+.sgi-shell .svg-empty .icon{font-size:32px;opacity:.35;margin-bottom:8px}
+.sgi-shell .svg-empty p{font-size:12.5px;color:var(--n-tx-3)}
+
+/* Tabla desglose (tab Cotización) — look mockup */
+.sgi-shell .desglose-table{
+  background:var(--n-panel);
+  border:1px solid var(--n-line);
+  border-radius:var(--n-r-lg);
+  overflow:hidden;
+  font-family:var(--sans);
+  font-size:12.5px;
+}
+.sgi-shell .desglose-table th{
+  background:var(--n-chrome);
+  color:var(--n-tx-4);
+  font-weight:600;font-size:10px;
+  text-transform:uppercase;letter-spacing:.08em;
+  padding:10px 14px;
+  border-bottom:1px solid var(--n-line);
+}
+.sgi-shell .desglose-table td{
+  padding:11px 14px;
+  border-bottom:1px solid var(--n-line);
+  color:var(--n-tx-2);
+}
+.sgi-shell .desglose-table tr:hover td{background:rgba(255,255,255,.02)}
+.sgi-shell .desglose-table tr:last-child td{border-bottom:none}
+.sgi-shell .desglose-table .total-row td{
+  font-weight:700;font-size:13px;
+  border-top:1px solid var(--n-line-2);
+  color:var(--n-tx);
+  background:var(--n-chrome);
+}
+.sgi-shell .desglose-table .venta-row td{
+  color:var(--n-accent);
+  font-weight:700;font-size:16px;
+  background:rgba(255,178,36,.05);
+}
+.sgi-shell .amount{
+  text-align:right;font-family:var(--n-mono);
+  font-variant-numeric:tabular-nums;
+}
+
+/* Tarjetas de resumen (tab Cotización — .rz-card) */
+.sgi-shell .rz-card{
+  background:var(--n-panel);
+  border:1px solid var(--n-line);
+  border-radius:var(--n-r-lg);
+  padding:var(--n-s4);
+  box-shadow:var(--n-lift);
+}
+.sgi-shell .rz-card h3{
+  font-size:11px;font-weight:600;
+  color:var(--n-tx-4);
+  text-transform:uppercase;letter-spacing:.08em;
+  margin:0 0 var(--n-s3);
+}
+.sgi-shell .rz-card h3 .sub{
+  font-weight:500;color:var(--n-tx-3);
+  font-size:10px;letter-spacing:0;text-transform:none;
+}
+.sgi-shell .rz-formula{
+  font-family:var(--n-mono);font-size:11.5px;
+  background:var(--n-chrome);
+  border:1px solid var(--n-line);
+  border-radius:var(--n-r);
+  padding:9px 11px;
+  color:var(--n-tx-2);
+}
+.sgi-shell .rz-formula .t{color:var(--n-tx-4);font-size:9.5px}
+.sgi-shell .rz-formula .f{color:var(--n-tx);font-weight:600}
+.sgi-shell .rz-table td{
+  color:var(--n-tx-2);
+  padding:5px 0;
+  font-size:12px;
+}
+.sgi-shell .rz-table td:last-child{
+  color:var(--n-tx);
+  font-family:var(--n-mono);
+}
+
+/* Cards path grid (piezas detectadas) */
+.sgi-shell .paths-grid{
+  gap:var(--n-s2);
+}
+.sgi-shell .path-card{
+  background:var(--n-panel);
+  border:1px solid var(--n-line);
+  border-radius:var(--n-r);
+  color:var(--n-tx-2);
+}
+.sgi-shell .path-card:hover{border-color:var(--n-line-2)}
+
+/* Empty states genéricos en cualquier tab */
+.sgi-shell .tab-content .svg-empty{margin-top:60px}
+
+/* ══════════════════════════════════════════════════════════
+   SGI Design v2 — INSPECTOR restyle (Etapa 4)
+   ══════════════════════════════════════════════════════════ */
+.sgi-shell .inspector{
+  background:var(--n-panel);
+  border-left:1px solid var(--n-line);
+  width:320px;min-width:320px;
+  color:var(--n-tx);font-family:var(--sans);
+}
+.sgi-shell .inspector-header{
+  background:var(--n-chrome);
+  border-bottom:1px solid var(--n-line);
+  padding:12px var(--n-s4);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.sgi-shell .inspector-header h2{
+  font-size:11px;font-weight:600;
+  color:var(--n-tx-4);
+  letter-spacing:.08em;text-transform:uppercase;
+  margin:0;padding:0;
+}
+.sgi-shell .inspector-header .btn-pill{
+  background:transparent;
+  border:1px solid var(--n-line-2);
+  border-radius:6px;
+  color:var(--n-tx-3);
+  padding:3px 8px !important;font-size:12px !important;
+  cursor:pointer;transition:var(--n-t);
+}
+.sgi-shell .inspector-header .btn-pill:hover{background:rgba(255,255,255,.04);color:var(--n-tx)}
+
+.sgi-shell .inspector .panel{
+  margin:0;
+  background:transparent;
+  border:none;border-top:1px solid var(--n-line);
+  border-radius:0;
+  padding:var(--n-s4);
+  box-shadow:none;
+}
+.sgi-shell .inspector .panel:first-of-type{border-top:none}
+.sgi-shell .inspector .panel h3{
+  font-size:10.5px;font-weight:600;
+  color:var(--n-tx-4);
+  letter-spacing:.08em;text-transform:uppercase;
+  margin:0 0 var(--n-s3);padding:0;
+  border:none;background:none;
+}
+.sgi-shell .inspector label{
+  display:block;
+  font-size:11.5px;font-weight:500;
+  color:var(--n-tx-3);
+  margin-top:var(--n-s3);margin-bottom:6px;
+}
+.sgi-shell .inspector .panel > *:first-child + label,
+.sgi-shell .inspector .panel > label:first-of-type{margin-top:0}
+.sgi-shell .inspector input[type="text"],
+.sgi-shell .inspector input[type="number"],
+.sgi-shell .inspector select{
+  width:100%;
+  background:var(--n-raise);
+  border:1px solid var(--n-line-2);
+  border-radius:var(--n-r);
+  padding:8px 10px;
+  font-size:13px;font-family:var(--sans);
+  color:var(--n-tx);
+  transition:var(--n-t);
+  box-shadow:var(--n-lift);
+  outline:none;
+}
+.sgi-shell .inspector input[type="number"]{
+  font-family:var(--n-mono);
+  font-variant-numeric:tabular-nums;
+}
+.sgi-shell .inspector input:hover,
+.sgi-shell .inspector select:hover{border-color:var(--n-line-3)}
+.sgi-shell .inspector input:focus,
+.sgi-shell .inspector select:focus{
+  border-color:var(--n-accent);
+  box-shadow:0 0 0 3px var(--n-accent-dim),var(--n-lift);
+}
+.sgi-shell .inspector select{
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%2379818D' stroke-width='1.5' stroke-linecap='round'><path d='M3.5 5 6 7.5 8.5 5'/></svg>");
+  background-repeat:no-repeat;background-position:right 10px center;
+  padding-right:28px;
+}
+
+/* Info tags del inspector (Total MO: $0, Total instalación: $0) */
+.sgi-shell .inspector .info-tag{
+  display:block;
+  background:var(--n-chrome);
+  border:1px solid var(--n-line);
+  border-radius:var(--n-r);
+  padding:8px 11px;
+  color:var(--n-tx);
+  font-size:12.5px;font-weight:600;
+  font-family:var(--n-mono);
+  margin-top:8px;
+}
+.sgi-shell .inspector #inst-tag{
+  background:var(--n-accent-dim) !important;
+  border-color:rgba(255,178,36,.2) !important;
+  color:var(--n-accent-2) !important;
+}
+.sgi-shell .inspector .formula-preview{
+  color:var(--n-ok) !important;
+  background:rgba(94,214,164,.06) !important;
+  border-color:rgba(94,214,164,.25) !important;
+}
+
+/* Toggle de instalación */
+.sgi-shell .inspector .panel h3 > span[style*="flex:1"]{
+  color:var(--n-tx);
+  font-size:11px;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;
+}
+
+/* Botón flotante para reabrir inspector */
+.sgi-shell .inspector-toggle-floating{
+  background:var(--n-raise);
+  border:1px solid var(--n-line-2);
+  color:var(--n-tx-2);
+  box-shadow:0 4px 12px rgba(0,0,0,.4);
+}
+.sgi-shell .inspector-toggle-floating:hover{
+  background:var(--n-accent);color:var(--n-bg);
+  border-color:var(--n-accent);
+}
 </style>
 <script type="importmap">
 {
