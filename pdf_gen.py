@@ -1273,3 +1273,203 @@ def generar_pdf_fachada(result, meta: dict, image_bytes: bytes,
     return buf.getvalue()
 
 
+# ─── 5. COTIZACIÓN NEÓN LED ─────────────────────────────────────────────────
+
+def generar_pdf_neon(result, meta: dict, doc_label: str = "COTIZACIÓN · NEÓN LED") -> bytes:
+    """Cotización de neón LED. Estructura análoga a `generar_pdf` pero adaptada
+    al schema NeonQuoteResult (no QuoteResult): mostrar 1ª vs 2ª generación,
+    aprovisionamiento del material base, modo lámina/3D, y desglose con corte
+    externo/gastos capturables cuando aplican.
+
+    `doc_label` se usa como título del encabezado — permite reciclar este
+    generador para OT ("ORDEN DE TRABAJO · NEÓN LED") sin duplicar código."""
+    buf = io.BytesIO()
+    doc = _doc_base(buf, doc_label)
+    st = _estilos()
+    elements = []
+
+    empresa = meta.get("empresa", EMPRESA.get("razon_social", "SGI Impresión y Diseño"))
+    elements.append(_header(empresa, doc_label, st))
+    elements.append(Spacer(1, 0.3*cm))
+
+    folio   = meta.get("folio", "---")
+    fecha   = meta.get("fecha", datetime.now().strftime("%d/%m/%Y"))
+    cliente = meta.get("cliente") or "—"
+    modo_fab = getattr(result, "modo_fabricacion", "lamina")
+    modo_label = "3D · Signflex (canal PETG impreso)" if modo_fab == "3d" else "Lámina cortada"
+
+    elements.append(_info_grid([
+        ["Folio:",    folio,             "Cliente:",  cliente],
+        ["Fecha:",    fecha,             "Tipo:",     "Neón LED"],
+        ["Vigencia:", "15 días naturales", "Modo:",   modo_label],
+    ], st))
+    elements.append(Spacer(1, 0.4*cm))
+
+    # ── Descripción del anuncio ─────────────────────────────────────────────
+    elements.append(Paragraph("Descripción del anuncio", S_H2))
+    es_gen2 = any("silicona" in (x.get("concepto") or "").lower()
+                  or "2ª gen"  in (x.get("concepto") or "").lower()
+                  for x in (result.insumos or []))
+    gen_label = "2ª generación (silicona sobre acrílico ranurado)" if es_gen2 \
+                else "1ª generación (manguera PVC clásica)"
+
+    desc = [
+        ["Generación",           gen_label],
+        ["Longitud de neón",     f"{result.lm:.2f} m"],
+        ["Uniones / tramos",     str(result.uniones)],
+        ["Dimensiones",          f"{result.ancho_cm:.0f} × {result.alto_cm:.0f} cm"],
+        ["Área base",            f"{result.area_m2:.3f} m²"],
+        ["Perímetro base",       f"{result.perim_m:.2f} m"],
+        ["Watts totales",        f"{result.watts_total:.1f} W"],
+        ["Fuente",               f"{result.num_fuentes}× {result.fuente_nombre}"],
+    ]
+    elements.append(_tabla_kv(desc))
+    elements.append(Spacer(1, 0.4*cm))
+
+    # ── Base (solo lámina) ──────────────────────────────────────────────────
+    if modo_fab != "3d" and result.base_mat:
+        elements.append(Paragraph("Base / soporte", S_H2))
+        aprov_labels = {
+            "compro_pieza": "Pieza cortada (comprada al proveedor)",
+            "corto_afuera": "Lámina propia + corte láser externo",
+            "corto_taller": "Lámina propia + corte en taller",
+        }
+        aprov_txt = aprov_labels.get(getattr(result, "aprovisionamiento", ""),
+                                     result.base_tipo or "—")
+        base_rows = [
+            ["Material",          result.base_mat],
+            ["Aprovisionamiento", aprov_txt],
+            ["Forma",             result.base_forma or "Rectangular"],
+        ]
+        if result.importe_corte_externo > 0:
+            base_rows.append(["Corte láser externo", f"${result.importe_corte_externo:,.2f}"])
+        if result.importe_desperdicio > 0:
+            base_rows.append([f"Desperdicio (tira {int(result.desperdicio_tira_cm)} cm)",
+                              f"${result.importe_desperdicio:,.2f}"])
+        elements.append(_tabla_kv(base_rows))
+        elements.append(Spacer(1, 0.4*cm))
+
+    # ── Datos 3D (solo modo 3D) ─────────────────────────────────────────────
+    if modo_fab == "3d":
+        elements.append(Paragraph("Fabricación 3D (canal PETG impreso)", S_H2))
+        f3d = [
+            ["Tira LED",          f"{result.tira_led_mm:.0f} mm" if result.tira_led_mm else "—"],
+            ["Sección canal (a×h×p)",
+             f"{result.canal_ancho_mm:.1f} × {result.canal_alto_mm:.1f} × {result.canal_pared_mm:.1f} mm"
+             if result.canal_ancho_mm else "—"],
+            ["Filamento PETG",    f"{result.gramos:.0f} g" + (" (báscula manual)" if result.gramos != result.gramos_auto else "")],
+            ["Horas impresora",   f"{result.horas_imp:.2f} h"],
+            ["Anclajes",          f"{result.anclajes} pza"],
+            ["Puentes / crossovers", f"{result.puentes} pza"],
+        ]
+        elements.append(_tabla_kv(f3d))
+        elements.append(Spacer(1, 0.4*cm))
+
+    # ── Desglose de insumos ─────────────────────────────────────────────────
+    elements.append(Paragraph("Desglose de insumos", S_H2))
+    S_TH  = ParagraphStyle("sgi_th_n",  fontSize=8.5, textColor=BLANCO, fontName="Helvetica-Bold")
+    S_TC  = ParagraphStyle("sgi_tc_n",  fontSize=8.5, textColor=colors.black, leading=12)
+    S_TR  = ParagraphStyle("sgi_tr_n",  fontSize=8.5, textColor=colors.black, leading=12, alignment=TA_RIGHT)
+    S_THR = ParagraphStyle("sgi_thr_n", fontSize=8.5, textColor=BLANCO, fontName="Helvetica-Bold", alignment=TA_RIGHT)
+
+    ins_rows = [[_p("Concepto", S_TH), _p("Cant.", S_THR), _p("Unid.", S_TH),
+                 _p("P. unit.", S_THR), _p("Importe", S_THR)]]
+    for x in (result.insumos or []):
+        ins_rows.append([
+            _p(x.get("concepto", ""), S_TC),
+            _p(f"{x.get('cantidad', 0):,.2f}", S_TR),
+            _p(x.get("unidad", ""), S_TC),
+            _p(f"${x.get('unit', 0):,.2f}", S_TR),
+            _p(f"${x.get('importe', 0):,.2f}", S_TR),
+        ])
+    ins_tbl = Table(ins_rows, colWidths=[PW*0.44, PW*0.10, PW*0.09, PW*0.18, PW*0.19])
+    ins_tbl.setStyle(TableStyle([
+        ("BACKGROUND",     (0, 0), (-1, 0),  AZUL_MED),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [BLANCO, GRIS_CLARO]),
+        ("GRID",           (0, 0), (-1, -1), 0.3, colors.lightgrey),
+        ("LEFTPADDING",    (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING",   (0, 0), (-1, -1), 5),
+        ("TOPPADDING",     (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING",  (0, 0), (-1, -1), 4),
+        ("VALIGN",         (0, 0), (-1, -1), "TOP"),
+    ]))
+    elements.append(ins_tbl)
+    elements.append(Spacer(1, 0.4*cm))
+
+    notas = meta.get("notas", "")
+    if notas:
+        elements.append(Paragraph("Notas", S_H2))
+        elements.append(Paragraph(notas, S_BODY))
+        elements.append(Spacer(1, 0.3*cm))
+
+    elements.append(HRFlowable(width="100%", color=AZUL_DARK, thickness=1))
+    elements.append(Spacer(1, 0.2*cm))
+
+    # ── Totales ─────────────────────────────────────────────────────────────
+    precio_final = result.precio_final or result.precio_iva
+    S_TL  = ParagraphStyle("sgi_tl_n",  fontSize=9,  textColor=colors.black, leading=13)
+    S_TLR = ParagraphStyle("sgi_tlr_n", fontSize=9,  textColor=colors.black, leading=13, alignment=TA_RIGHT)
+    S_TVT = ParagraphStyle("sgi_tvt_n", fontSize=12, textColor=NARANJA, fontName="Helvetica-Bold", leading=16)
+    S_TVR = ParagraphStyle("sgi_tvr_n", fontSize=12, textColor=NARANJA, fontName="Helvetica-Bold", leading=16, alignment=TA_RIGHT)
+
+    def _trow(label, valor, bold=False):
+        sl = S_TVT if bold else S_TL
+        sr = S_TVR if bold else S_TLR
+        return [_p(label, sl), _p(valor, sr)]
+
+    tot_rows = [
+        _trow("Costo directo (insumos + MO)", f"${result.costo_directo:,.2f}"),
+    ]
+    if result.total_gastos_capturables > 0:
+        tot_rows.append(_trow("Incluye extras opcionales",
+                              f"${result.total_gastos_capturables:,.2f}"))
+    tot_rows.extend([
+        _trow(f"Merma ({int(result.merma * 100)}%)",
+              f"${(result.subtotal - result.costo_directo):,.2f}"),
+        _trow("Subtotal",           f"${result.subtotal:,.2f}"),
+        _trow(f"Utilidad ({int(result.margen * 100)}%){' · urgencia ×' + str(result.urgencia_mult) if result.urgencia_mult > 1 else ''}",
+              f"${(result.precio - result.subtotal):,.2f}"),
+        _trow("Precio sin IVA",     f"${result.precio:,.2f}"),
+        _trow("IVA 16%",            f"${result.iva:,.2f}"),
+    ])
+    if result.inst_total > 0:
+        tot_rows.append(_trow("Instalación", f"${result.inst_total:,.2f}"))
+    tot_rows.append(_trow("PRECIO DE VENTA", f"${precio_final:,.2f}", bold=True))
+
+    last = len(tot_rows) - 1
+    tot_tbl = Table(tot_rows, colWidths=[PW * 0.70, PW * 0.30])
+    tot_tbl.setStyle(TableStyle([
+        ("LEFTPADDING",    (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING",   (0, 0), (-1, -1), 6),
+        ("TOPPADDING",     (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING",  (0, 0), (-1, -1), 4),
+        ("LINEABOVE",      (0, last), (-1, last), 1.5, AZUL_DARK),
+        ("BACKGROUND",     (0, last), (-1, last), GRIS_CLARO),
+        ("VALIGN",         (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    elements.append(tot_tbl)
+    elements.append(Spacer(1, 0.5*cm))
+
+    garantia_txt = ("Garantía: <b>3 meses</b> sobre defectos de fabricación e "
+                    "iluminación (LFPC art. 77). No cubre daño por golpes, "
+                    "manipulación indebida, agua sobre modelos IP no exteriores, "
+                    "ni fluctuaciones eléctricas mayores a ±10% del voltaje nominal.")
+    elements.append(KeepTogether([
+        Paragraph("Condiciones", S_H2),
+        Paragraph(
+            "• 50% de anticipo para iniciar fabricación  • 50% restante contra entrega<br/>"
+            "• Vigencia de esta cotización: 15 días naturales  • Precios en MXN con IVA incluido<br/>"
+            f"• Tiempo de entrega: <b>{meta.get('tiempo_entrega', 'según urgencia')}</b> a partir del anticipo y arte aprobado<br/>"
+            f"• {garantia_txt}",
+            S_BODY
+        ),
+        Spacer(1, 0.4*cm),
+        HRFlowable(width="100%", color=colors.lightgrey, thickness=0.5),
+        Spacer(1, 0.1*cm),
+        Paragraph(f"{empresa}  ·  Cotización válida 15 días  ·  Precios en MXN", S_PIE),
+    ]))
+
+    doc.build(elements)
+    return buf.getvalue()
+
+

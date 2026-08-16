@@ -41,7 +41,13 @@ from catalog_data import (
 )
 from excel_gen import generar_xlsx
 from neon_calculator import NeonQuoteResult, cotizar_neon
-from pdf_gen import generar_pdf, generar_pdf_entrega, generar_pdf_fachada, generar_pdf_ot
+from pdf_gen import (
+    generar_pdf,
+    generar_pdf_entrega,
+    generar_pdf_fachada,
+    generar_pdf_neon,
+    generar_pdf_ot,
+)
 from plano_gen import generar_plano_cliente, generar_plano_corte, generar_plano_taller
 
 BASE = Path(__file__).parent
@@ -1170,9 +1176,15 @@ async def api_ot(quote_id: str, cliente: str = "", notas: str = ""):
 
     _meta_con_cliente(meta)
     db.avanzar_estado(quote_id, "fabricacion")  # la OT manda el trabajo al taller
-    pdf_bytes = generar_pdf_ot(result, meta, svg_text=svg_text,
-                               viewbox_w=vb_w, viewbox_h=vb_h,
-                               paths_info=paths_info)
+    # Bifurcación por tipo — neón no lleva SVG con badges por material (no aplica
+    # el concepto "material por pieza"); su OT es el mismo desglose de cotización
+    # con label "ORDEN DE TRABAJO" para el taller.
+    if getattr(result, "tipo", "") == "neon":
+        pdf_bytes = generar_pdf_neon(result, meta, doc_label="ORDEN DE TRABAJO · NEÓN LED")
+    else:
+        pdf_bytes = generar_pdf_ot(result, meta, svg_text=svg_text,
+                                   viewbox_w=vb_w, viewbox_h=vb_h,
+                                   paths_info=paths_info)
     filename  = f"OT_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
     return FileResponse(path=_write_tmp(pdf_bytes, filename), filename=filename, media_type="application/pdf")
 
@@ -1214,7 +1226,13 @@ async def api_entrega(quote_id: str, cliente: str = "", notas: str = "",
         # fijamos 'pagado' a ese monto de forma atómica e idempotente, así
         # regenerar el acta con el mismo anticipo no duplica el pago.
         db.registrar_pago_total(quote_id, anticipo)
-    pdf_bytes = generar_pdf_entrega(result, meta)
+    # Neón usa el mismo generador con label "ACTA DE ENTREGA" — el template
+    # de letras/caja/planas asume `paths_count` y otros campos de QuoteResult
+    # que NeonQuoteResult no tiene.
+    if getattr(result, "tipo", "") == "neon":
+        pdf_bytes = generar_pdf_neon(result, meta, doc_label="ACTA DE ENTREGA · NEÓN LED")
+    else:
+        pdf_bytes = generar_pdf_entrega(result, meta)
     filename  = f"Entrega_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
     return FileResponse(path=_write_tmp(pdf_bytes, filename), filename=filename, media_type="application/pdf")
 
@@ -1332,7 +1350,11 @@ async def api_pdf(quote_id: str, cliente: str = "", notas: str = ""):
 
     _meta_con_cliente(meta)
     db.avanzar_estado(quote_id, "enviada")  # generar la cotización = ya se envió
-    pdf_bytes = generar_pdf(result, meta)
+    # Bifurcación por tipo — neón tiene su propio template
+    if getattr(result, "tipo", "") == "neon":
+        pdf_bytes = generar_pdf_neon(result, meta)
+    else:
+        pdf_bytes = generar_pdf(result, meta)
     filename  = f"Cotizacion_{_safe_part(meta.get('folio'))}_{_safe_part(meta.get('cliente'), default='cliente')}.pdf"
 
     return FileResponse(

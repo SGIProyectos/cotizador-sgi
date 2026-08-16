@@ -2050,7 +2050,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
       </div>
       <span class="brand__name">SGI Cotizador</span>
-      <span class="brand__v" id="brand-version">v1.24.0</span>
+      <span class="brand__v" id="brand-version">v1.24.1</span>
     </div>
     <div class="crumbs" id="topbar-crumbs">
       <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
@@ -2140,7 +2140,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.24.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.24.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -6595,8 +6595,18 @@ function renderResultNeon(d) {
         <input id="pdf-cliente" type="text" placeholder="Cliente (opcional)" style="height:30px;font-size:12px">
         <input id="pdf-notas" type="text" placeholder="Notas para los documentos (opcional)" style="height:30px;font-size:12px">
       </div>
-      <div style="font-size:11px;color:#9fb0cb;padding:6px 10px;background:rgba(232,163,56,.08);border-radius:6px;border:1px solid rgba(232,163,56,.25)">
-        📄 Generación de PDF / OT para neón: en la siguiente fase.
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px">
+        <a class="btn-pdf" href="/api/pdf/${d.quote_id}" target="_blank"
+           onclick="return actualizarPdfUrl('${d.quote_id}')"
+           title="Cotización formal para el cliente">📄 Cotización</a>
+        <a class="btn-pdf" href="/api/ot/${d.quote_id}" target="_blank"
+           onclick="return actualizarDocUrl('ot','${d.quote_id}')"
+           style="background:#2d5986"
+           title="Orden de trabajo (interna)">📋 Orden Trabajo</a>
+        <a class="btn-pdf" href="#"
+           onclick="return abrirModalEntrega('${d.quote_id}', ${d.precio_final})"
+           style="background:#2e7d32"
+           title="Acta de entrega + garantía 3 meses">✅ Acta Entrega</a>
       </div>
     </div>
 
