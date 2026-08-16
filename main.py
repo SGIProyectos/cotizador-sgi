@@ -495,6 +495,10 @@ class NeonRequest(_InstMixin):
     # Comercial
     urgencia_id: str = "normal"        # id de NEON_PARAMS.urgencias
     mano_obra_override: float = 0.0    # 0 = auto por m_por_min + tarifa_hora
+    # Gastos capturables: extras opcionales por cotización (IP exterior, dimmer,
+    # enchufe+cable, vinil impreso sobre base, o cualquier otro concepto libre).
+    # Cada uno {concepto: str, monto: float}. Entra al costo directo antes del margen.
+    gastos_capturables: list[dict] = []
     # Persistencia
     svg_text: str = ""
     cliente: str = ""
@@ -850,7 +854,8 @@ def _neon_result_to_dict(r: NeonQuoteResult, qid: str) -> dict:
         },
         "insumos": r.insumos,
         "totales": {
-            "total_insumos":  r.total_insumos,
+            "total_insumos":            r.total_insumos,
+            "total_gastos_capturables": r.total_gastos_capturables,
             "horas":          r.horas,
             "mano_obra":      r.mano_obra,
             "mano_obra_auto": r.mano_obra_auto,
@@ -909,6 +914,7 @@ async def api_cotizar_neon(req: NeonRequest):
         "corte_extra":        req.corte_extra,
         "aprovisionamiento_override": req.aprovisionamiento_override or None,
         "pieza_costo_override":      req.pieza_costo_override,
+        "gastos_capturables":        req.gastos_capturables or [],
         "fab3d": {
             "canal_ancho_mm":    req.canal_ancho_mm,
             "canal_alto_mm":     req.canal_alto_mm,

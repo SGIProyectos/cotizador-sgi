@@ -96,6 +96,7 @@ class NeonQuoteResult:
     # Comercial
     insumos: list[dict] = field(default_factory=list)
     total_insumos: float = 0.0
+    total_gastos_capturables: float = 0.0
     horas: float = 0.0
     mano_obra: float = 0.0
     mano_obra_auto: float = 0.0
@@ -431,6 +432,29 @@ def cotizar_neon(
         })
     total_insumos = _round2(sum(x["importe"] for x in insumos))
 
+    # ── Gastos capturables (extras opcionales por cotización) ────────────────
+    # Entran al costo directo ANTES del margen, para que el % de ganancia se
+    # aplique también sobre ellos (comportamiento equivalente a flete_maquila
+    # en cajas de luz). Vienen como lista [{concepto, monto}] en el request y
+    # se pintan cada uno como partida en el desglose.
+    gastos_capturables = []
+    gastos_in = (base or {}).get("gastos_capturables") or []
+    total_gastos = 0.0
+    for g in gastos_in:
+        concepto = str(g.get("concepto") or "").strip()
+        monto = _num(g.get("monto"), 0)
+        if not concepto or monto <= 0:
+            continue
+        gastos_capturables.append({
+            "concepto": concepto, "cantidad": 1, "unidad": "lote",
+            "unit": _round2(monto), "importe": _round2(monto),
+        })
+        total_gastos += monto
+    insumos.extend(gastos_capturables)
+    if total_gastos > 0:
+        # Recalcular total_insumos con los gastos ya sumados
+        total_insumos = _round2(sum(x["importe"] for x in insumos))
+
     # ── Mano de obra + margen + urgencia + IVA ────────────────────────────────
     m_por_min = _num(p.get("m_por_min"), 0)
     tarifa_h  = _num(p.get("tarifa_hora"), 0)
@@ -471,6 +495,7 @@ def cotizar_neon(
         desperdicio_tira_cm=desperdicio_tira_cm,
         importe_desperdicio=importe_desperdicio,
         insumos=insumos, total_insumos=total_insumos,
+        total_gastos_capturables=_round2(total_gastos),
         horas=_round2(horas * 100) / 100,
         mano_obra=mano_obra, mano_obra_auto=mano_obra_auto,
         costo_directo=costo_directo, merma=merma, margen=margen,
