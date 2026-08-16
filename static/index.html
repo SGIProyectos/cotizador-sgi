@@ -1989,7 +1989,7 @@ svg g.pieza-labels                 { pointer-events: none; }
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
       </div>
       <span class="brand__name">SGI Cotizador</span>
-      <span class="brand__v" id="brand-version">v1.21.0</span>
+      <span class="brand__v" id="brand-version">v1.22.0-alpha</span>
     </div>
     <div class="crumbs" id="topbar-crumbs">
       <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
@@ -2079,7 +2079,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.21.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.22.0-alpha</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -2102,6 +2102,7 @@ svg g.pieza-labels                 { pointer-events: none; }
         <button class="tipo-btn active" data-tipo="letras" onclick="setTipo('letras',this)">🔡 3D</button>
         <button class="tipo-btn" data-tipo="planas" onclick="setTipo('planas',this)">🔲 Planas</button>
         <button class="tipo-btn" data-tipo="caja" onclick="setTipo('caja',this)">💡 Caja</button>
+        <button class="tipo-btn" data-tipo="neon" onclick="setTipo('neon',this)">✨ Neón</button>
       </div>
     </div>
 
@@ -2434,6 +2435,147 @@ svg g.pieza-labels                 { pointer-events: none; }
       <!-- Banner de capas detectadas — se llena tras subir SVG -->
       <div id="planas-capas-banner" style="display:none;margin-top:10px;padding:8px 10px;
            border-radius:6px;font-size:11px;line-height:1.4"></div>
+    </div>
+
+    <!-- Parámetros NEÓN LED — motor calibrado contra 22 pares reales del taller -->
+    <div class="panel field-group" id="params-neon">
+      <h3>Parámetros — Neón LED
+        <span style="font-weight:400;font-size:10px;color:#9fb0cb;float:right">v1</span>
+      </h3>
+
+      <!-- Modo de fabricación (Lámina o 3D Signflex-style) -->
+      <label>Modo de fabricación</label>
+      <div class="tipo-btns" id="neon-modo-btns" style="margin-bottom:8px">
+        <button type="button" class="tipo-btn active" data-neon-modo="lamina"
+                onclick="setNeonModo('lamina',this)" title="Base cortada + kit de soporte">📄 Lámina</button>
+        <button type="button" class="tipo-btn" data-neon-modo="3d"
+                onclick="setNeonModo('3d',this)" title="Canal PETG impreso 3D (tipo Signflex3D)">🖨️ 3D</button>
+      </div>
+
+      <!-- Neón (común a los 2 modos) -->
+      <label>Longitud de neón (m)</label>
+      <input type="number" id="neon-lm" value="5" min="0" step="0.1"
+             placeholder="metros lineales de manguera">
+      <div class="info-tag" style="margin-bottom:6px;line-height:1.5">
+        En la próxima versión se calculará solo del SVG.
+      </div>
+
+      <label>Perfil de manguera</label>
+      <select id="neon-perfil">
+        <option value="">Cargando…</option>
+      </select>
+
+      <div style="display:flex;gap:8px">
+        <div style="flex:1">
+          <label>Uniones</label>
+          <input type="number" id="neon-uniones" value="0" min="0" step="1">
+        </div>
+        <div style="flex:1">
+          <label>Ancho (cm)</label>
+          <input type="number" id="neon-ancho" value="60" min="0" step="1">
+        </div>
+        <div style="flex:1">
+          <label>Alto (cm)</label>
+          <input type="number" id="neon-alto" value="20" min="0" step="1">
+        </div>
+      </div>
+
+      <label>Fuente</label>
+      <select id="neon-fuente">
+        <option value="">Auto (dimensionar por watts)</option>
+      </select>
+
+      <label>Urgencia</label>
+      <select id="neon-urgencia">
+        <option value="normal">Normal · 7-10 días</option>
+        <option value="rapido">Rápido · 4-5 días (×1.20)</option>
+        <option value="express">Express · 48-72 hrs (×1.45)</option>
+      </select>
+
+      <!-- ── Modo LÁMINA ── -->
+      <div id="neon-modo-lamina" style="margin-top:10px;padding-top:10px;
+           border-top:1px dashed rgba(255,255,255,.15)">
+        <label>Base</label>
+        <select id="neon-base">
+          <option value="">Cargando…</option>
+        </select>
+
+        <label>Forma de la base</label>
+        <select id="neon-forma">
+          <option value="rect">Rectangular</option>
+          <option value="silueta">Silueta / calada</option>
+          <option value="redondeada">Rectangular c/ esquinas</option>
+        </select>
+
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:12px;margin-top:8px">
+          <input type="checkbox" id="neon-soporte" checked style="width:auto;margin:0">
+          Incluir kit de separadores / soportes
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:12px;margin-top:4px">
+          <input type="checkbox" id="neon-desperdicio" checked style="width:auto;margin:0">
+          Cobrar desperdicio de lámina (tira ≤30 cm)
+        </label>
+      </div>
+
+      <!-- ── Modo 3D (Signflex-style) ── -->
+      <div id="neon-modo-3d" style="display:none;margin-top:10px;padding-top:10px;
+           border-top:1px dashed rgba(255,255,255,.15)">
+        <label>Tira LED (mm)</label>
+        <select id="neon-tira-led">
+          <option value="4">4 mm</option>
+          <option value="6">6 mm</option>
+          <option value="8">8 mm</option>
+          <option value="12" selected>12 mm</option>
+          <option value="16">16 mm</option>
+        </select>
+
+        <div style="margin-top:8px;font-size:11px;color:#9fb0cb;line-height:1.4">
+          Sección del canal PETG (auto-calcula gramos por sección en U)
+        </div>
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <div style="flex:1">
+            <label style="font-size:10.5px">Ancho (mm)</label>
+            <input type="number" id="neon-canal-ancho" value="16" min="0" step="0.1">
+          </div>
+          <div style="flex:1">
+            <label style="font-size:10.5px">Alto (mm)</label>
+            <input type="number" id="neon-canal-alto" value="20" min="0" step="0.1">
+          </div>
+          <div style="flex:1">
+            <label style="font-size:10.5px">Pared (mm)</label>
+            <input type="number" id="neon-canal-pared" value="1.6" min="0" step="0.1">
+          </div>
+        </div>
+
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <div style="flex:1">
+            <label style="font-size:10.5px" title="0 = auto por sección o fallback g/m">Gramos (báscula)</label>
+            <input type="number" id="neon-gramos-ov" value="0" min="0" step="1" placeholder="auto">
+          </div>
+          <div style="flex:1">
+            <label style="font-size:10.5px" title="0 = auto por metros/hora de la impresora">Horas (real)</label>
+            <input type="number" id="neon-horas-ov" value="0" min="0" step="0.1" placeholder="auto">
+          </div>
+        </div>
+
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <div style="flex:1">
+            <label style="font-size:10.5px">Anclajes (pza)</label>
+            <input type="number" id="neon-anclajes" value="0" min="0" step="1">
+          </div>
+          <div style="flex:1">
+            <label style="font-size:10.5px">Puentes (pza)</label>
+            <input type="number" id="neon-puentes" value="0" min="0" step="1">
+          </div>
+        </div>
+
+        <a href="https://signflex3d.com/generador.html" target="_blank" rel="noopener"
+           style="display:inline-block;margin-top:10px;padding:6px 10px;font-size:11.5px;
+           background:rgba(232,163,56,.15);color:var(--am);border:1px solid rgba(232,163,56,.4);
+           border-radius:6px;text-decoration:none">
+          🔗 Abrir en Signflex3D
+        </a>
+      </div>
     </div>
 
     </div><!-- /sidebar-vault -->
@@ -3350,26 +3492,110 @@ function toggleInspector(forceState) {
 
 function setTipo(tipo, btn) {
   tipoActual = tipo;
-  document.querySelectorAll(".tipo-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tipo-btn[data-tipo]").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
   document.getElementById("params-letras").classList.toggle("visible", tipo === "letras");
   document.getElementById("params-planas").classList.toggle("visible", tipo === "planas");
   document.getElementById("params-caja").classList.toggle("visible",   tipo === "caja");
+  document.getElementById("params-neon")?.classList.toggle("visible",  tipo === "neon");
   if (tipo === "planas" && typeof planasActualizarBannerCapas === "function") {
     planasActualizarBannerCapas();
   }
-  // Ajuste de precio y multiplicador solo aplican a letras y planas, no a caja
+  if (tipo === "neon" && typeof neonPopulateDropdowns === "function") {
+    neonPopulateDropdowns();
+  }
+  // Ajuste de precio y multiplicador solo aplican a letras y planas, no a caja/neón
   const ajusteSection = document.getElementById("ajuste-section");
-  if (ajusteSection) ajusteSection.style.display = tipo !== "caja" ? "" : "none";
+  if (ajusteSection) ajusteSection.style.display = (tipo !== "caja" && tipo !== "neon") ? "" : "none";
   const btnCalc = document.getElementById("btn-calc");
-  if (btnCalc) btnCalc.disabled = !sessionId;
+  // Neón NO requiere SVG (v1: Lm manual). Los otros tipos sí.
+  if (btnCalc) btnCalc.disabled = (tipo === "neon") ? false : !sessionId;
   // Re-render cards según el tipo (caja = bbox global, letras = por path)
-  if (svgPathsRaw.length) {
+  if (svgPathsRaw.length && tipo !== "neon") {
     renderPathCards(svgPathsRaw, lastScaleFactor, lastCerchaAltura);
     const svgEl = document.getElementById("svg-preview-box")?.querySelector("svg");
     if (svgEl) colorizePaths(svgEl, svgPathsRaw);
   }
   updateEstimacionLive();
+}
+
+// ─── NEÓN — helpers de UI ──────────────────────────────────────────────────
+// Estado del modo de fabricación del neón (lamina|3d). Se guarda aparte para
+// que setTipo y calcular() puedan consultarlo sin depender del DOM.
+let neonModoActual = "lamina";
+
+function setNeonModo(modo, btn) {
+  neonModoActual = modo;
+  document.querySelectorAll("#neon-modo-btns .tipo-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById("neon-modo-lamina").style.display = (modo === "lamina") ? "" : "none";
+  document.getElementById("neon-modo-3d").style.display     = (modo === "3d")     ? "" : "none";
+  updateEstimacionLive();
+}
+
+// Pobla los dropdowns de perfiles / fuentes / bases desde el catálogo cargado.
+// Lazy-load del catálogo si aún no está en memoria (evita esperar a que el
+// usuario entre al tab de catálogo).
+async function neonPopulateDropdowns() {
+  if (!catalog && typeof loadCatalog === "function") {
+    try { await loadCatalog(); } catch (_) { /* seguirá con defaults vacíos */ }
+  }
+  const perfiles = catalog?.neon_perfiles || [];
+  const params   = catalog?.neon_params   || {};
+  const bases    = params.bases    || [];
+  const formas   = params.formas   || [];
+  const fuentes  = params.fuentes  || [];
+  const urgencias = params.urgencias || [];
+
+  const selPerfil = document.getElementById("neon-perfil");
+  if (selPerfil && perfiles.length) {
+    const groups = {};
+    for (const p of perfiles) {
+      if (p.activo === false) continue;
+      (groups[p.nombre] = groups[p.nombre] || []).push(p);
+    }
+    selPerfil.innerHTML = Object.entries(groups).map(([nombre, arr]) => `
+      <optgroup label="${nombre}">
+        ${arr.map(p => `
+          <option value="${p.id}">${p.color || ''} — $${p.precio_m}/m · ${p.watts_m}W/m</option>
+        `).join("")}
+      </optgroup>
+    `).join("");
+    // Default: primer estándar blanco cálido si existe
+    const def = perfiles.find(p => p.id === "std-blanco");
+    if (def) selPerfil.value = "std-blanco";
+  }
+
+  const selBase = document.getElementById("neon-base");
+  if (selBase && bases.length) {
+    selBase.innerHTML = bases.filter(b => b.activo !== false).map(b => `
+      <option value="${b.id}">${b.nombre}</option>
+    `).join("");
+    if (bases.find(b => b.id === "acr-3-tr")) selBase.value = "acr-3-tr";
+  }
+
+  const selForma = document.getElementById("neon-forma");
+  if (selForma && formas.length) {
+    selForma.innerHTML = formas.map(f => `
+      <option value="${f.id}">${f.nombre}</option>
+    `).join("");
+  }
+
+  const selFuente = document.getElementById("neon-fuente");
+  if (selFuente && fuentes.length && selFuente.children.length <= 1) {
+    // Preserva la opción "Auto" y agrega las del catálogo
+    selFuente.innerHTML = `<option value="">Auto (dimensionar por watts)</option>` +
+      fuentes.filter(f => f.activo !== false).map(f => `
+        <option value="${f.id}">${f.nombre} · $${f.precio}</option>
+      `).join("");
+  }
+
+  const selUrg = document.getElementById("neon-urgencia");
+  if (selUrg && urgencias.length) {
+    selUrg.innerHTML = urgencias.map(u => `
+      <option value="${u.id}">${u.nombre} · ${u.dias}${u.mult > 1 ? ` (×${u.mult})` : ''}</option>
+    `).join("");
+  }
 }
 
 // ─── Chip de estimación en vivo (arriba del CTA) ─────────────────────────────
@@ -3416,6 +3642,27 @@ function updateEstimacionLive() {
   const r3 = document.getElementById("chip-live-sub");
   if (!r1 || !r2 || !r3) return;
 
+  // Neón: chip basado en Lm × precio_m del perfil seleccionado (aproximación
+  // rápida sin llamar al backend). No cuenta base, fuente, MO ni IVA.
+  if (tipoActual === "neon") {
+    const lm = parseFloat(document.getElementById("neon-lm")?.value) || 0;
+    const perfilId = document.getElementById("neon-perfil")?.value || "";
+    const perfil = (catalog?.neon_perfiles || []).find(p => p.id === perfilId);
+    const precioM = perfil?.precio_m || 0;
+    const ancho = parseFloat(document.getElementById("neon-ancho")?.value) || 0;
+    const alto  = parseFloat(document.getElementById("neon-alto")?.value)  || 0;
+    r1.textContent = `📏 ${lm.toFixed(1)} m de neón · ${ancho} × ${alto} cm · ${neonModoActual === '3d' ? '3D' : 'lámina'}`;
+    if (lm > 0 && precioM > 0) {
+      const bruto = lm * precioM;
+      r2.textContent = `💰 ~$${(bruto * 2).toLocaleString("es-MX", { maximumFractionDigits: 0 })} MXN`;
+      r3.textContent = `estimado bruto (manguera $${precioM}/m × ${lm} m × factor) — pulsa calcular para desglose real`;
+    } else {
+      r2.textContent = "—";
+      r3.textContent = "captura Lm y perfil para estimar";
+    }
+    return;
+  }
+
   if (!svgPathsRaw || !svgPathsRaw.length) {
     r1.textContent = "Sube un SVG para ver el estimado";
     r2.textContent = "";
@@ -3454,7 +3701,8 @@ function updateEstimacionLive() {
 
 // Listeners de inputs que afectan el chip. Se registran una vez, en DOMContentLoaded.
 (function _wireEstimacionLive() {
-  const ids = ["ancho-real", "altura-letra", "tipo-construccion"];
+  const ids = ["ancho-real", "altura-letra", "tipo-construccion",
+               "neon-lm", "neon-perfil", "neon-ancho", "neon-alto"];
   const attach = () => {
     ids.forEach(id => {
       const el = document.getElementById(id);
@@ -5046,7 +5294,12 @@ function renderPathCards(paths, scaleFactor, cerchaAlturaCm) {
 
 // ─── CALCULAR ────────────────────────────────────────────────────────────────
 async function calcular() {
-  if (!sessionId) { showToast("Primero sube un SVG", "err"); return; }
+  // Neón v1 no requiere SVG (Lm manual); los otros tipos sí. Fase 3 auto-calcula
+  // Lm del SVG con getTotalLength() y esta guarda se levantará también para neón.
+  if (tipoActual !== "neon" && !sessionId) {
+    showToast("Primero sube un SVG", "err");
+    return;
+  }
 
   const btn = document.getElementById("btn-calc");
   btn.disabled = true;
@@ -5110,6 +5363,34 @@ async function calcular() {
         cliente,
         ..._instBody(),
       };
+    } else if (tipoActual === "neon") {
+      url = "/api/cotizar/neon";
+      body = {
+        lm:            parseFloat(document.getElementById("neon-lm").value)      || 0,
+        uniones:       parseInt(document.getElementById("neon-uniones").value)   || 0,
+        perfil_id:     document.getElementById("neon-perfil").value || "",
+        fuente_id:     document.getElementById("neon-fuente").value || "",
+        ancho_cm:      parseFloat(document.getElementById("neon-ancho").value)   || 0,
+        alto_cm:       parseFloat(document.getElementById("neon-alto").value)    || 0,
+        modo_fabricacion: neonModoActual,
+        base_id:       document.getElementById("neon-base").value    || "acr-3-tr",
+        forma_id:      document.getElementById("neon-forma").value   || "rect",
+        incluir_soporte:    !!document.getElementById("neon-soporte").checked,
+        cobrar_desperdicio: !!document.getElementById("neon-desperdicio").checked,
+        // Modo 3D
+        canal_ancho_mm: parseFloat(document.getElementById("neon-canal-ancho").value) || 0,
+        canal_alto_mm:  parseFloat(document.getElementById("neon-canal-alto").value)  || 0,
+        canal_pared_mm: parseFloat(document.getElementById("neon-canal-pared").value) || 0,
+        gramos_override:   parseFloat(document.getElementById("neon-gramos-ov").value) || 0,
+        horas_imp_override: parseFloat(document.getElementById("neon-horas-ov").value)  || 0,
+        anclajes: parseInt(document.getElementById("neon-anclajes").value) || 0,
+        puentes:  parseInt(document.getElementById("neon-puentes").value)  || 0,
+        tira_led_mm: parseFloat(document.getElementById("neon-tira-led").value) || 12,
+        urgencia_id: document.getElementById("neon-urgencia").value || "normal",
+        svg_text: currentSvgText || "",
+        cliente,
+        ..._instBody(),
+      };
     } else {
       url  = "/api/cotizar/caja";
       body = {
@@ -5146,8 +5427,12 @@ async function calcular() {
       if (el && !el.value) el.value = _cli;
     }, 50);
     renderResult(data);
-    await renderRecomendaciones(data);
-    _v3dAutoRender(data);
+    // Recomendaciones y vista 3D asumen el shape de letras/caja/planas.
+    // Neón tendrá su propia vista 3D (extruir trazo con canal PETG) en fase futura.
+    if (tipoActual !== "neon") {
+      await renderRecomendaciones(data);
+      _v3dAutoRender(data);
+    }
     switchTab("result");
     showToast("Cotización lista", "ok");
 
@@ -5405,7 +5690,174 @@ function _renderICFHtml(icf) {
   `;
 }
 
+// ─── RENDERIZAR RESULTADO NEÓN ────────────────────────────────────────────
+// Shape del payload:
+//   { quote_id, folio, tipo:'neon', modo_fabricacion, neon:{lm,uniones,watts_total,num_fuentes,fuente_nombre,...},
+//     dimensiones:{ancho_cm,alto_cm,area_m2,perim_m}, base:{material,tipo,forma,importe,...},
+//     fab3d:{gramos,horas_imp,anclajes,puentes,importe_filamento,...}, insumos:[...],
+//     totales:{total_insumos,horas,mano_obra,costo_directo,merma,margen,urgencia_mult,subtotal,precio,iva,precio_iva},
+//     instalacion:{...}, precio_final }
+function renderResultNeon(d) {
+  const $ = n => (Number(n) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 });
+  const t = d.totales, n = d.neon, dim = d.dimensiones;
+  const es3D = d.modo_fabricacion === '3d';
+  const modoLabel = es3D ? '🖨️ Impresión 3D · canal PETG' : '📄 Lámina cortada';
+
+  const costoTotal = t.costo_directo + t.iva + (d.instalacion?.activa ? d.instalacion.total : 0);
+  const margenPct  = d.precio_final > 0 ? ((d.precio_final - costoTotal) / d.precio_final * 100) : 0;
+  const margenHero = margenPct >= 50 ? 'hero-ok' : margenPct >= 25 ? 'hero-warn' : 'hero-bad';
+
+  const insumosRows = (d.insumos || []).map(x => `
+    <tr>
+      <td>${x.concepto}</td>
+      <td style="text-align:right">${(Number(x.cantidad)||0).toLocaleString('es-MX', {maximumFractionDigits:2})}</td>
+      <td style="text-align:center;color:#9fb0cb">${x.unidad || ''}</td>
+      <td style="text-align:right;color:#9fb0cb">$${$(x.unit)}</td>
+      <td style="text-align:right;font-weight:600">$${$(x.importe)}</td>
+    </tr>`).join("");
+
+  const fab3dHtml = es3D ? `
+    <div class="panel" style="margin-top:12px">
+      <h3>🖨️ Fabricación 3D (Signflex-style)</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;font-size:12px">
+        <div><div style="color:#9fb0cb;font-size:10.5px">Tira LED</div>${d.fab3d.tira_led_mm || '—'} mm</div>
+        <div><div style="color:#9fb0cb;font-size:10.5px">Canal (a×h×p)</div>${d.fab3d.canal_ancho_mm}×${d.fab3d.canal_alto_mm}×${d.fab3d.canal_pared_mm} mm</div>
+        <div><div style="color:#9fb0cb;font-size:10.5px">Filamento</div><b>${(d.fab3d.gramos||0).toFixed(0)} g</b>${d.fab3d.gramos !== d.fab3d.gramos_auto ? ' <span style="color:var(--am);font-size:10px">manual</span>' : ''}</div>
+        <div><div style="color:#9fb0cb;font-size:10.5px">Horas impresora</div><b>${(d.fab3d.horas_imp||0).toFixed(2)} h</b></div>
+        <div><div style="color:#9fb0cb;font-size:10.5px">Anclajes</div><b>${d.fab3d.anclajes}</b> pza</div>
+        <div><div style="color:#9fb0cb;font-size:10.5px">Puentes</div><b>${d.fab3d.puentes}</b> pza</div>
+      </div>
+    </div>` : `
+    <div class="panel" style="margin-top:12px">
+      <h3>📄 Base — ${d.base.material}</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;font-size:12px">
+        <div><div style="color:#9fb0cb;font-size:10.5px">Forma</div>${d.base.forma}</div>
+        <div><div style="color:#9fb0cb;font-size:10.5px">Área</div><b>${(dim.area_m2||0).toFixed(3)} m²</b></div>
+        <div><div style="color:#9fb0cb;font-size:10.5px">Perímetro</div>${(dim.perim_m||0).toFixed(2)} m</div>
+        <div><div style="color:#9fb0cb;font-size:10.5px">Importe base</div><b>$${$(d.base.importe)}</b></div>
+        ${d.base.importe_desperdicio > 0 ? `
+          <div><div style="color:#9fb0cb;font-size:10.5px">Desperdicio (${d.base.desperdicio_tira_cm} cm)</div>$${$(d.base.importe_desperdicio)}</div>
+        ` : ''}
+      </div>
+    </div>`;
+
+  document.getElementById("result-content").innerHTML = `
+    <div style="margin-bottom:14px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <h2 style="color:var(--azul);font-size:16px">Cotización — ✨ Neón LED</h2>
+        <p style="font-size:11.5px;color:var(--txt3)">Folio: ${d.folio} · ${modoLabel}</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px;margin-bottom:6px">
+        <input id="pdf-cliente" type="text" placeholder="Cliente (opcional)" style="height:30px;font-size:12px">
+        <input id="pdf-notas" type="text" placeholder="Notas para los documentos (opcional)" style="height:30px;font-size:12px">
+      </div>
+      <div style="font-size:11px;color:#9fb0cb;padding:6px 10px;background:rgba(232,163,56,.08);border-radius:6px;border:1px solid rgba(232,163,56,.25)">
+        📄 Generación de PDF / OT para neón: en la siguiente fase.
+      </div>
+    </div>
+
+    <!-- ─── 3 HEROES (precio / costo / margen) ─── -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;margin-bottom:14px">
+      <div class="hero-card hero-am">
+        <div class="lbl">💰 Precio al cliente</div>
+        <div class="val">$${$(d.precio_final)}</div>
+        <div class="sub">con IVA${t.urgencia_mult > 1 ? ` · urgencia ×${t.urgencia_mult}` : ''}${d.instalacion?.activa ? ' + instalación' : ''}</div>
+      </div>
+      <div class="hero-card hero-ci">
+        <div class="lbl">🔨 Costo directo</div>
+        <div class="val">$${$(t.costo_directo)}</div>
+        <div class="sub">insumos ($${$(t.total_insumos)}) + MO ($${$(t.mano_obra)})</div>
+      </div>
+      <div class="hero-card ${margenHero}">
+        <div class="lbl">📈 Margen bruto</div>
+        <div class="val">${margenPct.toFixed(1)}%</div>
+        <div class="sub">margen catálogo ${(t.margen * 100).toFixed(0)}%</div>
+      </div>
+    </div>
+
+    <!-- ─── Neón (info general) ─── -->
+    <div class="panel" style="margin-bottom:12px">
+      <h3>✨ Neón</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;font-size:12px">
+        <div><div style="color:#9fb0cb;font-size:10.5px">Longitud</div><b>${(n.lm||0).toFixed(2)} m</b></div>
+        <div><div style="color:#9fb0cb;font-size:10.5px">Uniones</div>${n.uniones}</div>
+        <div><div style="color:#9fb0cb;font-size:10.5px">Dimensiones</div>${dim.ancho_cm} × ${dim.alto_cm} cm</div>
+        <div><div style="color:#9fb0cb;font-size:10.5px">Watts totales</div><b>${(n.watts_total||0).toFixed(1)} W</b></div>
+        <div><div style="color:#9fb0cb;font-size:10.5px">Fuente</div>${n.num_fuentes}× ${n.fuente_nombre}</div>
+      </div>
+    </div>
+
+    ${fab3dHtml}
+
+    <!-- ─── Desglose de insumos ─── -->
+    <div class="panel" style="margin-top:12px">
+      <h3>📋 Desglose de insumos</h3>
+      <table style="width:100%;font-size:12px;border-collapse:collapse">
+        <thead>
+          <tr style="color:#9fb0cb;font-size:11px;text-align:left;border-bottom:1px solid var(--borde)">
+            <th style="padding:6px 4px">Concepto</th>
+            <th style="padding:6px 4px;text-align:right">Cant.</th>
+            <th style="padding:6px 4px;text-align:center">Unid.</th>
+            <th style="padding:6px 4px;text-align:right">P. unit.</th>
+            <th style="padding:6px 4px;text-align:right">Importe</th>
+          </tr>
+        </thead>
+        <tbody>${insumosRows}</tbody>
+        <tfoot>
+          <tr style="border-top:1px solid var(--borde)">
+            <td colspan="4" style="padding:8px 4px;text-align:right;color:#9fb0cb">Total insumos</td>
+            <td style="padding:8px 4px;text-align:right;font-weight:700">$${$(t.total_insumos)}</td>
+          </tr>
+          <tr>
+            <td colspan="4" style="padding:4px;text-align:right;color:#9fb0cb">MO (${(t.horas||0).toFixed(2)} h @ tarifa taller)</td>
+            <td style="padding:4px;text-align:right">$${$(t.mano_obra)}</td>
+          </tr>
+          <tr>
+            <td colspan="4" style="padding:4px;text-align:right;color:#9fb0cb">Merma (${(t.merma * 100).toFixed(0)}%)</td>
+            <td style="padding:4px;text-align:right">$${$(t.subtotal - t.costo_directo)}</td>
+          </tr>
+          <tr>
+            <td colspan="4" style="padding:4px;text-align:right;color:#9fb0cb">Subtotal (costo + merma)</td>
+            <td style="padding:4px;text-align:right">$${$(t.subtotal)}</td>
+          </tr>
+          <tr>
+            <td colspan="4" style="padding:4px;text-align:right;color:#9fb0cb">Margen (${(t.margen * 100).toFixed(0)}%)${t.urgencia_mult > 1 ? ` × urgencia ${t.urgencia_mult}` : ''}</td>
+            <td style="padding:4px;text-align:right">$${$(t.precio - t.subtotal)}</td>
+          </tr>
+          <tr>
+            <td colspan="4" style="padding:4px;text-align:right;color:#9fb0cb">Precio sin IVA</td>
+            <td style="padding:4px;text-align:right;font-weight:600">$${$(t.precio)}</td>
+          </tr>
+          <tr>
+            <td colspan="4" style="padding:4px;text-align:right;color:#9fb0cb">IVA (16%)</td>
+            <td style="padding:4px;text-align:right">$${$(t.iva)}</td>
+          </tr>
+          <tr style="background:rgba(232,163,56,.10);border-top:2px solid var(--am)">
+            <td colspan="4" style="padding:10px 4px;text-align:right;font-weight:700;color:var(--am)">TOTAL con IVA</td>
+            <td style="padding:10px 4px;text-align:right;font-weight:700;color:var(--am);font-size:15px">$${$(t.precio_iva)}</td>
+          </tr>
+          ${d.instalacion?.activa ? `
+            <tr>
+              <td colspan="4" style="padding:4px;text-align:right;color:#9fb0cb">Instalación (viáticos + grúa + extras)</td>
+              <td style="padding:4px;text-align:right">$${$(d.instalacion.total)}</td>
+            </tr>
+            <tr style="border-top:1px solid var(--borde)">
+              <td colspan="4" style="padding:6px 4px;text-align:right;font-weight:700">PRECIO FINAL (incl. instalación)</td>
+              <td style="padding:6px 4px;text-align:right;font-weight:700;font-size:14px">$${$(d.precio_final)}</td>
+            </tr>
+          ` : ''}
+        </tfoot>
+      </table>
+    </div>
+  `;
+}
+
 function renderResult(d) {
+  // Neón tiene un shape de respuesta propio (dimensiones + neón + fab3d + insumos
+  // + totales) — bifurcamos a un renderer específico para no forzar el schema
+  // de letras/caja/planas sobre él.
+  if (d.tipo === 'neon') { renderResultNeon(d); return; }
+
   const m      = d.medidas;
   const costos = d.costos;
   const il     = d.iluminacion;
