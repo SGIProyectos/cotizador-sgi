@@ -2050,7 +2050,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
       </div>
       <span class="brand__name">SGI Cotizador</span>
-      <span class="brand__v" id="brand-version">v1.26.0</span>
+      <span class="brand__v" id="brand-version">v1.26.1</span>
     </div>
     <div class="crumbs" id="topbar-crumbs">
       <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
@@ -2140,7 +2140,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.26.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.26.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -2860,6 +2860,40 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
                   title="Rosa" style="background:#ff69b4"></button>
           <button class="cara-swatch" data-hex="1a1a1a" onclick="v3dSetCaraColor(0x1a1a1a)"
                   title="Negro (opaco)" style="background:#1a1a1a;border-color:#444"></button>
+        </div>
+        <!-- Paleta de colores NEÓN — se muestra solo cuando el tipo actual es 'neon' -->
+        <div id="neon-color-palette" style="display:none;position:absolute;top:12px;right:12px;z-index:10;
+             padding:8px 12px;background:rgba(15,19,25,.92);border:1px solid #1E2530;
+             border-radius:10px;backdrop-filter:blur(8px);align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:11px;color:#8a94a6;font-weight:600;letter-spacing:.06em;
+                       text-transform:uppercase">Color del neón:</span>
+          <button class="cara-swatch active" data-neon-color="Blanco cálido"
+                  onclick="v3dSetNeonColor('Blanco cálido')" title="Blanco cálido"
+                  style="background:#FFECC0"></button>
+          <button class="cara-swatch" data-neon-color="Blanco frío"
+                  onclick="v3dSetNeonColor('Blanco frío')" title="Blanco frío"
+                  style="background:#EEF4FF"></button>
+          <button class="cara-swatch" data-neon-color="Azul"
+                  onclick="v3dSetNeonColor('Azul')" title="Azul" style="background:#4EAAFF"></button>
+          <button class="cara-swatch" data-neon-color="Rojo"
+                  onclick="v3dSetNeonColor('Rojo')" title="Rojo" style="background:#FF3E5C"></button>
+          <button class="cara-swatch" data-neon-color="Rosa"
+                  onclick="v3dSetNeonColor('Rosa')" title="Rosa" style="background:#FF7EBC"></button>
+          <button class="cara-swatch" data-neon-color="Morado"
+                  onclick="v3dSetNeonColor('Morado')" title="Morado" style="background:#B970FF"></button>
+          <button class="cara-swatch" data-neon-color="Amarillo"
+                  onclick="v3dSetNeonColor('Amarillo')" title="Amarillo" style="background:#FFE05A"></button>
+          <button class="cara-swatch" data-neon-color="Verde"
+                  onclick="v3dSetNeonColor('Verde')" title="Verde" style="background:#78FF6B"></button>
+          <button class="cara-swatch" data-neon-color="RGB"
+                  onclick="v3dSetNeonColor('RGB')" title="RGB" style="background:linear-gradient(135deg,#FF3E5C,#B970FF,#4EAAFF)"></button>
+          <span style="width:1px;height:20px;background:#2a3441;margin:0 2px"></span>
+          <button class="cara-swatch" data-neon-power="on"
+                  onclick="v3dSetNeonPower(true)" title="Encendido"
+                  style="background:#FFB224;border-color:#FFB224"></button>
+          <button class="cara-swatch" data-neon-power="off"
+                  onclick="v3dSetNeonPower(false)" title="Apagado"
+                  style="background:#2a2a2a"></button>
         </div>
         <canvas id="visor3d-canvas" style="display:none"></canvas>
         <div id="visor3d-empty">
@@ -4140,18 +4174,59 @@ function _cfgNeonAplicar() {
   showToast("Configuración aplicada. Ya puedes calcular.", "ok");
 }
 
-// Handlers del wizard neón — actualizan visibilidad + info sin cerrar el modal
+// Handlers del wizard neón — dependencias lógicas entre pasos.
+//
+// Reglas de negocio:
+// - 2ª gen SIEMPRE es modo lámina (3D Signflex es un proceso distinto,
+//   solo aplica a 1ª gen). Se bloquea el modo 3D si eliges 2ª gen.
+// - 2ª gen SIEMPRE va sobre acrílico (el ranurado CNC solo tiene sentido
+//   ahí). Se filtra el select de base y se avisa si no es acrílico.
+// - Modo 3D no tiene base (el canal PETG ES la base) → oculta paso 5.
+// - "Compro pieza" muestra input de costo manual.
+
 function _cfgNeonOnGenChange() {
   const gen = _cfgCardVal("cfg-neon-gen-cards") || "1";
   const aviso = document.getElementById("cfg-neon-gen2-aviso");
+
+  // Bloquear/desbloquear card de modo 3D según la gen
+  const modo3dCard = document.querySelector('#cfg-neon-modo-cards [data-val="3d"]');
+  if (modo3dCard) {
+    const bloquear = (gen === "2");
+    modo3dCard.style.opacity = bloquear ? "0.35" : "";
+    modo3dCard.style.pointerEvents = bloquear ? "none" : "";
+    modo3dCard.title = bloquear ? "3D Signflex solo aplica a 1ª generación" : "";
+    if (bloquear && modo3dCard.classList.contains("active")) {
+      // Si estaba en 3D, forzar a lámina
+      modo3dCard.classList.remove("active");
+      const lamCard = document.querySelector('#cfg-neon-modo-cards [data-val="lamina"]');
+      if (lamCard) lamCard.classList.add("active");
+      _cfgNeonOnModoChange();
+    }
+  }
+
+  // Aviso 2ª gen (visible siempre que gen=2, se completa con estado de la base)
   if (aviso) {
     if (gen === "2") {
       aviso.style.display = "";
-      aviso.innerHTML = "⚡ <b>Neón 2ª generación</b> requiere <b>acrílico ranurado en CNC</b> (multiplicador ~1.9× sobre el corte externo). Elige un perfil 2ª gen abajo y una base de acrílico.";
+      const baseId = document.getElementById("cfg-neon-base")?.value;
+      const base = (catalog?.neon_params?.bases || []).find(b => b.id === baseId);
+      const esAcr = base && (/acr/i.test(base.id || "") || /acr[íi]lico/i.test(base.nombre || ""));
+      if (base && !esAcr) {
+        aviso.innerHTML = `⚠️ <b>Ojo:</b> elegiste base no acrílica. Neón 2ª generación se ve profesional <b>solo sobre acrílico ranurado</b>. Cambia la base o elige 1ª generación.`;
+        aviso.style.background = "#fee2e2";
+        aviso.style.borderLeftColor = "#dc2626";
+        aviso.style.color = "#7f1d1d";
+      } else {
+        aviso.innerHTML = `⚡ <b>Neón 2ª generación</b> requiere <b>acrílico ranurado en CNC</b> (multiplicador ~1.9× sobre el corte externo). Ya está bien configurado.`;
+        aviso.style.background = "#fef3c7";
+        aviso.style.borderLeftColor = "#f59e0b";
+        aviso.style.color = "#78350f";
+      }
     } else {
       aviso.style.display = "none";
     }
   }
+
   // Filtrar el dropdown de perfil por generación seleccionada
   const selPerfil = document.getElementById("cfg-neon-perfil");
   if (selPerfil && catalog?.neon_perfiles) {
@@ -4164,13 +4239,33 @@ function _cfgNeonOnGenChange() {
         <optgroup label="${nombre}">
           ${arr.map(p => `<option value="${p.id}">${p.color||''} — $${p.precio_m}/m · ${p.watts_m}W/m</option>`).join("")}
         </optgroup>`).join("");
-      // Si el perfil actual no es de esa gen, seleccionar el primero
       const curr = catalog.neon_perfiles.find(p => p.id === selPerfil.value);
       if (!curr || String(curr.generacion || 1) !== String(gen)) {
         selPerfil.value = perfiles[0].id;
       }
       _cfgNeonOnPerfilChange();
     }
+  }
+
+  // Filtrar el dropdown de base — 2ª gen solo acrílicos disponibles
+  const selBase = document.getElementById("cfg-neon-base");
+  if (selBase && catalog?.neon_params?.bases) {
+    const bases = catalog.neon_params.bases.filter(b => b.activo !== false);
+    const filtrar = (gen === "2");
+    selBase.innerHTML = bases.map(b => {
+      const esAcr = /acr/i.test(b.id || "") || /acr[íi]lico/i.test(b.nombre || "");
+      const disabled = filtrar && !esAcr;
+      const suffix = disabled ? " · (no compatible con 2ª gen)" : "";
+      return `<option value="${b.id}" ${disabled?'disabled':''}>${b.nombre}${suffix}</option>`;
+    }).join("");
+    // Si el actual quedó disabled, auto-seleccionar el primero válido
+    const curr = bases.find(b => b.id === selBase.value);
+    const currEsAcr = curr && (/acr/i.test(curr.id || "") || /acr[íi]lico/i.test(curr.nombre || ""));
+    if (filtrar && curr && !currEsAcr) {
+      const primerAcr = bases.find(b => /acr/i.test(b.id || "") || /acr[íi]lico/i.test(b.nombre || ""));
+      if (primerAcr) selBase.value = primerAcr.id;
+    }
+    _cfgNeonOnBaseChange();
   }
 }
 
@@ -4180,6 +4275,30 @@ function _cfgNeonOnModoChange() {
   const paso3d   = document.getElementById("cfg-neon-paso-3d");
   if (pasoBase) pasoBase.style.display = (modo === "lamina") ? "" : "none";
   if (paso3d)   paso3d.style.display   = (modo === "3d")     ? "" : "none";
+
+  // Modo 3D fuerza 1ª generación (Signflex es proceso de 1ª gen)
+  if (modo === "3d") {
+    const gen2Card = document.querySelector('#cfg-neon-gen-cards [data-val="2"]');
+    const gen1Card = document.querySelector('#cfg-neon-gen-cards [data-val="1"]');
+    if (gen2Card) {
+      gen2Card.style.opacity = "0.35";
+      gen2Card.style.pointerEvents = "none";
+      gen2Card.title = "2ª generación no aplica a modo 3D (canal impreso)";
+    }
+    if (gen2Card && gen2Card.classList.contains("active")) {
+      gen2Card.classList.remove("active");
+      if (gen1Card) gen1Card.classList.add("active");
+      _cfgNeonOnGenChange();
+    }
+  } else {
+    // Volver a lámina — habilitar card de 2ª gen
+    const gen2Card = document.querySelector('#cfg-neon-gen-cards [data-val="2"]');
+    if (gen2Card) {
+      gen2Card.style.opacity = "";
+      gen2Card.style.pointerEvents = "";
+      gen2Card.title = "";
+    }
+  }
 }
 
 function _cfgNeonOnPerfilChange() {
@@ -4188,7 +4307,7 @@ function _cfgNeonOnPerfilChange() {
   const perfil = (catalog?.neon_perfiles || []).find(p => p.id === perfilId);
   if (info && perfil) {
     const gen = perfil.generacion || 1;
-    info.innerHTML = `📐 Altura mínima recomendada: <b>${perfil.altura_min_cm} cm</b> · ${perfil.watts_m}W/m · ${gen}ª generación`;
+    info.innerHTML = `📐 Altura mínima recomendada: <b>${perfil.altura_min_cm} cm</b> · ${perfil.watts_m}W/m · ${gen}ª generación · $${perfil.precio_m}/m`;
   } else if (info) {
     info.textContent = "";
   }
@@ -4197,13 +4316,14 @@ function _cfgNeonOnPerfilChange() {
 function _cfgNeonOnBaseChange() {
   const baseId = document.getElementById("cfg-neon-base")?.value;
   const base = (catalog?.neon_params?.bases || []).find(b => b.id === baseId);
-  // Auto-seleccionar la card del aprovisionamiento default del material
   if (base) {
     const aprovDef = base.aprovisionamiento || (base.precio_lamina ? "corto_afuera" : "compro_pieza");
     document.querySelectorAll("#cfg-neon-aprov-cards .cfg-card").forEach(c => {
       c.classList.toggle("active", c.dataset.val === aprovDef);
     });
     _cfgNeonOnAprovChange();
+    // Re-evaluar aviso 2ª gen (puede cambiar el mensaje según acrílico o no)
+    _cfgNeonOnGenChange();
   }
 }
 
@@ -12764,6 +12884,12 @@ window.v3d_render = function(args) {
     const show = (tipo === 'letras' && tipoConstruccion === 'cajon_luz');
     palette.style.display = show ? 'flex' : 'none';
   }
+  // Paleta neón — solo para tipo=neon (color en vivo + toggle encendido/apagado)
+  const neonPal = document.getElementById('neon-color-palette');
+  if (neonPal) neonPal.style.display = (tipo === 'neon') ? 'flex' : 'none';
+  // Explode NO aplica a neón — la manguera es una pieza, no hay capas
+  const btnExp = document.getElementById('btn-explode');
+  if (btnExp && tipo === 'neon') btnExp.style.display = 'none';
 
   if (!REN) initScene(canvas);
   clearMeshes();
@@ -13117,6 +13243,33 @@ function _neonSampleSubpath(subPath, sf, cx, cy, zFront, N = 60) {
   return pts;
 }
 
+// Referencias globales al último build (para permitir cambio de color/apagado
+// sin re-parsear el SVG). Estas viven en el módulo Three.js.
+window._v3dNeon = { tubes: [], cores: [], luz: null, halos: [], power: true, color: 0xFFECC0 };
+
+// Sprite de halo — plano orientado a cámara con textura radial glow.
+// Va detrás/alrededor de cada trazo para simular bloom sin postprocess.
+let _neonHaloTexCache = null;
+function _neonHaloTexture(baseHex) {
+  // Cache por color para no regenerar en cada frame
+  const key = String(baseHex);
+  if (_neonHaloTexCache && _neonHaloTexCache.key === key) return _neonHaloTexCache.tex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  const clr = new THREE.Color(baseHex);
+  const r = Math.round(clr.r * 255), g = Math.round(clr.g * 255), b = Math.round(clr.b * 255);
+  const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0.00, `rgba(${r},${g},${b},1.00)`);
+  grad.addColorStop(0.25, `rgba(${r},${g},${b},0.55)`);
+  grad.addColorStop(0.55, `rgba(${r},${g},${b},0.20)`);
+  grad.addColorStop(1.00, `rgba(${r},${g},${b},0.00)`);
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c);
+  _neonHaloTexCache = { key, tex };
+  return tex;
+}
+
 function _buildNeon(svgText, sf, args) {
   const grp = new THREE.Group();
   const perfilName  = args.neonPerfilNombre  || '';
@@ -13124,9 +13277,13 @@ function _buildNeon(svgText, sf, args) {
   const modoFab     = args.neonModoFab       || 'lamina';
   const color       = _neonColorHex3D(perfilName, perfilColor);
 
+  // Reset del state global (nuevo build = referencias limpias)
+  window._v3dNeon = { tubes: [], cores: [], luz: null, halos: [], baseMesh: null,
+                      power: true, color: color, perfilName, radioCm: 0.6 };
+
   const { paths } = LDR.parse(svgText);
 
-  // Calcular bbox conjunto en SVG-space para centrar la escena
+  // Calcular bbox conjunto en SVG-space
   let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
   for (const svgPath of paths) {
     for (const sp of svgPath.subPaths || []) {
@@ -13142,80 +13299,162 @@ function _buildNeon(svgText, sf, args) {
   const cx = (mnX + mxX) / 2, cy = (mnY + mxY) / 2;
   const wCm = (mxX - mnX) * sf, hCm = (mxY - mnY) * sf;
 
-  // Base VERTICAL (plano XY, pared). Grosor va en Z (profundidad).
-  // El anuncio real se cuelga en una pared, no está acostado en el suelo.
+  // ── PARED DE FONDO (siempre visible, da contexto realista) ──
+  const wallW = Math.max(wCm * 2.2, 60);
+  const wallH = Math.max(hCm * 2.2, 60);
+  const wallGeo = new THREE.PlaneGeometry(wallW, wallH);
+  const wallTex = _wallTexture();
+  wallTex.repeat.set(wallW / 60, wallH / 60);
+  const wallMat = new THREE.MeshStandardMaterial({
+    map: wallTex, color: 0x555a63, roughness: 0.95, metalness: 0.05,
+  });
+  const wallMesh = new THREE.Mesh(wallGeo, wallMat);
+  wallMesh.position.set(0, 0, -1.5);
+  grp.add(wallMesh);
+
+  // ── BASE (lámina acrílica o canal PETG oscuro) ──
+  let baseThick;
   if (modoFab === 'lamina') {
-    const baseW = Math.max(wCm * 1.1, 10);
-    const baseH = Math.max(hCm * 1.1, 10);
-    const baseThick = 0.3;   // 3mm de acrílico
+    const baseW = Math.max(wCm * 1.08, 12);
+    const baseH = Math.max(hCm * 1.08, 12);
+    baseThick = 0.3;
     const baseGeo = new THREE.BoxGeometry(baseW, baseH, baseThick);
     const baseMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff, transparent: true, opacity: 0.18,
-      roughness: 0.15, metalness: 0.05,
-    });
-    const baseMesh = new THREE.Mesh(baseGeo, baseMat);
-    baseMesh.position.set(0, 0, -baseThick / 2);   // base pegada a Z=0, sale hacia -Z
-    grp.add(baseMesh);
-  } else if (modoFab === '3d') {
-    // Canal PETG oscuro — plano XY como la lámina, pero grueso y opaco
-    const baseW = Math.max(wCm * 1.05, 8);
-    const baseH = Math.max(hCm * 1.05, 8);
-    const baseThick = 0.5;
-    const baseGeo = new THREE.BoxGeometry(baseW, baseH, baseThick);
-    const baseMat = new THREE.MeshStandardMaterial({
-      color: 0x1c1c20, roughness: 0.85, metalness: 0.1,
+      color: 0xffffff, transparent: true, opacity: 0.32,
+      roughness: 0.1, metalness: 0.15,
     });
     const baseMesh = new THREE.Mesh(baseGeo, baseMat);
     baseMesh.position.set(0, 0, -baseThick / 2);
     grp.add(baseMesh);
+    window._v3dNeon.baseMesh = baseMesh;
+  } else {
+    const baseW = Math.max(wCm * 1.03, 8);
+    const baseH = Math.max(hCm * 1.03, 8);
+    baseThick = 0.5;
+    const baseGeo = new THREE.BoxGeometry(baseW, baseH, baseThick);
+    const baseMat = new THREE.MeshStandardMaterial({
+      color: 0x141518, roughness: 0.75, metalness: 0.2,
+    });
+    const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+    baseMesh.position.set(0, 0, -baseThick / 2);
+    grp.add(baseMesh);
+    window._v3dNeon.baseMesh = baseMesh;
   }
 
-  // Radio de la manguera — según ancho del perfil (6/12/16 mm)
+  // Radio de la manguera según ancho del perfil
   let radioCm = 0.6;
-  if (/mini|6mm/i.test(perfilName)) radioCm = 0.3;
-  if (/premium|16mm|silicona 16mm/i.test(perfilName)) radioCm = 0.8;
+  if (/mini|6mm/i.test(perfilName)) radioCm = 0.35;
+  if (/premium|16mm|silicona 16mm/i.test(perfilName)) radioCm = 0.9;
+  window._v3dNeon.radioCm = radioCm;
 
+  // Materiales — emissive alto para que el neón "brille" sin bloom global
   const tubeMat = new THREE.MeshStandardMaterial({
-    color: color, emissive: color, emissiveIntensity: 1.8,
-    roughness: 0.25, metalness: 0.0,
+    color: color, emissive: color, emissiveIntensity: 2.5,
+    roughness: 0.15, metalness: 0.0,
+    transparent: true, opacity: 0.98,
   });
   const coreMat = new THREE.MeshBasicMaterial({
-    color: 0xffffff, transparent: true, opacity: 0.85,
+    color: 0xffffff, transparent: true, opacity: 0.95,
+  });
+  // Halo billboard: se ve como bloom real sin postprocess
+  const haloMat = new THREE.SpriteMaterial({
+    map: _neonHaloTexture(color),
+    color: 0xffffff,
+    transparent: true, opacity: 0.85,
+    blending: THREE.AdditiveBlending, depthWrite: false,
   });
 
-  // La manguera sale ~radio + 0.2 cm hacia adelante de la superficie de la base
-  const zFront = radioCm + 0.2;
+  const zFront = radioCm + 0.15;
   let trazosOk = 0;
   for (const svgPath of paths) {
     for (const sp of svgPath.subPaths || []) {
-      const pts = _neonSampleSubpath(sp, sf, cx, cy, zFront, 80);
+      const pts = _neonSampleSubpath(sp, sf, cx, cy, zFront, 100);
       if (pts.length < 2) continue;
       try {
         const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
-        const tubeGeo = new THREE.TubeGeometry(curve, Math.max(pts.length * 3, 60),
-                                                radioCm, 12, false);
-        grp.add(new THREE.Mesh(tubeGeo, tubeMat));
-        const coreGeo = new THREE.TubeGeometry(curve, Math.max(pts.length * 3, 60),
-                                                radioCm * 0.55, 10, false);
-        grp.add(new THREE.Mesh(coreGeo, coreMat));
+        const segs = Math.max(pts.length * 4, 80);
+        // Tubo cilíndrico principal
+        const tubeGeo = new THREE.TubeGeometry(curve, segs, radioCm, 16, false);
+        const tube = new THREE.Mesh(tubeGeo, tubeMat);
+        grp.add(tube); window._v3dNeon.tubes.push(tube);
+        // Núcleo brillante interior
+        const coreGeo = new THREE.TubeGeometry(curve, segs, radioCm * 0.5, 12, false);
+        const core = new THREE.Mesh(coreGeo, coreMat);
+        grp.add(core); window._v3dNeon.cores.push(core);
+        // Halos sprite cada N puntos de la curva (bloom "gratis")
+        const nHalos = Math.max(4, Math.min(20, Math.round(pts.length / 4)));
+        for (let i = 0; i < nHalos; i++) {
+          const t = (i + 0.5) / nHalos;
+          const p = curve.getPoint(t);
+          const halo = new THREE.Sprite(haloMat);
+          halo.position.copy(p);
+          halo.position.z -= radioCm * 0.2;   // ligero atrás para no clip con el tube
+          halo.scale.set(radioCm * 8, radioCm * 8, 1);
+          grp.add(halo);
+          window._v3dNeon.halos.push(halo);
+        }
         trazosOk++;
       } catch (_) {}
     }
   }
 
-  // Luz puntual del color del neón — delante del anuncio, refleja en la base
+  // Luces — 1 puntual del color del neón + ambient + directional para dar
+  // volumen a la pared y la base. Los directionals producen sombras suaves.
   if (trazosOk > 0) {
-    const luz = new THREE.PointLight(new THREE.Color(color), 0.8,
-                                     Math.max(wCm, hCm) * 1.2, 1.5);
-    luz.position.set(0, 0, zFront + radioCm * 4);
+    const luz = new THREE.PointLight(new THREE.Color(color), 1.2,
+                                     Math.max(wCm, hCm) * 2.0, 1.8);
+    luz.position.set(0, 0, zFront + radioCm * 5);
     grp.add(luz);
+    window._v3dNeon.luz = luz;
   }
-
-  // Ambient tenue para no negros absolutos en las paredes
-  grp.add(new THREE.AmbientLight(0x333340, 0.5));
+  grp.add(new THREE.AmbientLight(0x2a2e38, 0.7));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.35);
+  dir.position.set(-30, 40, 50);
+  grp.add(dir);
 
   return grp;
 }
+
+// ── API pública: cambiar color/estado del neón sin re-parsear el SVG ──
+window.v3dSetNeonColor = function(colorName) {
+  const st = window._v3dNeon;
+  if (!st || !st.tubes.length) return;
+  const hex = _NEON_COLOR_HEX_3D[colorName] || 0xFFECC0;
+  st.color = hex;
+  const clr = new THREE.Color(hex);
+  for (const t of st.tubes) {
+    t.material.color.copy(clr);
+    t.material.emissive.copy(clr);
+    t.material.needsUpdate = true;
+  }
+  // Halos: nueva textura del color
+  const tex = _neonHaloTexture(hex);
+  for (const h of st.halos) {
+    h.material.map = tex;
+    h.material.needsUpdate = true;
+  }
+  if (st.luz) st.luz.color.copy(clr);
+  // Actualizar botones activos de la paleta
+  document.querySelectorAll('#neon-color-palette [data-neon-color]').forEach(b => {
+    b.classList.toggle('active', b.dataset.neonColor === colorName);
+  });
+};
+
+window.v3dSetNeonPower = function(on) {
+  const st = window._v3dNeon;
+  if (!st) return;
+  st.power = !!on;
+  const emissiveInt = on ? 2.5 : 0;
+  const coreOpacity = on ? 0.95 : 0.0;
+  const haloOpacity = on ? 0.85 : 0.0;
+  for (const t of st.tubes) t.material.emissiveIntensity = emissiveInt;
+  for (const c of st.cores) c.material.opacity = coreOpacity;
+  for (const h of st.halos) h.material.opacity = haloOpacity;
+  if (st.luz) st.luz.intensity = on ? 1.2 : 0;
+  document.querySelectorAll('#neon-color-palette [data-neon-power]').forEach(b => {
+    b.classList.toggle('active', (b.dataset.neonPower === 'on') === on);
+  });
+};
 
 function _buildLetras(svgText, sf, depthCm, tipo, tipoConstruccion) {
   const { paths } = LDR.parse(svgText);
