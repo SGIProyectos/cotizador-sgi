@@ -2050,7 +2050,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
       </div>
       <span class="brand__name">SGI Cotizador</span>
-      <span class="brand__v" id="brand-version">v1.25.1</span>
+      <span class="brand__v" id="brand-version">v1.26.0</span>
     </div>
     <div class="crumbs" id="topbar-crumbs">
       <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
@@ -2140,7 +2140,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.25.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.26.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -3596,6 +3596,251 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
 
       </div><!-- /cfg-sec-planas -->
 
+      <!-- ══ SECCIÓN NEÓN LED ══ -->
+      <div id="cfg-sec-neon" style="display:none">
+
+        <!-- Paso 1: Generación -->
+        <div class="cfg-step">
+          <div class="cfg-step-label"><span class="cfg-step-num">1</span>¿Qué generación de neón?</div>
+          <div class="cfg-cards" id="cfg-neon-gen-cards">
+            <div class="cfg-card active" data-val="1" onclick="selectCfgCard(this,'cfg-neon-gen-cards');_cfgNeonOnGenChange()">
+              <div class="cfg-card-icon">💡</div>
+              <div class="cfg-card-name">1ª generación</div>
+              <div class="cfg-card-desc">Manguera PVC clásica · sobre cualquier base · más económica</div>
+            </div>
+            <div class="cfg-card" data-val="2" onclick="selectCfgCard(this,'cfg-neon-gen-cards');_cfgNeonOnGenChange()">
+              <div class="cfg-card-icon">⚡</div>
+              <div class="cfg-card-name">2ª generación</div>
+              <div class="cfg-card-desc">Silicona flexible · sobre acrílico ranurado en CNC · look profesional</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Paso 2: Modo de fabricación -->
+        <div class="cfg-step">
+          <div class="cfg-step-label"><span class="cfg-step-num">2</span>¿Cómo se fabrica la base?</div>
+          <div class="cfg-cards" id="cfg-neon-modo-cards">
+            <div class="cfg-card active" data-val="lamina" onclick="selectCfgCard(this,'cfg-neon-modo-cards');_cfgNeonOnModoChange()">
+              <div class="cfg-card-icon">📄</div>
+              <div class="cfg-card-name">Lámina cortada</div>
+              <div class="cfg-card-desc">Tradicional · base plana con la manguera pegada</div>
+            </div>
+            <div class="cfg-card" data-val="3d" onclick="selectCfgCard(this,'cfg-neon-modo-cards');_cfgNeonOnModoChange()">
+              <div class="cfg-card-icon">🖨️</div>
+              <div class="cfg-card-name">3D Signflex</div>
+              <div class="cfg-card-desc">Canal PETG impreso 3D siguiendo el trazo · sin base</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Paso 3: Perfil de manguera (color + grosor) -->
+        <div class="cfg-step">
+          <div class="cfg-step-label"><span class="cfg-step-num">3</span>Color y grosor de la manguera</div>
+          <div class="cfg-inline">
+            <label>Perfil de manguera</label>
+            <select id="cfg-neon-perfil" onchange="_cfgNeonOnPerfilChange()"
+              style="width:100%;padding:8px 10px;border-radius:7px;border:1px solid #c8d4e8;font-size:13px">
+              <option value="">Cargando…</option>
+            </select>
+          </div>
+          <div id="cfg-neon-perfil-info" style="font-size:11px;color:#6b7d9c;margin-top:6px;min-height:16px"></div>
+        </div>
+
+        <!-- Paso 4: Dimensiones -->
+        <div class="cfg-step">
+          <div class="cfg-step-label"><span class="cfg-step-num">4</span>Dimensiones y longitud</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+            <div>
+              <label style="font-size:11px;color:#4a5568">Longitud neón (m)</label>
+              <input type="number" id="cfg-neon-lm" min="0" step="0.1"
+                style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid #c8d4e8;font-size:13px">
+            </div>
+            <div>
+              <label style="font-size:11px;color:#4a5568">Ancho (cm)</label>
+              <input type="number" id="cfg-neon-ancho" min="0" step="1"
+                style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid #c8d4e8;font-size:13px">
+            </div>
+            <div>
+              <label style="font-size:11px;color:#4a5568">Alto (cm)</label>
+              <input type="number" id="cfg-neon-alto" min="0" step="1"
+                style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid #c8d4e8;font-size:13px">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+            <div>
+              <label style="font-size:11px;color:#4a5568">Uniones</label>
+              <input type="number" id="cfg-neon-uniones" value="0" min="0" step="1"
+                style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid #c8d4e8;font-size:13px">
+            </div>
+            <div>
+              <label style="font-size:11px;color:#4a5568">Urgencia</label>
+              <select id="cfg-neon-urgencia"
+                style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid #c8d4e8;font-size:13px">
+                <option value="normal">Normal · 7-10 días</option>
+                <option value="rapido">Rápido · 4-5 días (×1.20)</option>
+                <option value="express">Express · 48-72 hrs (×1.45)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Paso 5: Base + aprovisionamiento (SOLO modo lámina) -->
+        <div class="cfg-step" id="cfg-neon-paso-base">
+          <div class="cfg-step-label"><span class="cfg-step-num">5</span>Base y forma de aprovisionamiento</div>
+
+          <label style="font-size:11px;color:#4a5568">Material de base</label>
+          <select id="cfg-neon-base" onchange="_cfgNeonOnBaseChange()"
+            style="width:100%;padding:8px 10px;border-radius:7px;border:1px solid #c8d4e8;font-size:13px;margin-bottom:10px">
+            <option value="">Cargando…</option>
+          </select>
+
+          <div style="font-size:12px;font-weight:600;color:#4a5568;margin-bottom:6px">
+            ¿Cómo obtienes el material?
+          </div>
+          <div class="cfg-cards" id="cfg-neon-aprov-cards">
+            <div class="cfg-card" data-val="compro_pieza" onclick="selectCfgCard(this,'cfg-neon-aprov-cards');_cfgNeonOnAprovChange()">
+              <div class="cfg-card-icon">🛒</div>
+              <div class="cfg-card-name">Compro pieza cortada</div>
+              <div class="cfg-card-desc">Sin cortadora ni stock · captura el costo del pedazo</div>
+            </div>
+            <div class="cfg-card" data-val="corto_afuera" onclick="selectCfgCard(this,'cfg-neon-aprov-cards');_cfgNeonOnAprovChange()">
+              <div class="cfg-card-icon">📤</div>
+              <div class="cfg-card-name">Corto afuera</div>
+              <div class="cfg-card-desc">Tengo lámina · mando a cortar con láser tercero</div>
+            </div>
+            <div class="cfg-card" data-val="corto_taller" onclick="selectCfgCard(this,'cfg-neon-aprov-cards');_cfgNeonOnAprovChange()">
+              <div class="cfg-card-icon">🔧</div>
+              <div class="cfg-card-name">Corto en taller</div>
+              <div class="cfg-card-desc">Tengo lámina y cortadora propia · solo prorrateo</div>
+            </div>
+          </div>
+
+          <!-- Input costo pieza (solo si aprov = compro_pieza) -->
+          <div id="cfg-neon-pieza-wrap" style="display:none;margin-top:10px">
+            <label style="font-size:11px;color:#4a5568">Costo de la pieza (MXN)</label>
+            <input type="number" id="cfg-neon-pieza-costo" min="0" step="10"
+              placeholder="lo que te costó la pieza cortada"
+              style="width:100%;padding:8px 10px;border-radius:7px;border:1px solid #c8d4e8;font-size:13px">
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+            <div>
+              <label style="font-size:11px;color:#4a5568">Forma</label>
+              <select id="cfg-neon-forma"
+                style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid #c8d4e8;font-size:13px">
+                <option value="rect">Rectangular</option>
+                <option value="silueta">Silueta / calada</option>
+                <option value="redondeada">Rectangular c/ esquinas</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:#4a5568">Kit de soporte</label>
+              <div style="padding:7px 0">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+                  <input type="checkbox" id="cfg-neon-soporte" checked>
+                  <span>Incluir separadores</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-top:2px">
+                  <input type="checkbox" id="cfg-neon-desperdicio" checked>
+                  <span>Cobrar desperdicio</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Paso 5-alt: Datos 3D (SOLO modo 3D) -->
+        <div class="cfg-step" id="cfg-neon-paso-3d" style="display:none">
+          <div class="cfg-step-label"><span class="cfg-step-num">5</span>Fabricación 3D — canal PETG</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+              <label style="font-size:11px;color:#4a5568">Ancho tira LED (mm)</label>
+              <select id="cfg-neon-tira-led"
+                style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid #c8d4e8;font-size:13px">
+                <option value="4">4 mm</option>
+                <option value="6">6 mm</option>
+                <option value="8">8 mm</option>
+                <option value="12" selected>12 mm</option>
+                <option value="16">16 mm</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:#4a5568">Enlace útil</label>
+              <a href="https://signflex3d.com/generador.html" target="_blank" rel="noopener"
+                style="display:inline-block;padding:7px 10px;font-size:12px;color:#e87c2a;border:1px solid #f5c93b;border-radius:6px;background:#fef8e7;text-decoration:none;width:100%;text-align:center;box-sizing:border-box">
+                🔗 Signflex3D
+              </a>
+            </div>
+          </div>
+          <div style="font-size:11px;color:#6b7d9c;margin:10px 0 6px">
+            Sección del canal PETG (auto-calcula filamento)
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+            <div>
+              <label style="font-size:10.5px;color:#4a5568">Ancho (mm)</label>
+              <input type="number" id="cfg-neon-canal-ancho" value="16" step="0.1"
+                style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid #c8d4e8;font-size:12px">
+            </div>
+            <div>
+              <label style="font-size:10.5px;color:#4a5568">Alto (mm)</label>
+              <input type="number" id="cfg-neon-canal-alto" value="20" step="0.1"
+                style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid #c8d4e8;font-size:12px">
+            </div>
+            <div>
+              <label style="font-size:10.5px;color:#4a5568">Pared (mm)</label>
+              <input type="number" id="cfg-neon-canal-pared" value="1.6" step="0.1"
+                style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid #c8d4e8;font-size:12px">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-top:8px">
+            <div>
+              <label style="font-size:10.5px;color:#4a5568" title="0 = auto por sección">Gramos manual</label>
+              <input type="number" id="cfg-neon-gramos-ov" value="0" min="0" step="1" placeholder="auto"
+                style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid #c8d4e8;font-size:12px">
+            </div>
+            <div>
+              <label style="font-size:10.5px;color:#4a5568" title="0 = auto por m/hr">Horas manual</label>
+              <input type="number" id="cfg-neon-horas-ov" value="0" min="0" step="0.1" placeholder="auto"
+                style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid #c8d4e8;font-size:12px">
+            </div>
+            <div>
+              <label style="font-size:10.5px;color:#4a5568">Anclajes</label>
+              <input type="number" id="cfg-neon-anclajes" value="0" min="0" step="1"
+                style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid #c8d4e8;font-size:12px">
+            </div>
+            <div>
+              <label style="font-size:10.5px;color:#4a5568">Puentes</label>
+              <input type="number" id="cfg-neon-puentes" value="0" min="0" step="1"
+                style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid #c8d4e8;font-size:12px">
+            </div>
+          </div>
+        </div>
+
+        <!-- Paso 6: Fuente y gastos opcionales -->
+        <div class="cfg-step">
+          <div class="cfg-step-label"><span class="cfg-step-num">6</span>Fuente y gastos opcionales</div>
+          <label style="font-size:11px;color:#4a5568">Fuente de poder</label>
+          <select id="cfg-neon-fuente"
+            style="width:100%;padding:8px 10px;border-radius:7px;border:1px solid #c8d4e8;font-size:13px;margin-bottom:10px">
+            <option value="">Auto (dimensionar por watts)</option>
+          </select>
+
+          <details style="margin-top:6px">
+            <summary style="cursor:pointer;font-size:12px;color:#4a5568;font-weight:600">
+              💰 Gastos opcionales capturables
+              <span style="font-weight:400;color:#8a94a6">(clic para expandir)</span>
+            </summary>
+            <div id="cfg-neon-gastos-lista" style="margin-top:8px"></div>
+          </details>
+        </div>
+
+        <!-- Aviso 2ª gen si aplica -->
+        <div id="cfg-neon-gen2-aviso" style="display:none;margin-top:14px;padding:10px 14px;
+             background:#fef3c7;border-left:4px solid #f59e0b;border-radius:6px;
+             font-size:12px;color:#78350f;line-height:1.5"></div>
+
+      </div><!-- /cfg-sec-neon -->
+
     </div><!-- /cfg-body -->
 
     <div class="cfg-footer">
@@ -3704,6 +3949,271 @@ function setTipo(tipo, btn) {
 // Estado del modo de fabricación del neón (lamina|3d). Se guarda aparte para
 // que setTipo y calcular() puedan consultarlo sin depender del DOM.
 let neonModoActual = "lamina";
+
+// ══════════════════ MODAL CONFIGURADOR NEÓN ══════════════════════════════
+// Wizard tipo letras 3D — todas las opciones que afectan el precio en una
+// sola ventana guiada. Al aplicar, sincroniza al sidebar (que es la fuente
+// de verdad que lee calcular()).
+
+async function _cfgNeonSyncDesdeSidebar() {
+  // Asegurar catálogo cargado (fuerza reload si no hay gen2 aún)
+  if (typeof neonPopulateDropdowns === "function") await neonPopulateDropdowns();
+
+  const perfiles = catalog?.neon_perfiles || [];
+  const params   = catalog?.neon_params   || {};
+
+  // Poblar el select de perfil (mismo agrupamiento que el sidebar)
+  const selPerfil = document.getElementById("cfg-neon-perfil");
+  if (selPerfil) {
+    const gen1 = perfiles.filter(p => p.activo !== false && (p.generacion || 1) === 1);
+    const gen2 = perfiles.filter(p => p.activo !== false && (p.generacion || 1) === 2);
+    const grpBy = arr => { const g={}; for (const p of arr) (g[p.nombre]=g[p.nombre]||[]).push(p); return g; };
+    const renderGrp = grupos => Object.entries(grupos).map(([nombre, arr]) => `
+      <optgroup label="${nombre}">
+        ${arr.map(p => `<option value="${p.id}">${p.color||''} — $${p.precio_m}/m · ${p.watts_m}W/m</option>`).join("")}
+      </optgroup>`).join("");
+    let html = "";
+    if (gen1.length) html += `<optgroup label="━━ 1ª GENERACIÓN ━━" disabled></optgroup>` + renderGrp(grpBy(gen1));
+    if (gen2.length) html += `<optgroup label="━━ 2ª GENERACIÓN ━━" disabled></optgroup>` + renderGrp(grpBy(gen2));
+    selPerfil.innerHTML = html;
+  }
+
+  // Poblar base
+  const selBase = document.getElementById("cfg-neon-base");
+  if (selBase) {
+    selBase.innerHTML = (params.bases || []).filter(b => b.activo !== false)
+      .map(b => `<option value="${b.id}">${b.nombre}</option>`).join("");
+  }
+
+  // Poblar formas y urgencias
+  const selForma = document.getElementById("cfg-neon-forma");
+  if (selForma) {
+    selForma.innerHTML = (params.formas || []).map(f =>
+      `<option value="${f.id}">${f.nombre}</option>`).join("");
+  }
+  const selUrg = document.getElementById("cfg-neon-urgencia");
+  if (selUrg) {
+    selUrg.innerHTML = (params.urgencias || []).map(u =>
+      `<option value="${u.id}">${u.nombre} · ${u.dias}${u.mult>1?` (×${u.mult})`:''}</option>`).join("");
+  }
+  const selFuente = document.getElementById("cfg-neon-fuente");
+  if (selFuente) {
+    selFuente.innerHTML = `<option value="">Auto (dimensionar por watts)</option>` +
+      (params.fuentes || []).filter(f => f.activo !== false)
+        .map(f => `<option value="${f.id}">${f.nombre} · $${f.precio}</option>`).join("");
+  }
+
+  // Copiar valores actuales del sidebar al modal
+  const $ = id => document.getElementById(id);
+  if ($("cfg-neon-perfil"))   $("cfg-neon-perfil").value   = $("neon-perfil")?.value   || "";
+  if ($("cfg-neon-base"))     $("cfg-neon-base").value     = $("neon-base")?.value     || "";
+  if ($("cfg-neon-forma"))    $("cfg-neon-forma").value    = $("neon-forma")?.value    || "rect";
+  if ($("cfg-neon-fuente"))   $("cfg-neon-fuente").value   = $("neon-fuente")?.value   || "";
+  if ($("cfg-neon-urgencia")) $("cfg-neon-urgencia").value = $("neon-urgencia")?.value || "normal";
+  if ($("cfg-neon-lm"))       $("cfg-neon-lm").value       = $("neon-lm")?.value       || "";
+  if ($("cfg-neon-ancho"))    $("cfg-neon-ancho").value    = $("neon-ancho")?.value    || "";
+  if ($("cfg-neon-alto"))     $("cfg-neon-alto").value     = $("neon-alto")?.value     || "";
+  if ($("cfg-neon-uniones"))  $("cfg-neon-uniones").value  = $("neon-uniones")?.value  || "0";
+  if ($("cfg-neon-soporte"))  $("cfg-neon-soporte").checked = !!$("neon-soporte")?.checked;
+  if ($("cfg-neon-desperdicio")) $("cfg-neon-desperdicio").checked = !!$("neon-desperdicio")?.checked;
+  if ($("cfg-neon-tira-led")) $("cfg-neon-tira-led").value = $("neon-tira-led")?.value || "12";
+  if ($("cfg-neon-canal-ancho")) $("cfg-neon-canal-ancho").value = $("neon-canal-ancho")?.value || "16";
+  if ($("cfg-neon-canal-alto"))  $("cfg-neon-canal-alto").value  = $("neon-canal-alto")?.value  || "20";
+  if ($("cfg-neon-canal-pared")) $("cfg-neon-canal-pared").value = $("neon-canal-pared")?.value || "1.6";
+  if ($("cfg-neon-gramos-ov")) $("cfg-neon-gramos-ov").value = $("neon-gramos-ov")?.value || "0";
+  if ($("cfg-neon-horas-ov"))  $("cfg-neon-horas-ov").value  = $("neon-horas-ov")?.value  || "0";
+  if ($("cfg-neon-anclajes"))  $("cfg-neon-anclajes").value  = $("neon-anclajes")?.value  || "0";
+  if ($("cfg-neon-puentes"))   $("cfg-neon-puentes").value   = $("neon-puentes")?.value   || "0";
+  if ($("cfg-neon-pieza-costo")) $("cfg-neon-pieza-costo").value = $("neon-pieza-costo")?.value || "0";
+
+  // Cards: generación (default 1) y modo (lamina por default)
+  const perfilSel = perfiles.find(p => p.id === $("neon-perfil")?.value);
+  const gen = perfilSel?.generacion || 1;
+  document.querySelectorAll("#cfg-neon-gen-cards .cfg-card").forEach(c => {
+    c.classList.toggle("active", String(c.dataset.val) === String(gen));
+  });
+  const modo = neonModoActual || "lamina";
+  document.querySelectorAll("#cfg-neon-modo-cards .cfg-card").forEach(c => {
+    c.classList.toggle("active", c.dataset.val === modo);
+  });
+  // Aprovisionamiento default del material actual (o del override si existe)
+  const baseNow = (params.bases || []).find(b => b.id === $("neon-base")?.value);
+  const aprovDefault = $("neon-aprov-ov")?.value ||
+    baseNow?.aprovisionamiento ||
+    (baseNow?.precio_lamina ? "corto_afuera" : "compro_pieza");
+  document.querySelectorAll("#cfg-neon-aprov-cards .cfg-card").forEach(c => {
+    c.classList.toggle("active", c.dataset.val === aprovDefault);
+  });
+
+  // Renderizar panel de gastos capturables dentro del modal
+  const gastosWrap = document.getElementById("cfg-neon-gastos-lista");
+  if (gastosWrap && typeof _NEON_GASTOS_FIJOS !== "undefined") {
+    const fijos = _NEON_GASTOS_FIJOS.map((g,i) => `
+      <div style="display:grid;grid-template-columns:1fr 100px;gap:6px;align-items:center;margin-bottom:4px">
+        <span style="font-size:12px;color:#4a5568">${g.icon} ${g.concepto}</span>
+        <input type="number" id="cfg-neon-gasto-${g.key}" data-cfg-neon-gasto="${g.concepto}"
+               value="${document.getElementById(`neon-gasto-${g.key}`)?.value || 0}" min="0" step="10"
+               style="padding:5px 8px;text-align:right;font-size:12px;border:1px solid #c8d4e8;border-radius:5px">
+      </div>`).join("");
+    const libres = [1,2].map(n => `
+      <div style="display:grid;grid-template-columns:1fr 100px;gap:6px;align-items:center;margin-bottom:4px">
+        <input type="text" id="cfg-neon-gasto-libre-${n}-nom" placeholder="Otro extra ${n}"
+               value="${document.getElementById(`neon-gasto-libre-${n}-nom`)?.value || ''}"
+               style="padding:5px 8px;font-size:11.5px;border:1px solid #c8d4e8;border-radius:5px">
+        <input type="number" id="cfg-neon-gasto-libre-${n}-mon"
+               value="${document.getElementById(`neon-gasto-libre-${n}-mon`)?.value || 0}" min="0" step="10"
+               style="padding:5px 8px;text-align:right;font-size:12px;border:1px solid #c8d4e8;border-radius:5px">
+      </div>`).join("");
+    gastosWrap.innerHTML = fijos + libres;
+  }
+
+  // Refrescar estado visual (mostrar/ocultar 3D, pieza-wrap, aviso gen2, info perfil)
+  _cfgNeonOnModoChange();
+  _cfgNeonOnAprovChange();
+  _cfgNeonOnPerfilChange();
+  _cfgNeonOnGenChange();
+}
+
+function _cfgNeonAplicar() {
+  const $ = id => document.getElementById(id);
+  const gen  = _cfgCardVal("cfg-neon-gen-cards") || "1";
+  const modo = _cfgCardVal("cfg-neon-modo-cards") || "lamina";
+  const aprov = _cfgCardVal("cfg-neon-aprov-cards") || "";
+
+  // Modo (lamina|3d) → estado global + toggles UI del sidebar
+  neonModoActual = modo;
+  document.querySelectorAll("#neon-modo-btns .tipo-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.neonModo === modo);
+  });
+  const lamWrap = $("neon-modo-lamina"), tresdWrap = $("neon-modo-3d");
+  if (lamWrap)   lamWrap.style.display   = (modo === "lamina") ? "" : "none";
+  if (tresdWrap) tresdWrap.style.display = (modo === "3d")     ? "" : "none";
+
+  // Sincronizar TODOS los inputs del sidebar
+  const copy = (from, to) => { if ($(from) && $(to)) $(to).value = $(from).value; };
+  copy("cfg-neon-perfil",   "neon-perfil");
+  copy("cfg-neon-base",     "neon-base");
+  copy("cfg-neon-forma",    "neon-forma");
+  copy("cfg-neon-fuente",   "neon-fuente");
+  copy("cfg-neon-urgencia", "neon-urgencia");
+  copy("cfg-neon-lm",       "neon-lm");
+  copy("cfg-neon-ancho",    "neon-ancho");
+  copy("cfg-neon-alto",     "neon-alto");
+  copy("cfg-neon-uniones",  "neon-uniones");
+  copy("cfg-neon-tira-led", "neon-tira-led");
+  copy("cfg-neon-canal-ancho","neon-canal-ancho");
+  copy("cfg-neon-canal-alto", "neon-canal-alto");
+  copy("cfg-neon-canal-pared","neon-canal-pared");
+  copy("cfg-neon-gramos-ov","neon-gramos-ov");
+  copy("cfg-neon-horas-ov", "neon-horas-ov");
+  copy("cfg-neon-anclajes", "neon-anclajes");
+  copy("cfg-neon-puentes",  "neon-puentes");
+  copy("cfg-neon-pieza-costo","neon-pieza-costo");
+  if ($("cfg-neon-soporte"))    $("neon-soporte").checked    = $("cfg-neon-soporte").checked;
+  if ($("cfg-neon-desperdicio")) $("neon-desperdicio").checked = $("cfg-neon-desperdicio").checked;
+
+  // Aprovisionamiento — solo override si el usuario eligió algo distinto al default del catálogo
+  const base = (catalog?.neon_params?.bases || []).find(b => b.id === $("neon-base")?.value);
+  const aprovDefault = base?.aprovisionamiento ||
+    (base?.precio_lamina ? "corto_afuera" : "compro_pieza");
+  if ($("neon-aprov-ov")) $("neon-aprov-ov").value = (aprov !== aprovDefault) ? aprov : "";
+
+  // Gastos capturables — copiar del modal al panel del sidebar
+  if (typeof _NEON_GASTOS_FIJOS !== "undefined") {
+    for (const g of _NEON_GASTOS_FIJOS) {
+      const src = $(`cfg-neon-gasto-${g.key}`), dst = $(`neon-gasto-${g.key}`);
+      if (src && dst) dst.value = src.value;
+    }
+    for (const n of [1,2]) {
+      const sn = $(`cfg-neon-gasto-libre-${n}-nom`), dn = $(`neon-gasto-libre-${n}-nom`);
+      const sm = $(`cfg-neon-gasto-libre-${n}-mon`), dm = $(`neon-gasto-libre-${n}-mon`);
+      if (sn && dn) dn.value = sn.value;
+      if (sm && dm) dm.value = sm.value;
+    }
+  }
+
+  // Refrescar info del sidebar (aprov badge, aviso 2ª gen, visor 3D si hay SVG)
+  if (typeof _neonUpdateAprovInfo === "function") _neonUpdateAprovInfo();
+  if (typeof _neonUpdateGen2Aviso === "function") _neonUpdateGen2Aviso();
+  const svg = document.getElementById("svg-preview-box")?.querySelector("svg");
+  if (svg && typeof _neonPintar === "function") _neonPintar(svg);
+  showToast("Configuración aplicada. Ya puedes calcular.", "ok");
+}
+
+// Handlers del wizard neón — actualizan visibilidad + info sin cerrar el modal
+function _cfgNeonOnGenChange() {
+  const gen = _cfgCardVal("cfg-neon-gen-cards") || "1";
+  const aviso = document.getElementById("cfg-neon-gen2-aviso");
+  if (aviso) {
+    if (gen === "2") {
+      aviso.style.display = "";
+      aviso.innerHTML = "⚡ <b>Neón 2ª generación</b> requiere <b>acrílico ranurado en CNC</b> (multiplicador ~1.9× sobre el corte externo). Elige un perfil 2ª gen abajo y una base de acrílico.";
+    } else {
+      aviso.style.display = "none";
+    }
+  }
+  // Filtrar el dropdown de perfil por generación seleccionada
+  const selPerfil = document.getElementById("cfg-neon-perfil");
+  if (selPerfil && catalog?.neon_perfiles) {
+    const perfiles = catalog.neon_perfiles.filter(p =>
+      p.activo !== false && String(p.generacion || 1) === String(gen)
+    );
+    if (perfiles.length) {
+      const grpBy = arr => { const g={}; for (const p of arr) (g[p.nombre]=g[p.nombre]||[]).push(p); return g; };
+      selPerfil.innerHTML = Object.entries(grpBy(perfiles)).map(([nombre, arr]) => `
+        <optgroup label="${nombre}">
+          ${arr.map(p => `<option value="${p.id}">${p.color||''} — $${p.precio_m}/m · ${p.watts_m}W/m</option>`).join("")}
+        </optgroup>`).join("");
+      // Si el perfil actual no es de esa gen, seleccionar el primero
+      const curr = catalog.neon_perfiles.find(p => p.id === selPerfil.value);
+      if (!curr || String(curr.generacion || 1) !== String(gen)) {
+        selPerfil.value = perfiles[0].id;
+      }
+      _cfgNeonOnPerfilChange();
+    }
+  }
+}
+
+function _cfgNeonOnModoChange() {
+  const modo = _cfgCardVal("cfg-neon-modo-cards") || "lamina";
+  const pasoBase = document.getElementById("cfg-neon-paso-base");
+  const paso3d   = document.getElementById("cfg-neon-paso-3d");
+  if (pasoBase) pasoBase.style.display = (modo === "lamina") ? "" : "none";
+  if (paso3d)   paso3d.style.display   = (modo === "3d")     ? "" : "none";
+}
+
+function _cfgNeonOnPerfilChange() {
+  const info = document.getElementById("cfg-neon-perfil-info");
+  const perfilId = document.getElementById("cfg-neon-perfil")?.value;
+  const perfil = (catalog?.neon_perfiles || []).find(p => p.id === perfilId);
+  if (info && perfil) {
+    const gen = perfil.generacion || 1;
+    info.innerHTML = `📐 Altura mínima recomendada: <b>${perfil.altura_min_cm} cm</b> · ${perfil.watts_m}W/m · ${gen}ª generación`;
+  } else if (info) {
+    info.textContent = "";
+  }
+}
+
+function _cfgNeonOnBaseChange() {
+  const baseId = document.getElementById("cfg-neon-base")?.value;
+  const base = (catalog?.neon_params?.bases || []).find(b => b.id === baseId);
+  // Auto-seleccionar la card del aprovisionamiento default del material
+  if (base) {
+    const aprovDef = base.aprovisionamiento || (base.precio_lamina ? "corto_afuera" : "compro_pieza");
+    document.querySelectorAll("#cfg-neon-aprov-cards .cfg-card").forEach(c => {
+      c.classList.toggle("active", c.dataset.val === aprovDef);
+    });
+    _cfgNeonOnAprovChange();
+  }
+}
+
+function _cfgNeonOnAprovChange() {
+  const aprov = _cfgCardVal("cfg-neon-aprov-cards") || "corto_taller";
+  const wrap = document.getElementById("cfg-neon-pieza-wrap");
+  if (wrap) wrap.style.display = (aprov === "compro_pieza") ? "" : "none";
+}
+
+// (_cfgCardVal ya está definido más abajo — compartido con letras/caja/planas)
 
 // ── Gastos opcionales capturables ────────────────────────────────────────
 // 4 conceptos fijos (los que aparecen SIEMPRE en el flujo comercial neón) +
@@ -4938,6 +5448,7 @@ async function uploadSVG(file) {
       _neonAfterUpload();
       switchTab("svg");
       updateEstimacionLive();
+      openCfgModal();   // ← Wizard neón: se abre igual que en letras/caja/planas
     } else {
       // Cards: sin escala todavía, se actualizan en actualizarAsesor
       renderPathCards(svgPathsRaw, 0, 0);
@@ -8730,14 +9241,22 @@ async function openCfgModal() {
   document.getElementById("cfg-sec-letras").style.display = tipoActual === "letras" ? "" : "none";
   document.getElementById("cfg-sec-caja").style.display   = tipoActual === "caja"   ? "" : "none";
   document.getElementById("cfg-sec-planas").style.display = tipoActual === "planas" ? "" : "none";
+  const cfgNeon = document.getElementById("cfg-sec-neon");
+  if (cfgNeon) cfgNeon.style.display = tipoActual === "neon" ? "" : "none";
 
   const titulos = {
     letras: ["Configurar letras 3D", "Selecciona el tipo de construcción y la altura para recibir recomendaciones"],
     caja:   ["Configurar caja de luz", "Indica las dimensiones y características para calcular los LEDs"],
     planas: ["Configurar letras planas", "Elige la altura y material de corte"],
+    neon:   ["Configurar anuncio de Neón LED", "Elige generación, modo, perfil y todo lo que afecta el precio"],
   };
   document.getElementById("cfg-title").textContent = titulos[tipoActual]?.[0] || "Configurar anuncio";
   document.getElementById("cfg-sub").textContent   = titulos[tipoActual]?.[1] || "";
+
+  // ── Poblar campos del wizard NEÓN ──
+  if (tipoActual === "neon" && typeof _cfgNeonSyncDesdeSidebar === "function") {
+    await _cfgNeonSyncDesdeSidebar();
+  }
 
   // Calcular alto total del diseño = bbox combinado de todos los paths
   const anchoReal  = parseFloat(document.getElementById("ancho-real")?.value) || 0;
@@ -9066,6 +9585,12 @@ function onCfgCajaProfChange() {
 }
 
 function aplicarConfiguracion() {
+  if (tipoActual === "neon") {
+    _cfgNeonAplicar();
+    closeCfgModal();
+    updateEstimacionLive();
+    return;
+  }
   if (tipoActual === "letras") {
     const tipo   = _cfgCardVal("cfg-tipo-cards") || "cajon_luz";
     const altura = parseFloat(document.getElementById("cfg-altura")?.value) || 0;
