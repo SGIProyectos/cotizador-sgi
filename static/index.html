@@ -2050,7 +2050,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
       </div>
       <span class="brand__name">SGI Cotizador</span>
-      <span class="brand__v" id="brand-version">v1.22.0-rc2</span>
+      <span class="brand__v" id="brand-version">v1.23.0</span>
     </div>
     <div class="crumbs" id="topbar-crumbs">
       <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
@@ -2140,7 +2140,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.22.0-rc2</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.23.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -2557,9 +2557,31 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
       <div id="neon-modo-lamina" style="margin-top:10px;padding-top:10px;
            border-top:1px dashed rgba(255,255,255,.15)">
         <label>Base</label>
-        <select id="neon-base">
+        <select id="neon-base" onchange="_neonUpdateAprovInfo()">
           <option value="">Cargando…</option>
         </select>
+
+        <!-- Info del aprovisionamiento del material seleccionado + override opcional -->
+        <div id="neon-aprov-info" class="info-tag" style="margin-bottom:6px;line-height:1.5">
+          —
+        </div>
+
+        <label>Aprovisionamiento
+          <span style="font-size:10px;opacity:.55">(solo esta cotización)</span>
+        </label>
+        <select id="neon-aprov-ov" onchange="_neonUpdateAprovInfo()">
+          <option value="">Usar el del catálogo</option>
+          <option value="compro_pieza">🛒 Compro pieza cortada</option>
+          <option value="corto_afuera">📤 Corto afuera</option>
+          <option value="corto_taller">🔧 Corto en taller</option>
+        </select>
+
+        <!-- Input de la pieza: solo visible en modo "compro_pieza" -->
+        <div id="neon-pieza-wrap" style="display:none">
+          <label>Costo de la pieza (MXN)</label>
+          <input type="number" id="neon-pieza-costo" value="0" min="0" step="10"
+                 placeholder="lo que te costó la pieza cortada">
+        </div>
 
         <label>Forma de la base</label>
         <select id="neon-forma">
@@ -3667,6 +3689,32 @@ function setTipo(tipo, btn) {
 // que setTipo y calcular() puedan consultarlo sin depender del DOM.
 let neonModoActual = "lamina";
 
+// Muestra info del modo de aprovisionamiento efectivo (default del catálogo o
+// el override elegido para esta cotización) y muestra/oculta el input manual
+// de la pieza.
+function _neonUpdateAprovInfo() {
+  const info = document.getElementById("neon-aprov-info");
+  const wrap = document.getElementById("neon-pieza-wrap");
+  if (!info || !wrap) return;
+  const baseId = document.getElementById("neon-base")?.value;
+  const bases  = catalog?.neon_params?.bases || [];
+  const base   = bases.find(b => b.id === baseId);
+  if (!base) { info.textContent = "—"; wrap.style.display = "none"; return; }
+  const ov  = document.getElementById("neon-aprov-ov")?.value || "";
+  const aprov = ov || base.aprovisionamiento
+    || (base.precio_lamina ? "corto_taller" : "compro_pieza");
+  const labels = {
+    compro_pieza: "🛒 Compro pieza cortada — captura el costo directo",
+    corto_afuera:  `📤 Corto afuera — se cobra corte externo (${base.corte_externo_m2 || catalog?.neon_params?.corte_externo_m2_default || 0} $/m²)`,
+    corto_taller:  "🔧 Corto en taller — solo prorrateo de lámina",
+  };
+  info.innerHTML = labels[aprov] || aprov;
+  info.style.background = aprov === "compro_pieza" ? "rgba(232,163,56,.10)"
+                       : aprov === "corto_afuera"  ? "rgba(74,158,255,.10)"
+                       : "rgba(90,220,150,.10)";
+  wrap.style.display = (aprov === "compro_pieza") ? "" : "none";
+}
+
 function setNeonModo(modo, btn) {
   neonModoActual = modo;
   document.querySelectorAll("#neon-modo-btns .tipo-btn").forEach(b => b.classList.remove("active"));
@@ -4236,6 +4284,9 @@ async function neonPopulateDropdowns() {
       <option value="${u.id}">${u.nombre} · ${u.dias}${u.mult > 1 ? ` (×${u.mult})` : ''}</option>
     `).join("");
   }
+
+  // Refresca la info del aprovisionamiento con la base ya seleccionada
+  if (typeof _neonUpdateAprovInfo === "function") _neonUpdateAprovInfo();
 }
 
 // ─── Chip de estimación en vivo (arriba del CTA) ─────────────────────────────
@@ -6058,6 +6109,8 @@ async function calcular() {
         forma_id:      document.getElementById("neon-forma").value   || "rect",
         incluir_soporte:    !!document.getElementById("neon-soporte").checked,
         cobrar_desperdicio: !!document.getElementById("neon-desperdicio").checked,
+        aprovisionamiento_override: document.getElementById("neon-aprov-ov")?.value || "",
+        pieza_costo_override:       parseFloat(document.getElementById("neon-pieza-costo")?.value) || 0,
         // Modo 3D
         canal_ancho_mm: parseFloat(document.getElementById("neon-canal-ancho").value) || 0,
         canal_alto_mm:  parseFloat(document.getElementById("neon-canal-alto").value)  || 0,
@@ -6408,19 +6461,31 @@ function renderResultNeon(d) {
         <div><div style="color:#9fb0cb;font-size:10.5px">Anclajes</div><b>${d.fab3d.anclajes}</b> pza</div>
         <div><div style="color:#9fb0cb;font-size:10.5px">Puentes</div><b>${d.fab3d.puentes}</b> pza</div>
       </div>
-    </div>` : `
+    </div>` : (() => {
+      const aprovLabels = {
+        compro_pieza: '🛒 Compro pieza cortada',
+        corto_afuera: '📤 Corto afuera (lámina + corte externo)',
+        corto_taller: '🔧 Corto en taller (solo prorrateo)',
+      };
+      const aprovLbl = aprovLabels[d.base.aprovisionamiento] || d.base.aprovisionamiento || '';
+      return `
     <div class="panel" style="margin-top:12px">
       <h3>📄 Base — ${d.base.material}</h3>
+      <div style="font-size:11px;color:var(--am);margin-bottom:6px">${aprovLbl}</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;font-size:12px">
         <div><div style="color:#9fb0cb;font-size:10.5px">Forma</div>${d.base.forma}</div>
         <div><div style="color:#9fb0cb;font-size:10.5px">Área</div><b>${(dim.area_m2||0).toFixed(3)} m²</b></div>
         <div><div style="color:#9fb0cb;font-size:10.5px">Perímetro</div>${(dim.perim_m||0).toFixed(2)} m</div>
         <div><div style="color:#9fb0cb;font-size:10.5px">Importe base</div><b>$${$(d.base.importe)}</b></div>
+        ${d.base.importe_corte_externo > 0 ? `
+          <div><div style="color:#9fb0cb;font-size:10.5px">Corte láser externo</div>$${$(d.base.importe_corte_externo)}</div>
+        ` : ''}
         ${d.base.importe_desperdicio > 0 ? `
           <div><div style="color:#9fb0cb;font-size:10.5px">Desperdicio (${d.base.desperdicio_tira_cm} cm)</div>$${$(d.base.importe_desperdicio)}</div>
         ` : ''}
       </div>
     </div>`;
+    })();
 
   document.getElementById("result-content").innerHTML = `
     <div style="margin-bottom:14px">
@@ -7646,28 +7711,36 @@ function renderNeonPerfiles() {
 function renderNeonBases() {
   const rows = catalog.neon_params?.bases || [];
   let html = `<table class="cat-table"><thead><tr>
-    <th style="width:130px">ID</th><th>Nombre</th><th style="width:100px">Tipo precio</th>
-    <th style="width:90px">Lámina W</th><th style="width:90px">Lámina H</th>
-    <th style="width:110px">$/lám o $/m²</th><th style="width:70px">Activo</th><th style="width:36px"></th>
+    <th style="width:110px">ID</th><th>Nombre</th>
+    <th style="width:160px">Aprovisionamiento</th>
+    <th style="width:110px">$/lám o $/m²</th>
+    <th style="width:110px">Corte ext ($/m²)</th>
+    <th style="width:60px">Activo</th><th style="width:36px"></th>
   </tr></thead><tbody>`;
   rows.forEach((b, i) => {
-    const esLamina = (b.tipo_precio || (b.precio_lamina ? 'lamina' : 'pieza')) === 'lamina';
-    const precio = esLamina ? (b.precio_lamina || 0) : (b.precio_m2 || 0);
+    // Retrocompat: si el catálogo trae solo tipo_precio (viejo), mapearlo
+    const aprov = b.aprovisionamiento
+      || (b.tipo_precio === 'pieza' || (!b.precio_lamina && b.precio_m2 != null)
+          ? 'compro_pieza' : 'corto_taller');
+    const esPieza = aprov === 'compro_pieza';
+    const precio  = esPieza ? (b.precio_m2 || 0) : (b.precio_lamina || 0);
+    const corteExt = b.corte_externo_m2 || 0;
     html += `<tr>
       <td><input data-neon-base="${i}" data-k="id" value="${b.id||''}" class="np-input"></td>
       <td><input data-neon-base="${i}" data-k="nombre" value="${b.nombre||''}" class="np-input"></td>
       <td>
-        <select data-neon-base="${i}" data-k="tipo_precio" class="np-input" onchange="renderNeonBases()">
-          <option value="lamina" ${esLamina?'selected':''}>Lámina</option>
-          <option value="pieza"  ${!esLamina?'selected':''}>Pieza (m²)</option>
+        <select data-neon-base="${i}" data-k="aprovisionamiento" class="np-input" onchange="renderNeonBases()">
+          <option value="compro_pieza"  ${aprov==='compro_pieza'?'selected':''}>🛒 Compro pieza</option>
+          <option value="corto_afuera"  ${aprov==='corto_afuera'?'selected':''}>📤 Corto afuera</option>
+          <option value="corto_taller"  ${aprov==='corto_taller'?'selected':''}>🔧 Corto en taller</option>
         </select>
       </td>
-      <td><input type="number" data-neon-base="${i}" data-k="lamina_w" value="${b.lamina_w||120}" step="1"
-                 class="np-input np-num" ${!esLamina?'disabled':''}></td>
-      <td><input type="number" data-neon-base="${i}" data-k="lamina_h" value="${b.lamina_h||240}" step="1"
-                 class="np-input np-num" ${!esLamina?'disabled':''}></td>
-      <td><input type="number" data-neon-base="${i}" data-k="${esLamina?'precio_lamina':'precio_m2'}"
-                 value="${precio}" step="10" class="np-input np-num"></td>
+      <td><input type="number" data-neon-base="${i}" data-k="${esPieza?'precio_m2':'precio_lamina'}"
+                 value="${precio}" step="10" class="np-input np-num"
+                 title="${esPieza?'Precio sugerido por m² (fallback si no capturas costo manual)':'Precio de la lámina completa (se prorratea al área usada)'}"></td>
+      <td><input type="number" data-neon-base="${i}" data-k="corte_externo_m2" value="${corteExt}"
+                 step="10" class="np-input np-num" ${aprov!=='corto_afuera'?'disabled':''}
+                 title="Costo por m² del corte láser externo (proveedor)"></td>
       <td style="text-align:center"><input type="checkbox" data-neon-base="${i}" data-k="activo" ${b.activo!==false?'checked':''}></td>
       <td class="actions"><button class="btn-del" onclick="delNeonBase(${i})">✕</button></td>
     </tr>`;
@@ -7697,6 +7770,7 @@ function renderNeonParams() {
     ${fld('margen',           'Margen (fracción)',      '0.35 = 35% sobre costo directo', '0.05')}
     ${fld('soporte_precio',   'Kit soporte ($)',        'Separadores/soportes por anuncio (modo lámina)', '10')}
     ${fld('desperdicio_umbral_cm', 'Umbral desperdicio (cm)', 'Tiras sobrantes ≤ este valor se cobran (no reutilizables)', '1')}
+    ${fld('corte_externo_m2_default', 'Corte externo default ($/m²)', 'Fallback global cuando un material sin este campo usa "corto afuera"', '10')}
   </tbody></table>`;
   document.getElementById("tbl-neon-params-wrap").innerHTML = html;
 }
@@ -7775,7 +7849,8 @@ function renderNeon() {
 function collectNeon() {
   if (!catalog) return;
   const numKeys = new Set(['precio_m','watts_m','altura_min_cm','lamina_w','lamina_h',
-                            'precio_lamina','precio_m2','factor_area','corte_m','mult']);
+                            'precio_lamina','precio_m2','corte_externo_m2',
+                            'factor_area','corte_m','mult']);
   // Perfiles
   document.querySelectorAll('[data-neon-perfil]').forEach(el => {
     const i = parseInt(el.dataset.neonPerfil);
@@ -7845,7 +7920,9 @@ function addNeonBase() {
   const n = catalog.neon_params.bases.length + 1;
   catalog.neon_params.bases.push({
     id: `custom-base-${n}`, nombre: "Nueva base",
-    tipo_precio: "lamina", lamina_w: 120, lamina_h: 240, precio_lamina: 1000,
+    aprovisionamiento: "corto_afuera",
+    lamina_w: 120, lamina_h: 240, precio_lamina: 1000,
+    corte_externo_m2: 380,
     activo: true,
   });
   renderNeonBases();

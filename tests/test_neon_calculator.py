@@ -38,10 +38,13 @@ def _forma_by_id(fid: str) -> dict:
     return next(f for f in P["formas"] if f["id"] == fid)
 
 
-# ═══ TEST 1 · Modo lámina (retrocompat) ══════════════════════════════════════
+# ═══ TEST 1 · Modo lámina (calibración con corte externo) ═══════════════════
 def test_01_modo_lamina_precio_iva():
-    """Modo lámina clásico: Lm=5, 120×40 cm, acrílico 3mm rect, con soporte
-    y cobrando desperdicio. Precio esperado ~4224.71 (calibración de taller)."""
+    """Modo lámina: Lm=5, 120×40 cm, acrílico 3mm rect, con soporte + desperdicio.
+    Los defaults nuevos ponen acrílico como aprovisionamiento='corto_afuera'
+    (SGI tiene lámina, manda a cortar). El corte externo (380 $/m² × 0.48 m² =
+    $182.40) entra al costo directo y se amplifica con merma 5% + margen 35% +
+    IVA 16% → precio final ~$4548 (vs $4224.71 del modelo antiguo sin corte)."""
     r = cotizar_neon(
         Lm=5, uniones=3, perfil=PERFIL_BLANCO, fuente=FUENTE_100,
         dimensiones={"ancho_cm": 120, "alto_cm": 40},
@@ -53,7 +56,77 @@ def test_01_modo_lamina_precio_iva():
         params=P, urgencia_mult=1,
     )
     assert r.modo_fabricacion == "lamina"
+    assert r.aprovisionamiento == "corto_afuera"
+    assert r.importe_corte_externo == pytest.approx(182.40, abs=1)
+    assert r.precio_iva == pytest.approx(4548.60, abs=5)
+
+
+# ═══ TEST 1B · Modo lámina con "corto_taller" (sin corte externo) ═══════════
+def test_01b_corto_taller_sin_corte_externo():
+    """Si el taller tiene su propia cortadora (aprovisionamiento='corto_taller'),
+    NO se cobra corte externo. Comparado con TEST 1 debe salir más barato exactamente
+    en el importe del corte + su amplificación por merma/margen/IVA."""
+    material = dict(_base_by_id("acr-3-tr"))
+    material["aprovisionamiento"] = "corto_taller"
+    r = cotizar_neon(
+        Lm=5, uniones=3, perfil=PERFIL_BLANCO, fuente=FUENTE_100,
+        dimensiones={"ancho_cm": 120, "alto_cm": 40},
+        base={"material": material, "forma": _forma_by_id("rect"),
+              "incluir_soporte": True, "cobrar_desperdicio": True},
+        params=P, urgencia_mult=1,
+    )
+    assert r.aprovisionamiento == "corto_taller"
+    assert r.importe_corte_externo == 0
+    # Sin corte externo = ~$4224.71 (el número histórico del smoke test JS)
     assert r.precio_iva == pytest.approx(4224.71, abs=5)
+
+
+# ═══ TEST 1C · Modo "compro_pieza" (MDF, input manual) ═════════════════════
+def test_01c_compro_pieza_manual():
+    """MDF típico: SGI compra la pieza ya cortado. El usuario captura el costo
+    de la pieza por cotización (pieza_costo_override); ese monto entra al desglose
+    como una sola partida 'Base · MDF 6mm crudo (pieza cortada)'."""
+    r = cotizar_neon(
+        Lm=5, uniones=3, perfil=PERFIL_BLANCO, fuente=FUENTE_100,
+        dimensiones={"ancho_cm": 120, "alto_cm": 40},
+        base={
+            "material": _base_by_id("mdf-6-crudo"),
+            "forma":    _forma_by_id("rect"),
+            "pieza_costo_override": 250,    # el usuario pagó $250 por la pieza
+            "incluir_soporte": True,
+        },
+        params=P, urgencia_mult=1,
+    )
+    assert r.aprovisionamiento == "compro_pieza"
+    assert r.importe_base == 250
+    assert r.importe_corte_externo == 0        # sin corte propio ni externo
+    assert r.importe_desperdicio == 0          # no aplica desperdicio si compras la pieza
+    # La partida sale con concepto "(pieza cortada)" y cantidad=1 pza
+    base_p = next(x for x in r.insumos if "Base" in x["concepto"])
+    assert base_p["cantidad"] == 1
+    assert base_p["unidad"] == "pza"
+    assert "pieza cortada" in base_p["concepto"]
+
+
+# ═══ TEST 1D · Override de aprovisionamiento por cotización ═════════════════
+def test_01d_aprovisionamiento_override_por_cotizacion():
+    """El catálogo dice acrílico='corto_afuera', pero para ESTA cotización el
+    usuario compra la pieza ya cortado. `aprovisionamiento_override` fuerza el
+    modo sin tocar el catálogo."""
+    r = cotizar_neon(
+        Lm=5, uniones=3, perfil=PERFIL_BLANCO, fuente=FUENTE_100,
+        dimensiones={"ancho_cm": 120, "alto_cm": 40},
+        base={
+            "material": _base_by_id("acr-3-tr"),   # catálogo dice corto_afuera
+            "forma":    _forma_by_id("rect"),
+            "aprovisionamiento_override": "compro_pieza",
+            "pieza_costo_override": 400,
+        },
+        params=P, urgencia_mult=1,
+    )
+    assert r.aprovisionamiento == "compro_pieza"
+    assert r.importe_base == 400
+    assert r.importe_corte_externo == 0
 
 
 # ═══ TEST 2 · Modo 3D con g/m fallback ═══════════════════════════════════════

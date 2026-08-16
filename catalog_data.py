@@ -1405,22 +1405,50 @@ def catalog_apply(raw: dict):
         _apply_neon_params(raw["neon_params"], full_replace=True)
 
 
+def _migrar_bases_neon_legacy(bases: list) -> list:
+    """Migra bases del modelo viejo (tipo_precio: 'lamina'|'pieza') al nuevo
+    modelo con `aprovisionamiento`. Idempotente: si ya tiene el campo, no toca.
+
+    Reglas:
+    - tipo_precio='pieza' o solo precio_m2 → aprovisionamiento='compro_pieza'
+      (el usuario probablemente compra el pedazo ya cortado; puede editarlo)
+    - tipo_precio='lamina' o tiene precio_lamina → aprovisionamiento='corto_afuera'
+      (asume que manda a cortar; si tiene cortadora propia, edita a 'corto_taller')
+    - `corte_externo_m2` default 380 si aprov='corto_afuera' y no lo tiene
+    """
+    for b in bases:
+        if not isinstance(b, dict) or b.get("aprovisionamiento"):
+            continue
+        tp = b.get("tipo_precio")
+        if tp == "pieza" or (not b.get("precio_lamina") and b.get("precio_m2") is not None):
+            b["aprovisionamiento"] = "compro_pieza"
+        else:
+            b["aprovisionamiento"] = "corto_afuera"
+            if b.get("corte_externo_m2") is None:
+                b["corte_externo_m2"] = 380
+    return bases
+
+
 def _apply_neon_params(raw: dict, *, full_replace: bool) -> None:
     """Aplica overrides al dict NEON_PARAMS in-place.
     - full_replace=True (desde catalog_apply): reemplaza cada key top-level y
       el sub-dict fab3d completos.
     - full_replace=False (desde _catalog_merge): fusiona preservando defaults
       no presentes en `raw` — así se conservan campos nuevos añadidos al motor
-      cuando el catalog.json es viejo."""
+      cuando el catalog.json es viejo.
+
+    Migra bases legacy al modelo nuevo con `aprovisionamiento`."""
     if not isinstance(raw, dict):
         return
     for k, v in raw.items():
         if k == "fab3d":
             continue
-        if full_replace or k not in NEON_PARAMS:
+        if k == "bases" and isinstance(v, list):
+            NEON_PARAMS[k] = _migrar_bases_neon_legacy(copy.deepcopy(v))
+        elif full_replace or k not in NEON_PARAMS:
             NEON_PARAMS[k] = copy.deepcopy(v)
         elif isinstance(v, list):
-            # listas del catálogo (fuentes, consumibles, bases, formas, urgencias)
+            # listas del catálogo (fuentes, consumibles, formas, urgencias)
             # se reemplazan completas — el frontend siempre manda la lista viva.
             NEON_PARAMS[k] = copy.deepcopy(v)
         else:

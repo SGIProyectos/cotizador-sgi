@@ -1500,7 +1500,9 @@
         "lamina_w": 120,
         "lamina_h": 240,
         "precio_lamina": 2450,
-        "activo": true
+        "activo": true,
+        "aprovisionamiento": "corto_afuera",
+        "corte_externo_m2": 380
       },
       {
         "id": "acr-6-tr",
@@ -1509,7 +1511,9 @@
         "lamina_w": 120,
         "lamina_h": 240,
         "precio_lamina": 4030,
-        "activo": true
+        "activo": true,
+        "aprovisionamiento": "corto_afuera",
+        "corte_externo_m2": 380
       },
       {
         "id": "acr-3-neg",
@@ -1518,7 +1522,9 @@
         "lamina_w": 120,
         "lamina_h": 240,
         "precio_lamina": 2590,
-        "activo": true
+        "activo": true,
+        "aprovisionamiento": "corto_afuera",
+        "corte_externo_m2": 380
       },
       {
         "id": "acr-6-neg",
@@ -1527,28 +1533,33 @@
         "lamina_w": 120,
         "lamina_h": 240,
         "precio_lamina": 4180,
-        "activo": true
+        "activo": true,
+        "aprovisionamiento": "corto_afuera",
+        "corte_externo_m2": 380
       },
       {
         "id": "mdf-6-crudo",
         "nombre": "MDF 6mm crudo",
         "tipo_precio": "pieza",
         "precio_m2": 280,
-        "activo": true
+        "activo": true,
+        "aprovisionamiento": "compro_pieza"
       },
       {
         "id": "mdf-6-pint",
         "nombre": "MDF 6mm pintado",
         "tipo_precio": "pieza",
         "precio_m2": 520,
-        "activo": true
+        "activo": true,
+        "aprovisionamiento": "compro_pieza"
       },
       {
         "id": "mdf-9-pint",
         "nombre": "MDF 9mm pintado",
         "tipo_precio": "pieza",
         "precio_m2": 680,
-        "activo": true
+        "activo": true,
+        "aprovisionamiento": "compro_pieza"
       },
       {
         "id": "pvc-3",
@@ -1557,7 +1568,9 @@
         "lamina_w": 120,
         "lamina_h": 240,
         "precio_lamina": 1090,
-        "activo": true
+        "activo": true,
+        "aprovisionamiento": "corto_afuera",
+        "corte_externo_m2": 380
       },
       {
         "id": "pvc-6",
@@ -1566,7 +1579,9 @@
         "lamina_w": 120,
         "lamina_h": 240,
         "precio_lamina": 1790,
-        "activo": true
+        "activo": true,
+        "aprovisionamiento": "corto_afuera",
+        "corte_externo_m2": 380
       },
       {
         "id": "trov-3",
@@ -1575,7 +1590,9 @@
         "lamina_w": 120,
         "lamina_h": 240,
         "precio_lamina": 980,
-        "activo": true
+        "activo": true,
+        "aprovisionamiento": "corto_afuera",
+        "corte_externo_m2": 380
       },
       {
         "id": "aluco-3",
@@ -1584,14 +1601,17 @@
         "lamina_w": 120,
         "lamina_h": 240,
         "precio_lamina": 3600,
-        "activo": true
+        "activo": true,
+        "aprovisionamiento": "corto_afuera",
+        "corte_externo_m2": 380
       },
       {
         "id": "sin-base",
         "nombre": "Sin base (solo neón)",
         "tipo_precio": "pieza",
         "precio_m2": 0,
-        "activo": true
+        "activo": true,
+        "aprovisionamiento": "compro_pieza"
       }
     ],
     "formas": [
@@ -1615,6 +1635,7 @@
       }
     ],
     "soporte_precio": 180,
+    "corte_externo_m2_default": 380,
     "urgencias": [
       {
         "id": "normal",

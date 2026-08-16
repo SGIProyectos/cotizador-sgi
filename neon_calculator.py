@@ -67,10 +67,12 @@ class NeonQuoteResult:
 
     # Base (modo lámina)
     base_mat: str = ""
-    base_tipo: str = ""
+    base_tipo: str = ""           # "compro_pieza" | "corto_afuera" | "corto_taller" (o legacy: "lamina"/"pieza")
     base_forma: str = ""
+    aprovisionamiento: str = ""    # duplicado de base_tipo, más explícito
     importe_base: float = 0.0
     importe_base_auto: float = 0.0
+    importe_corte_externo: float = 0.0
     desperdicio_m2: float = 0.0
     desperdicio_tira_cm: float = 0.0
     importe_desperdicio: float = 0.0
@@ -207,17 +209,47 @@ def cotizar_neon(
     perim_m      = _round2(2 * (ancho_m + alto_m) * 100) / 100
 
     # ── Bloque de base según modo de fabricación ──────────────────────────────
+    # Modelo de aprovisionamiento del material base (los 3 casos reales del taller):
+    #   "compro_pieza" — sin stock, sin cortadora. Compras la pieza ya cortado.
+    #                     Costo = importe manual de la pieza (por cotización).
+    #   "corto_afuera"  — tienes lámina, mandas a cortar (láser tercero).
+    #                     Costo = área × ($/cm² lámina prorrateado + $/m² corte externo).
+    #   "corto_taller"  — tienes lámina y cortadora propia.
+    #                     Costo = área × $/cm² lámina prorrateado (sin corte externo).
+    #
+    # El campo `aprovisionamiento` vive en el material del catálogo; el request
+    # puede sobrescribirlo con `aprovisionamiento_override` para una cotización.
+    # Retrocompat: si el material solo trae `tipo_precio` (lámina|pieza) se mapea
+    # a los nuevos modos ("lamina" → "corto_taller", "pieza" → "compro_pieza").
     importe_base = 0.0
     importe_base_auto = 0.0
     importe_desperdicio = 0.0
+    importe_corte_externo = 0.0
     desperdicio_m2 = 0.0
     desperdicio_tira_cm = 0.0
-    tipo_base = b_mat.get("tipo_precio") or ("lamina" if b_mat.get("precio_lamina") else "pieza")
+
+    aprov_override = (base or {}).get("aprovisionamiento_override")
+    aprov = aprov_override or b_mat.get("aprovisionamiento") or (
+        "compro_pieza" if (b_mat.get("tipo_precio") == "pieza"
+                            or (not b_mat.get("precio_lamina") and b_mat.get("precio_m2") is not None))
+        else "corto_taller"
+    )
+    tipo_base = aprov  # etiqueta para el JSON de respuesta
 
     if modo_fab == "3d":
         pass  # Sin base recortada — el canal se imprime siguiendo el trazo.
-    elif tipo_base == "lamina":
-        # Se compra por lámina completa; se prorratea al área usada.
+    elif aprov == "compro_pieza":
+        # Compras la pieza ya cortado — el usuario captura el costo real.
+        # `pieza_costo_override` es el nombre nuevo; `pieza_costo_override`
+        # se mantiene por retrocompat con requests antiguos.
+        pieza_ov = _num((base or {}).get("pieza_costo_override"), 0)
+        if pieza_ov <= 0:
+            pieza_ov = _num((base or {}).get("pieza_costo_override"), 0)
+        # Sugerencia (para mostrar como "auto"): área × precio_m2 si el catálogo lo tiene
+        importe_base_auto = _round2(area_m2 * _num(b_mat.get("precio_m2"), 0))
+        importe_base = _round2(pieza_ov) if pieza_ov > 0 else importe_base_auto
+    else:
+        # corto_afuera y corto_taller comparten el prorrateo de la lámina
         lW = _num(b_mat.get("lamina_w"), 120)
         lH = _num(b_mat.get("lamina_h"), 240)
         lamina_cm2 = lW * lH
@@ -237,11 +269,14 @@ def cotizar_neon(
                     waste_cm2 = desperdicio_tira_cm * lH
                     desperdicio_m2      = _round2(waste_cm2 / 10000 * 100) / 100
                     importe_desperdicio = _round2(waste_cm2 * precio_cm2)
-    else:
-        # Se compra ya cortado a medida (MDF típicamente).
-        importe_base_auto = _round2(area_m2 * _num(b_mat.get("precio_m2"), 0))
-        override_pieza = _num((base or {}).get("pieza_costo_override"), 0)
-        importe_base = _round2(override_pieza) if override_pieza > 0 else importe_base_auto
+
+        if aprov == "corto_afuera":
+            # Corte láser externo — cobrado por m² de material (no perimetral,
+            # porque los talleres externos cobran por hoja/pieza, no por metro).
+            # El costo por m² vive en el material o (fallback) en params.
+            corte_m2 = _num(b_mat.get("corte_externo_m2"),
+                            _num(p.get("corte_externo_m2_default"), 0))
+            importe_corte_externo = _round2(area_m2 * corte_m2)
 
     importe_corte       = 0.0 if modo_fab == "3d" else _round2(perim_m * _num(b_for.get("corte_m"), 0))
     importe_corte_extra = 0.0 if modo_fab == "3d" else _round2(max(0, _num((base or {}).get("corte_extra"), 0)))
@@ -336,16 +371,23 @@ def cotizar_neon(
                             "unit": puente_precio, "importe": importe_puentes})
     else:
         if importe_base > 0:
-            if tipo_base == "lamina" and b_mat.get("precio_lamina"):
+            # Etiqueta según cómo se compró (para que el usuario/cliente entienda
+            # de dónde sale el número).
+            if aprov == "compro_pieza":
+                concepto_base = f"Base · {b_mat.get('nombre', 'Base')} (pieza cortada)"
+                unit_base = importe_base  # el "unit" es la pieza mismo
+                cant_base = 1
+                unidad_base = "pza"
+            else:
                 lW = _num(b_mat.get("lamina_w"), 120)
                 lH = _num(b_mat.get("lamina_h"), 240)
-                unit_base = _round2((_num(b_mat.get("precio_lamina"), 0) / (lW * lH)) * 10000)
-            else:
-                unit_base = _num(b_mat.get("precio_m2"), 0)
+                unit_base = _round2((_num(b_mat.get("precio_lamina"), 0) / (lW * lH)) * 10000) if lW*lH > 0 else 0
+                concepto_base = f"Base · {b_mat.get('nombre', 'Base')} ({b_for.get('nombre', '')})"
+                cant_base = area_m2
+                unidad_base = "m²"
             insumos.append({
-                "concepto": f"Base · {b_mat.get('nombre', 'Base')} ({b_for.get('nombre', '')})",
-                "cantidad": area_m2, "unidad": "m²",
-                "unit": unit_base, "importe": importe_base,
+                "concepto": concepto_base, "cantidad": cant_base,
+                "unidad": unidad_base, "unit": unit_base, "importe": importe_base,
             })
         if importe_desperdicio > 0:
             insumos.append({
@@ -353,6 +395,14 @@ def cotizar_neon(
                 "cantidad": desperdicio_m2, "unidad": "m²",
                 "unit": _round2(importe_desperdicio / (desperdicio_m2 or 1)),
                 "importe": importe_desperdicio,
+            })
+        if importe_corte_externo > 0:
+            corte_m2_val = _num(b_mat.get("corte_externo_m2"),
+                                _num(p.get("corte_externo_m2_default"), 0))
+            insumos.append({
+                "concepto": "Corte láser externo (proveedor)",
+                "cantidad": area_m2, "unidad": "m²",
+                "unit": corte_m2_val, "importe": importe_corte_externo,
             })
         if importe_corte > 0:
             insumos.append({"concepto": f"Corte especial ({b_for.get('nombre', '')})",
@@ -413,8 +463,10 @@ def cotizar_neon(
         base_mat=b_mat.get("nombre", ""),
         base_tipo=tipo_base,
         base_forma=b_for.get("nombre", ""),
+        aprovisionamiento=aprov,
         importe_base=importe_base,
         importe_base_auto=importe_base_auto,
+        importe_corte_externo=importe_corte_externo,
         desperdicio_m2=desperdicio_m2,
         desperdicio_tira_cm=desperdicio_tira_cm,
         importe_desperdicio=importe_desperdicio,
@@ -514,22 +566,47 @@ NEON_PARAMS_DEFAULTS: dict = {
         {"id": "termo",      "nombre": "Termofit 3mm surtido",       "precio": 120, "unidad": "juego", "activo": True},
     ],
 
-    # Materiales de base (modo lámina)
-    #   tipo_precio="lamina" → precio por lámina completa, se prorratea al área usada
-    #   tipo_precio="pieza"  → precio por m² directo (comprado ya cortado)
+    # Materiales de base — cada uno con su modelo de aprovisionamiento y, si
+    # aplica, costo de corte externo (proveedor).
+    #
+    #   aprovisionamiento="compro_pieza" → sin lámina, sin cortadora; costo
+    #                     manual por cotización (input `pieza_costo_override`).
+    #                     `precio_m2` opcional se usa solo como sugerencia auto.
+    #   aprovisionamiento="corto_afuera"  → tienes lámina, mandas a cortar;
+    #                     costo = área × prorrateo lámina + área × corte_externo_m2.
+    #   aprovisionamiento="corto_taller"  → tienes lámina y cortadora propia;
+    #                     costo = área × prorrateo lámina (sin corte externo).
+    #
+    # Defaults sembrados con el caso real de SGI (feb 2026):
+    #   MDF   → compro_pieza (SGI no tiene cortadora ni láminas de MDF)
+    #   Acrílico → corto_afuera (SGI tiene láminas, manda a cortar por láser)
+    #   PVC/Trovicel/Alucobond → corto_afuera (mismo caso)
+    # El usuario puede cambiar cualquier material a cualquier modo en el editor.
     "bases": [
-        {"id": "acr-3-tr",    "nombre": "Acrílico transparente 3mm", "tipo_precio": "lamina", "lamina_w": 120, "lamina_h": 240, "precio_lamina": 2450, "activo": True},
-        {"id": "acr-6-tr",    "nombre": "Acrílico transparente 6mm", "tipo_precio": "lamina", "lamina_w": 120, "lamina_h": 240, "precio_lamina": 4030, "activo": True},
-        {"id": "acr-3-neg",   "nombre": "Acrílico negro 3mm",        "tipo_precio": "lamina", "lamina_w": 120, "lamina_h": 240, "precio_lamina": 2590, "activo": True},
-        {"id": "acr-6-neg",   "nombre": "Acrílico negro 6mm",        "tipo_precio": "lamina", "lamina_w": 120, "lamina_h": 240, "precio_lamina": 4180, "activo": True},
-        {"id": "mdf-6-crudo", "nombre": "MDF 6mm crudo",             "tipo_precio": "pieza",  "precio_m2": 280,  "activo": True},
-        {"id": "mdf-6-pint",  "nombre": "MDF 6mm pintado",           "tipo_precio": "pieza",  "precio_m2": 520,  "activo": True},
-        {"id": "mdf-9-pint",  "nombre": "MDF 9mm pintado",           "tipo_precio": "pieza",  "precio_m2": 680,  "activo": True},
-        {"id": "pvc-3",       "nombre": "PVC espumado 3mm",          "tipo_precio": "lamina", "lamina_w": 120, "lamina_h": 240, "precio_lamina": 1090, "activo": True},
-        {"id": "pvc-6",       "nombre": "PVC espumado 6mm",          "tipo_precio": "lamina", "lamina_w": 120, "lamina_h": 240, "precio_lamina": 1790, "activo": True},
-        {"id": "trov-3",      "nombre": "Trovicel 3mm",              "tipo_precio": "lamina", "lamina_w": 120, "lamina_h": 240, "precio_lamina":  980, "activo": True},
-        {"id": "aluco-3",     "nombre": "Alucobond 3mm",             "tipo_precio": "lamina", "lamina_w": 120, "lamina_h": 240, "precio_lamina": 3600, "activo": True},
-        {"id": "sin-base",    "nombre": "Sin base (solo neón)",      "tipo_precio": "pieza",  "precio_m2": 0,    "activo": True},
+        {"id": "acr-3-tr",    "nombre": "Acrílico transparente 3mm", "aprovisionamiento": "corto_afuera",
+         "lamina_w": 120, "lamina_h": 240, "precio_lamina": 2450, "corte_externo_m2": 380, "activo": True},
+        {"id": "acr-6-tr",    "nombre": "Acrílico transparente 6mm", "aprovisionamiento": "corto_afuera",
+         "lamina_w": 120, "lamina_h": 240, "precio_lamina": 4030, "corte_externo_m2": 420, "activo": True},
+        {"id": "acr-3-neg",   "nombre": "Acrílico negro 3mm",        "aprovisionamiento": "corto_afuera",
+         "lamina_w": 120, "lamina_h": 240, "precio_lamina": 2590, "corte_externo_m2": 380, "activo": True},
+        {"id": "acr-6-neg",   "nombre": "Acrílico negro 6mm",        "aprovisionamiento": "corto_afuera",
+         "lamina_w": 120, "lamina_h": 240, "precio_lamina": 4180, "corte_externo_m2": 420, "activo": True},
+        {"id": "mdf-6-crudo", "nombre": "MDF 6mm crudo",             "aprovisionamiento": "compro_pieza",
+         "precio_m2": 280,  "activo": True},
+        {"id": "mdf-6-pint",  "nombre": "MDF 6mm pintado",           "aprovisionamiento": "compro_pieza",
+         "precio_m2": 520,  "activo": True},
+        {"id": "mdf-9-pint",  "nombre": "MDF 9mm pintado",           "aprovisionamiento": "compro_pieza",
+         "precio_m2": 680,  "activo": True},
+        {"id": "pvc-3",       "nombre": "PVC espumado 3mm",          "aprovisionamiento": "corto_afuera",
+         "lamina_w": 120, "lamina_h": 240, "precio_lamina": 1090, "corte_externo_m2": 320, "activo": True},
+        {"id": "pvc-6",       "nombre": "PVC espumado 6mm",          "aprovisionamiento": "corto_afuera",
+         "lamina_w": 120, "lamina_h": 240, "precio_lamina": 1790, "corte_externo_m2": 340, "activo": True},
+        {"id": "trov-3",      "nombre": "Trovicel 3mm",              "aprovisionamiento": "corto_afuera",
+         "lamina_w": 120, "lamina_h": 240, "precio_lamina":  980, "corte_externo_m2": 320, "activo": True},
+        {"id": "aluco-3",     "nombre": "Alucobond 3mm",             "aprovisionamiento": "corto_afuera",
+         "lamina_w": 120, "lamina_h": 240, "precio_lamina": 3600, "corte_externo_m2": 450, "activo": True},
+        {"id": "sin-base",    "nombre": "Sin base (solo neón)",      "aprovisionamiento": "compro_pieza",
+         "precio_m2": 0,    "activo": True},
     ],
 
     # Formas de la base
@@ -542,6 +619,12 @@ NEON_PARAMS_DEFAULTS: dict = {
     ],
 
     "soporte_precio": 180,   # MXN — kit separadores/soportes por anuncio
+
+    # Costo por m² del corte láser externo (proveedor 3ro). Fallback global
+    # usado cuando un material con aprovisionamiento="corto_afuera" no define
+    # su propio `corte_externo_m2`. Los talleres cobran típicamente por hoja/
+    # pieza, pero prorrateado a m² anda ~$350-$450 en México (feb 2026).
+    "corte_externo_m2_default": 380,
 
     "urgencias": [
         {"id": "normal",  "nombre": "Normal",  "dias": "7–10 días", "mult": 1.00},

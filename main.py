@@ -479,6 +479,10 @@ class NeonRequest(_InstMixin):
     incluir_soporte: bool = True
     cobrar_desperdicio: bool = True
     corte_extra: float = 0.0
+    # Aprovisionamiento (override del default del material). Si "", usa el del catálogo.
+    aprovisionamiento_override: str = ""
+    # Costo manual de la pieza — solo aplica cuando aprovisionamiento="compro_pieza"
+    pieza_costo_override: float = 0.0
     # 3D (modo Signflex-style)
     canal_ancho_mm: float = 0.0
     canal_alto_mm: float = 0.0
@@ -817,14 +821,16 @@ def _neon_result_to_dict(r: NeonQuoteResult, qid: str) -> dict:
             "perim_m":  round(r.perim_m, 2),
         },
         "base": {
-            "material":            r.base_mat,
-            "tipo":                r.base_tipo,
-            "forma":               r.base_forma,
-            "importe":             r.importe_base,
-            "importe_auto":        r.importe_base_auto,
-            "desperdicio_m2":      r.desperdicio_m2,
-            "desperdicio_tira_cm": round(r.desperdicio_tira_cm, 1),
-            "importe_desperdicio": r.importe_desperdicio,
+            "material":             r.base_mat,
+            "tipo":                 r.base_tipo,
+            "aprovisionamiento":    r.aprovisionamiento,
+            "forma":                r.base_forma,
+            "importe":              r.importe_base,
+            "importe_auto":         r.importe_base_auto,
+            "importe_corte_externo": r.importe_corte_externo,
+            "desperdicio_m2":       r.desperdicio_m2,
+            "desperdicio_tira_cm":  round(r.desperdicio_tira_cm, 1),
+            "importe_desperdicio":  r.importe_desperdicio,
         },
         "fab3d": {
             "gramos":           r.gramos,
@@ -901,6 +907,8 @@ async def api_cotizar_neon(req: NeonRequest):
         "incluir_soporte":    req.incluir_soporte,
         "cobrar_desperdicio": req.cobrar_desperdicio,
         "corte_extra":        req.corte_extra,
+        "aprovisionamiento_override": req.aprovisionamiento_override or None,
+        "pieza_costo_override":      req.pieza_costo_override,
         "fab3d": {
             "canal_ancho_mm":    req.canal_ancho_mm,
             "canal_alto_mm":     req.canal_alto_mm,
