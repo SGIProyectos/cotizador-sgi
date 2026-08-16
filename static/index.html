@@ -1507,6 +1507,17 @@ body.neon-mode-viewer .sgi-shell #svg-preview-box{
 
 /* Estado excluido de un trazo (click para "no lleva neón") */
 [data-neon-excluded="1"]{opacity:.18;stroke-dasharray:4 3 !important}
+
+/* Anotaciones sobre el SVG (anclas y puentes) — se dibujan en <g id="sgi-neon-annots"> */
+.neon-anchor{fill:#FFD84A;stroke:#0b0e13;stroke-width:1;filter:drop-shadow(0 0 3px rgba(255,216,74,.7))}
+.neon-bridge{stroke:#FF9F5A;stroke-width:1.5;stroke-dasharray:5 3;fill:none;
+             filter:drop-shadow(0 0 2px rgba(255,159,90,.6))}
+.neon-bridge-ghost{stroke:#FF9F5A;stroke-width:1.2;stroke-dasharray:2 2;fill:none;opacity:.5}
+
+/* Cursor por herramienta */
+body.neon-mode-viewer.tool-anchor #svg-preview-box svg{cursor:crosshair}
+body.neon-mode-viewer.tool-bridge #svg-preview-box svg{cursor:cell}
+body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
 .sgi-shell .sidebar .tipo-btn{
   padding:7px 4px;font-size:11.5px;font-weight:500;
   color:var(--n-tx-3);
@@ -2028,7 +2039,7 @@ body.neon-mode-viewer .sgi-shell #svg-preview-box{
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
       </div>
       <span class="brand__name">SGI Cotizador</span>
-      <span class="brand__v" id="brand-version">v1.22.0-beta</span>
+      <span class="brand__v" id="brand-version">v1.22.0-rc1</span>
     </div>
     <div class="crumbs" id="topbar-crumbs">
       <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
@@ -2118,7 +2129,7 @@ body.neon-mode-viewer .sgi-shell #svg-preview-box{
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.22.0-beta</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.22.0-rc1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -2706,10 +2717,18 @@ body.neon-mode-viewer .sgi-shell #svg-preview-box{
           <button class="nvb-btn" data-neon-target="canal" onclick="_neonSetTarget('canal')" title="Canal PETG impreso con LED dentro">🖨️ Canal 3D</button>
         </div>
         <span class="nvb-sep" id="neon-target-sep" style="display:none"></span>
-        <span class="nvb-lbl">Click en trazo</span>
+        <span class="nvb-lbl">Herramienta</span>
         <div class="nvb-group">
-          <button class="nvb-btn active" title="Excluye/incluye el trazo del cálculo de neón">🚫 Excluir</button>
+          <button class="nvb-btn active" data-neon-tool="exclude" onclick="_neonSetTool('exclude')"
+                  title="Excluye o re-incluye el trazo del cálculo de neón">🚫 Excluir</button>
+          <button class="nvb-btn" data-neon-tool="anchor" onclick="_neonSetTool('anchor')"
+                  title="Click en el trazo para agregar un anclaje (tornillo + taco)">📍 Anclar</button>
+          <button class="nvb-btn" data-neon-tool="bridge" onclick="_neonSetTool('bridge')"
+                  title="2 clicks para conectar dos trazos (crossover de cable)">↝ Puente</button>
+          <button class="nvb-btn" data-neon-tool="color" onclick="_neonSetTool('color')"
+                  title="Asigna el perfil seleccionado a este trazo (multi-color)">🎨 Color</button>
         </div>
+        <button class="nvb-btn" onclick="_neonClearAnnots()" style="border:1px solid var(--line2);border-radius:5px;margin-left:2px" title="Limpiar anclas, puentes y colores por trazo">↺ Limpiar</button>
         <span class="nvb-info" id="neon-viewer-info">Sube un SVG</span>
       </div>
       <div id="svg-preview-box">
@@ -3606,14 +3625,20 @@ function setNeonModo(modo, btn) {
 }
 
 // Estado del visor neón — persiste entre llamadas (modo iluminación,
-// estilo tube/canal, trazos excluidos, escala px→cm cacheada).
+// estilo tube/canal, trazos excluidos, escala px→cm cacheada, anotaciones
+// interactivas y multi-color).
 const neonUI = {
-  mode: 'tube',           // 'tube' (encendido) | 'apag' (apagado)
-  target: 'tube',         // 'tube' (manguera) | 'canal' (canal 3D — solo modo 3D)
-  excluded: new Set(),    // índices de trazos que el usuario marcó como "no lleva neón"
-  scaleCmPerPx: 0,        // cacheada para no recalcularla en cada click
-  uid: 'sgi-neon',        // id único de los filtros SVG (evita colisiones)
-  trazos: [],             // [{idx, lenPx, el}] — snapshot al montar
+  mode: 'tube',              // 'tube' (encendido) | 'apag' (apagado)
+  target: 'tube',            // 'tube' (manguera) | 'canal' (canal 3D — solo modo 3D)
+  tool: 'exclude',           // 'exclude' | 'anchor' | 'bridge' | 'color'
+  excluded: new Set(),       // índices de trazos "no lleva neón"
+  anchors: [],               // [{x, y}] en unidades del viewBox — tornillos + tacos
+  bridges: [],               // [{x1, y1, x2, y2}] — crossovers entre trazos
+  bridgeOrigin: null,        // {x, y} durante modo puente (esperando 2° click)
+  perfilPorTrazo: {},        // {idx: perfil_id} — asignaciones multi-color
+  scaleCmPerPx: 0,           // cacheada
+  uid: 'sgi-neon',
+  trazos: [],                // [{idx, lenPx, el}] — snapshot al montar
 };
 
 // Color hex del perfil de neón (para pintar el stroke antes de aplicar el
@@ -3762,9 +3787,11 @@ function _neonPintar(svg) {
       if (len < 0.5) continue;
 
       el.setAttribute('data-neon-idx', String(idx));
-      // Estilo de manguera: fill vacío, stroke del color, capsulado
+      // Estilo de manguera: fill vacío, stroke del color, capsulado.
+      // Si el trazo tiene un perfil específico asignado (multi-color), usa ESE.
+      const perfilTrazo = neonUI.perfilPorTrazo[idx];
       el.style.fill = 'none';
-      el.style.stroke = color;
+      el.style.stroke = perfilTrazo ? _neonColorHex(perfilTrazo) : color;
       el.style.strokeWidth = strokeW;
       el.style.strokeLinecap = 'round';
       el.style.strokeLinejoin = 'round';
@@ -3792,6 +3819,14 @@ function _neonPintar(svg) {
   document.querySelectorAll('#neon-viewer-bar [data-neon-target]').forEach(b => {
     b.classList.toggle('active', b.dataset.neonTarget === neonUI.target);
   });
+  document.querySelectorAll('#neon-viewer-bar [data-neon-tool]').forEach(b => {
+    b.classList.toggle('active', b.dataset.neonTool === neonUI.tool);
+  });
+
+  // Re-dibuja las anotaciones (anclas + puentes) para que queden por encima
+  // de los trazos actualizados (el grupo <g id="sgi-neon-annots"> es el último
+  // hijo del SVG, así que siempre se ve por encima).
+  _neonDibujarAnnots(svg);
 }
 
 function _neonSetMode(mode) {
@@ -3805,15 +3840,197 @@ function _neonSetTarget(target) {
   if (svg) _neonPintar(svg);
 }
 
+function _neonSetTool(tool) {
+  neonUI.tool = tool;
+  neonUI.bridgeOrigin = null;   // reset del estado intermedio del puente
+  document.querySelectorAll('#neon-viewer-bar [data-neon-tool]').forEach(b => {
+    b.classList.toggle('active', b.dataset.neonTool === tool);
+  });
+  document.body.classList.remove('tool-anchor', 'tool-bridge', 'tool-color');
+  if (tool !== 'exclude') document.body.classList.add('tool-' + tool);
+  // Limpia el "fantasma" del origen del puente si el usuario cambió de tool
+  const svg = document.getElementById("svg-preview-box")?.querySelector("svg");
+  if (svg) _neonDibujarAnnots(svg);
+}
+
+// Convierte un evento del mouse a coordenadas del viewBox del SVG.
+// Usa createSVGPoint + getScreenCTM para funcionar aunque haya transforms
+// (preserveAspectRatio, viewport scaling, etc.).
+function _neonGetSvgPoint(svg, evt) {
+  const pt = svg.createSVGPoint();
+  pt.x = evt.clientX;
+  pt.y = evt.clientY;
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return { x: 0, y: 0 };
+  const p = pt.matrixTransform(ctm.inverse());
+  return { x: p.x, y: p.y };
+}
+
+function _neonAddAnchor(x, y) {
+  neonUI.anchors.push({ x, y });
+  _neonSyncContadores();
+}
+function _neonAddBridge(x1, y1, x2, y2) {
+  neonUI.bridges.push({ x1, y1, x2, y2 });
+  _neonSyncContadores();
+}
+function _neonClearAnnots() {
+  neonUI.anchors = [];
+  neonUI.bridges = [];
+  neonUI.bridgeOrigin = null;
+  neonUI.perfilPorTrazo = {};
+  neonUI.excluded.clear();
+  _neonSyncContadores();
+  const svg = document.getElementById("svg-preview-box")?.querySelector("svg");
+  if (svg) { _neonPintar(svg); }
+  _neonRecalcularLm();
+  showToast("Anotaciones limpias", "ok");
+}
+
+// Sincroniza los contadores del sidebar (#neon-anclajes, #neon-puentes) con
+// las anotaciones del visor. En modo 3D estos contadores se cobran; en modo
+// lámina no aplican pero el usuario puede seguir viendo la información.
+function _neonSyncContadores() {
+  const a = document.getElementById("neon-anclajes");
+  const p = document.getElementById("neon-puentes");
+  if (a) a.value = neonUI.anchors.length;
+  if (p) p.value = neonUI.bridges.length;
+}
+
+// Dibuja anclas y puentes en un <g id="sgi-neon-annots"> DENTRO del SVG,
+// para que se escalen automáticamente con el viewBox. Idempotente: limpia
+// y re-crea el grupo cada vez.
+function _neonDibujarAnnots(svg) {
+  const NS = 'http://www.w3.org/2000/svg';
+  let g = svg.querySelector('#sgi-neon-annots');
+  if (g) g.remove();
+  g = document.createElementNS(NS, 'g');
+  g.setAttribute('id', 'sgi-neon-annots');
+  g.style.pointerEvents = 'none';   // no bloquea clicks en los trazos
+  svg.appendChild(g);
+
+  const vb = (svg.getAttribute('viewBox') || '0 0 300 300').split(/[\s,]+/).map(parseFloat);
+  const size = Math.max(vb[2] || 300, vb[3] || 300);
+  const rAnchor = (size * 0.012).toFixed(2);
+
+  // Puentes primero (para que las anclas queden encima)
+  for (const b of neonUI.bridges) {
+    const line = document.createElementNS(NS, 'line');
+    line.setAttribute('x1', b.x1); line.setAttribute('y1', b.y1);
+    line.setAttribute('x2', b.x2); line.setAttribute('y2', b.y2);
+    line.setAttribute('class', 'neon-bridge');
+    g.appendChild(line);
+  }
+  // Ghost del origen del puente (mientras espera el 2° click)
+  if (neonUI.tool === 'bridge' && neonUI.bridgeOrigin) {
+    const dot = document.createElementNS(NS, 'circle');
+    dot.setAttribute('cx', neonUI.bridgeOrigin.x);
+    dot.setAttribute('cy', neonUI.bridgeOrigin.y);
+    dot.setAttribute('r', rAnchor);
+    dot.setAttribute('class', 'neon-bridge-ghost');
+    dot.setAttribute('fill', '#FF9F5A');
+    dot.setAttribute('stroke', '#FF9F5A');
+    dot.setAttribute('stroke-dasharray', '2 2');
+    dot.style.opacity = '.6';
+    g.appendChild(dot);
+  }
+  // Anclas encima
+  for (const a of neonUI.anchors) {
+    const c = document.createElementNS(NS, 'circle');
+    c.setAttribute('cx', a.x); c.setAttribute('cy', a.y);
+    c.setAttribute('r', rAnchor);
+    c.setAttribute('class', 'neon-anchor');
+    g.appendChild(c);
+  }
+}
+
 function _neonClickTrazo(e) {
   const idx = parseInt(e.currentTarget.dataset.neonIdx);
   if (isNaN(idx)) return;
-  if (neonUI.excluded.has(idx)) neonUI.excluded.delete(idx);
-  else                          neonUI.excluded.add(idx);
-  const svg = document.getElementById("svg-preview-box")?.querySelector("svg");
-  if (svg) _neonPintar(svg);
-  _neonRecalcularLm();
   e.stopPropagation();
+  const svg = document.getElementById("svg-preview-box")?.querySelector("svg");
+  if (!svg) return;
+
+  if (neonUI.tool === 'exclude') {
+    if (neonUI.excluded.has(idx)) neonUI.excluded.delete(idx);
+    else                          neonUI.excluded.add(idx);
+    _neonPintar(svg);
+    _neonRecalcularLm();
+    return;
+  }
+
+  if (neonUI.tool === 'anchor') {
+    // Punto del click en coordenadas del viewBox. Preferimos snap-al-trazo
+    // (findClosestPointOnPath) cuando podemos calcular getTotalLength, para
+    // que el ancla siempre quede exactamente sobre la manguera.
+    const p = _neonGetSvgPoint(svg, e);
+    const snap = _neonSnapToPath(e.currentTarget, p);
+    _neonAddAnchor(snap.x, snap.y);
+    _neonDibujarAnnots(svg);
+    return;
+  }
+
+  if (neonUI.tool === 'bridge') {
+    const p = _neonGetSvgPoint(svg, e);
+    const snap = _neonSnapToPath(e.currentTarget, p);
+    if (!neonUI.bridgeOrigin) {
+      neonUI.bridgeOrigin = { x: snap.x, y: snap.y, idx };
+      _neonDibujarAnnots(svg);
+      showToast("Origen del puente marcado. Ahora click en el trazo destino.", "ok");
+    } else {
+      // 2° click: cerrar el puente
+      _neonAddBridge(neonUI.bridgeOrigin.x, neonUI.bridgeOrigin.y, snap.x, snap.y);
+      neonUI.bridgeOrigin = null;
+      _neonDibujarAnnots(svg);
+    }
+    return;
+  }
+
+  if (neonUI.tool === 'color') {
+    // Asigna el perfil actualmente seleccionado en el sidebar a este trazo.
+    // Si ya lo tenía, lo quita (toggle) — así el usuario puede "des-asignar"
+    // volviendo al color global.
+    const perfilId = document.getElementById("neon-perfil")?.value || "";
+    if (!perfilId) { showToast("Selecciona un perfil en el sidebar primero", "err"); return; }
+    if (neonUI.perfilPorTrazo[idx] === perfilId) delete neonUI.perfilPorTrazo[idx];
+    else                                          neonUI.perfilPorTrazo[idx] = perfilId;
+    _neonPintar(svg);
+    return;
+  }
+}
+
+// Encuentra el punto del path más cercano al click (samplea getTotalLength).
+// Si el elemento no soporta getPointAtLength (rect/circle/ellipse), devuelve
+// el click sin snap.
+function _neonSnapToPath(el, clickPt) {
+  if (!el.getTotalLength || !el.getPointAtLength) return clickPt;
+  try {
+    const L = el.getTotalLength();
+    if (L <= 0) return clickPt;
+    // Muestreo grueso (30 puntos) + refinamiento binario simple
+    const N = 30;
+    let bestT = 0, bestD = Infinity;
+    for (let i = 0; i <= N; i++) {
+      const t = (i / N) * L;
+      const p = el.getPointAtLength(t);
+      const d = (p.x - clickPt.x) ** 2 + (p.y - clickPt.y) ** 2;
+      if (d < bestD) { bestD = d; bestT = t; }
+    }
+    // Refinamiento local
+    const step0 = L / N;
+    for (let i = 0; i < 6; i++) {
+      const step = step0 / (2 ** i);
+      for (const dt of [-step, step]) {
+        const t = Math.max(0, Math.min(L, bestT + dt));
+        const p = el.getPointAtLength(t);
+        const d = (p.x - clickPt.x) ** 2 + (p.y - clickPt.y) ** 2;
+        if (d < bestD) { bestD = d; bestT = t; }
+      }
+    }
+    return el.getPointAtLength(bestT);
+  } catch (_) {
+    return clickPt;
+  }
 }
 
 // Suma la longitud de todos los trazos NO excluidos (escalados a metros) y
@@ -3857,9 +4074,14 @@ function _neonAfterUpload() {
   const svgEl = document.getElementById("svg-preview-box")?.querySelector("svg");
   if (!svgEl) return;
 
-  // Reset del estado del visor (nueva subida = nuevo diseño, sin exclusiones)
+  // Reset del estado del visor (nueva subida = nuevo diseño, todo limpio)
   neonUI.excluded.clear();
+  neonUI.anchors = [];
+  neonUI.bridges = [];
+  neonUI.bridgeOrigin = null;
+  neonUI.perfilPorTrazo = {};
   neonUI.mode = 'tube';
+  _neonSyncContadores();
 
   // Escala px → cm. Prioridad: artboard_w_cm del backend (si el SVG declara
   // unidad física); fallback: input #ancho-real / viewBox width.
@@ -5747,10 +5969,30 @@ async function calcular() {
       };
     } else if (tipoActual === "neon") {
       url = "/api/cotizar/neon";
+      // Multi-color: si hay asignaciones por trazo, construimos `tramos`
+      // agrupando por perfil (los trazos NO asignados y NO excluidos usan
+      // el perfil global del sidebar). Cuando no hay asignaciones, el
+      // backend simplemente usa `lm` + `perfil_id` global.
+      const perfilGlobal = document.getElementById("neon-perfil").value || "";
+      let tramos = [];
+      const hayMulticolor = Object.keys(neonUI.perfilPorTrazo).length > 0;
+      if (hayMulticolor && neonUI.scaleCmPerPx > 0 && neonUI.trazos.length > 0) {
+        const porPerfil = new Map();
+        for (const t of neonUI.trazos) {
+          if (neonUI.excluded.has(t.idx)) continue;
+          const pid = neonUI.perfilPorTrazo[t.idx] || perfilGlobal;
+          const lmT = (t.lenPx * neonUI.scaleCmPerPx) / 100;
+          porPerfil.set(pid, (porPerfil.get(pid) || 0) + lmT);
+        }
+        tramos = Array.from(porPerfil.entries())
+                       .filter(([pid, lm]) => pid && lm > 0)
+                       .map(([pid, lm]) => ({ perfil_id: pid, Lm: lm }));
+      }
       body = {
         lm:            parseFloat(document.getElementById("neon-lm").value)      || 0,
         uniones:       parseInt(document.getElementById("neon-uniones").value)   || 0,
-        perfil_id:     document.getElementById("neon-perfil").value || "",
+        perfil_id:     perfilGlobal,
+        tramos:        tramos,
         fuente_id:     document.getElementById("neon-fuente").value || "",
         ancho_cm:      parseFloat(document.getElementById("neon-ancho").value)   || 0,
         alto_cm:       parseFloat(document.getElementById("neon-alto").value)    || 0,
