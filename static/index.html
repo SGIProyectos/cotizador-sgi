@@ -1461,15 +1461,17 @@ svg g.pieza-labels                 { pointer-events: none; }
 
 /* Tipo de anuncio: 3 pills tipo segmented control */
 .sgi-shell .sidebar .tipo-btns{
-  display:grid;grid-template-columns:1fr 1fr 1fr;
+  display:grid;grid-template-columns:repeat(4, 1fr);
   background:var(--n-raise);
   border:1px solid var(--n-line-2);
   border-radius:var(--n-r);
   padding:3px;gap:2px;
   box-shadow:var(--n-lift);
 }
+/* Override para segmentados internos de 2 opciones (ej. modo Lámina/3D del neón) */
+.sgi-shell .sidebar #neon-modo-btns{grid-template-columns:1fr 1fr}
 .sgi-shell .sidebar .tipo-btn{
-  padding:7px 8px;font-size:12px;font-weight:500;
+  padding:7px 4px;font-size:11.5px;font-weight:500;
   color:var(--n-tx-3);
   background:transparent;border:none;border-radius:6px;
   cursor:pointer;transition:var(--n-t);
