@@ -3535,6 +3535,86 @@ function setNeonModo(modo, btn) {
   updateEstimacionLive();
 }
 
+// Corre después de subir un SVG con tipoActual='neon'. Auto-calcula Lm total
+// sumando el perímetro real de cada trazo con getTotalLength() (API del DOM;
+// exacto y sin depender del backend). Escala px → cm usando el ancho real
+// ya capturado (data.artboard_w_cm o el input #ancho-real). Llena los inputs
+// #neon-lm, #neon-ancho, #neon-alto para que el usuario vea números listos.
+function _neonAfterUpload() {
+  const svgEl = document.getElementById("svg-preview-box")?.querySelector("svg");
+  if (!svgEl) return;
+
+  // Escala px → cm. Prioridad: artboard_w_cm del backend (si el SVG declara
+  // unidad física); fallback: input #ancho-real / viewBox width.
+  const anchoInput = parseFloat(document.getElementById("ancho-real")?.value) || 0;
+  const scaleCmPerPx = (svgArtboardWCm > 0 && svgViewboxW > 0)
+    ? (svgArtboardWCm / svgViewboxW)
+    : (anchoInput > 0 && svgViewboxW > 0 ? anchoInput / svgViewboxW : 0);
+
+  // Sumar getTotalLength() de todos los elementos medibles del SVG. Filtramos
+  // los que están dentro de <defs>/<clipPath>/<mask>/<symbol>/<pattern>/<marker>
+  // (son plantillas, no se pintan).
+  const MEASURABLE = ['path','line','polyline','polygon','circle','ellipse','rect'];
+  const TEMPLATE = new Set(['defs','clippath','mask','symbol','pattern','marker']);
+  const isInTemplate = (el) => {
+    let p = el.parentNode;
+    while (p && p.nodeType === 1 && p.tagName) {
+      if (p.tagName.toLowerCase() === 'svg') return false;
+      if (TEMPLATE.has(p.tagName.toLowerCase())) return true;
+      p = p.parentNode;
+    }
+    return false;
+  };
+  let totalPx = 0, trazos = 0;
+  for (const tag of MEASURABLE) {
+    for (const el of svgEl.querySelectorAll(tag)) {
+      if (isInTemplate(el)) continue;
+      let len = 0;
+      try {
+        if (['path','line','polyline','polygon'].includes(tag)) {
+          len = el.getTotalLength();
+        } else if (tag === 'circle') {
+          len = 2 * Math.PI * (parseFloat(el.getAttribute('r')) || 0);
+        } else if (tag === 'ellipse') {
+          const rx = parseFloat(el.getAttribute('rx')) || 0;
+          const ry = parseFloat(el.getAttribute('ry')) || 0;
+          const h = Math.pow((rx - ry) / ((rx + ry) || 1), 2);
+          len = Math.PI * (rx + ry) * (1 + 3*h / (10 + Math.sqrt(4 - 3*h)));
+        } else if (tag === 'rect') {
+          const w = parseFloat(el.getAttribute('width')) || 0;
+          const h = parseFloat(el.getAttribute('height')) || 0;
+          len = 2 * (w + h);
+        }
+      } catch (_) { /* getTotalLength puede fallar en paths inválidos */ }
+      if (len > 0.5) {
+        totalPx += len;
+        trazos++;
+      }
+    }
+  }
+
+  // Convertir px → metros. Si no tenemos escala, dejamos el input como está
+  // y avisamos al usuario que capture el ancho real primero.
+  if (scaleCmPerPx > 0 && totalPx > 0) {
+    const lmMetros = (totalPx * scaleCmPerPx) / 100;
+    const inputLm = document.getElementById("neon-lm");
+    if (inputLm) inputLm.value = lmMetros.toFixed(2);
+
+    // Dimensiones del bbox conjunto → llenar ancho/alto del neón (en cm)
+    if (svgPathsRaw.length > 0) {
+      const minX = Math.min(...svgPathsRaw.map(p => p.bbox.x));
+      const maxX = Math.max(...svgPathsRaw.map(p => p.bbox.x + p.bbox.w));
+      const minY = Math.min(...svgPathsRaw.map(p => p.bbox.y));
+      const maxY = Math.max(...svgPathsRaw.map(p => p.bbox.y + p.bbox.h));
+      document.getElementById("neon-ancho").value = ((maxX - minX) * scaleCmPerPx).toFixed(0);
+      document.getElementById("neon-alto").value  = ((maxY - minY) * scaleCmPerPx).toFixed(0);
+    }
+    showToast(`✨ Neón detectado: ${lmMetros.toFixed(2)} m sobre ${trazos} trazo${trazos===1?"":"s"}`, "ok");
+  } else {
+    showToast(`SVG cargado — captura el ancho real y recalcularé los metros`, "ok");
+  }
+}
+
 // Pobla los dropdowns de perfiles / fuentes / bases desde el catálogo cargado.
 // Lazy-load del catálogo si aún no está en memoria (evita esperar a que el
 // usuario entre al tab de catálogo).
@@ -4122,18 +4202,28 @@ async function uploadSVG(file) {
     // Mostrar SVG (con contexto de pared si ya hay dims, o preview normal)
     renderWallPreview();
 
-    // Cards: sin escala todavía, se actualizan en actualizarAsesor
-    renderPathCards(svgPathsRaw, 0, 0);
-
     dz.classList.add("ok");
     document.getElementById("drop-label").textContent = `✓ ${file.name}  (${data.paths.length} paths)`;
     document.getElementById("btn-calc").disabled = false;
 
-    actualizarAsesor(true);   // actualiza sidebar, path cards y asesor
-    updateEstimacionLive();
-    switchTab("svg");
+    // ─ Bifurcación por tipo ────────────────────────────────────────────
+    // Neón: en lugar de cards de piezas / modal de config (letras/caja/planas),
+    // se auto-calcula Lm con getTotalLength() y se llenan los inputs del panel.
+    // El modal openCfgModal() asume las secciones cfg-sec-letras|caja|planas
+    // y quedaría vacío para neón, así que no lo abrimos.
+    if (tipoActual === "neon") {
+      _neonAfterUpload();
+      switchTab("svg");
+      updateEstimacionLive();
+    } else {
+      // Cards: sin escala todavía, se actualizan en actualizarAsesor
+      renderPathCards(svgPathsRaw, 0, 0);
+      actualizarAsesor(true);   // actualiza sidebar, path cards y asesor
+      updateEstimacionLive();
+      switchTab("svg");
+      openCfgModal();
+    }
     showToast(`SVG cargado: ${data.paths.length} paths detectados`, "ok");
-    openCfgModal();
   } catch (err) {
     showToast("Error al cargar SVG: " + err.message, "err");
     document.getElementById("drop-label").textContent = "Error — intenta de nuevo";
@@ -7469,7 +7559,7 @@ document.addEventListener("DOMContentLoaded", () => {
   _actualizarCerchaHint();
   document.getElementById("mat-cara")?.addEventListener("change", () => { if (previewMode === "3d") render3D(); });
   document.getElementById("tipo-construccion")?.addEventListener("change", () => { if (previewMode === "3d") render3D(); });
-  document.getElementById("ancho-real").addEventListener("input",    () => { actualizarAsesor(); _updateFormulaPreview(); renderWallPreview(); if (tipoActual === "caja") sugerirLedCaja(); });
+  document.getElementById("ancho-real").addEventListener("input",    () => { actualizarAsesor(); _updateFormulaPreview(); renderWallPreview(); if (tipoActual === "caja") sugerirLedCaja(); if (tipoActual === "neon" && currentSvgText) _neonAfterUpload(); });
   document.getElementById("tipo-multiplicador").addEventListener("change", _updateFormulaPreview);
   // Mostrar ajuste-section para el tipo por defecto (letras)
   const ajusteSection = document.getElementById("ajuste-section");
