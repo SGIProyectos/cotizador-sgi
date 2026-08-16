@@ -1518,6 +1518,17 @@ body.neon-mode-viewer .sgi-shell #svg-preview-box{
 body.neon-mode-viewer.tool-anchor #svg-preview-box svg{cursor:crosshair}
 body.neon-mode-viewer.tool-bridge #svg-preview-box svg{cursor:cell}
 body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
+
+/* Inputs inline del editor de catálogo neón */
+.np-input{
+  width:100%;padding:4px 7px;font-size:12px;
+  background:#0f141b;color:var(--txt);
+  border:1px solid var(--borde);border-radius:4px;
+  font-family:var(--sans);box-sizing:border-box;
+}
+.np-input:focus{outline:1.5px solid var(--am);border-color:var(--am)}
+.np-input.np-num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--n-mono)}
+.np-input:disabled{opacity:.4;background:#0a0d13}
 .sgi-shell .sidebar .tipo-btn{
   padding:7px 4px;font-size:11.5px;font-weight:500;
   color:var(--n-tx-3);
@@ -2039,7 +2050,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
       </div>
       <span class="brand__name">SGI Cotizador</span>
-      <span class="brand__v" id="brand-version">v1.22.0-rc1</span>
+      <span class="brand__v" id="brand-version">v1.22.0-rc2</span>
     </div>
     <div class="crumbs" id="topbar-crumbs">
       <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
@@ -2129,7 +2140,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.22.0-rc1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.22.0-rc2</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -3020,6 +3031,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
         <button class="cat-subbtn" onclick="showCatSection('precios_base',this)">💰 Precios Base</button>
         <button class="cat-subbtn" onclick="showCatSection('silvatrim',this)">🔲 Silvatrim</button>
         <button class="cat-subbtn" onclick="showCatSection('vinilos',this)">🎨 Vinilos</button>
+        <button class="cat-subbtn" onclick="showCatSection('neon',this)">✨ Neón</button>
       </div>
 
       <!-- LÁMINAS -->
@@ -3094,6 +3106,51 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
           <p>Fórmula: altura_cm × precio_cm × multiplicador (todo incluido — materiales, mano de obra, instalación)</p>
         </div>
         <div id="tbl-precios-base-wrap"></div>
+      </div>
+
+      <!-- NEÓN LED -->
+      <div class="cat-section" id="cat-neon">
+        <div class="cat-section-hdr">
+          <p>Catálogo del módulo de neón LED (motor calibrado contra 22 pares reales del taller). Los cambios se guardan igual que el resto del catálogo.</p>
+        </div>
+
+        <!-- Perfiles de manguera -->
+        <p style="font-size:12px;font-weight:700;color:var(--am);margin:14px 0 6px">
+          Perfiles de manguera <span style="font-weight:400;color:#999;font-size:11px">— precio y watts por metro</span>
+        </p>
+        <div id="tbl-neon-perfiles-wrap"></div>
+        <button class="btn-add" style="margin-top:4px" onclick="addNeonPerfil()">+ Nuevo perfil</button>
+
+        <!-- Parámetros generales -->
+        <p style="font-size:12px;font-weight:700;color:var(--azul);margin:20px 0 6px">
+          Parámetros generales <span style="font-weight:400;color:#999;font-size:11px">— comunes a los 2 modos</span>
+        </p>
+        <div id="tbl-neon-params-wrap"></div>
+
+        <!-- Fab 3D (Signflex-style) -->
+        <p style="font-size:12px;font-weight:700;color:var(--am);margin:20px 0 6px">
+          Fabricación 3D <span style="font-weight:400;color:#999;font-size:11px">— canal PETG impreso (Signflex-style)</span>
+        </p>
+        <div id="tbl-neon-fab3d-wrap"></div>
+
+        <!-- Materiales de base (modo lámina) -->
+        <p style="font-size:12px;font-weight:700;color:var(--azul);margin:20px 0 6px">
+          Materiales de base <span style="font-weight:400;color:#999;font-size:11px">— modo lámina, se prorratea al área usada</span>
+        </p>
+        <div id="tbl-neon-bases-wrap"></div>
+        <button class="btn-add" style="margin-top:4px" onclick="addNeonBase()">+ Nueva base</button>
+
+        <!-- Formas de la base -->
+        <p style="font-size:12px;font-weight:700;color:var(--azul);margin:20px 0 6px">
+          Formas de la base <span style="font-weight:400;color:#999;font-size:11px">— factor de área y costo de corte perimetral</span>
+        </p>
+        <div id="tbl-neon-formas-wrap"></div>
+
+        <!-- Urgencias -->
+        <p style="font-size:12px;font-weight:700;color:var(--naranja);margin:20px 0 6px">
+          Urgencias <span style="font-weight:400;color:#999;font-size:11px">— multiplicador sobre el precio final</span>
+        </p>
+        <div id="tbl-neon-urgencias-wrap"></div>
       </div>
     </div>
   </main>
@@ -7211,6 +7268,7 @@ async function loadCatalog(force=false) {
 async function saveCatalog() {
   if (!catalog) return;
   collectPreciosBase();
+  if (typeof collectNeon === "function") collectNeon();
   const btn = document.getElementById("btn-save-cat");
   btn.textContent = "Guardando..."; btn.disabled = true;
   try {
@@ -7221,6 +7279,9 @@ async function saveCatalog() {
     if (!r.ok) throw new Error();
     showToast("Catálogo guardado correctamente", "ok");
     updateMultiplicadoresSelect();
+    // Re-poblar los dropdowns del panel de neón (perfil/base/fuente/urgencia)
+    // por si el usuario acaba de editar los catálogos de neón.
+    if (typeof neonPopulateDropdowns === "function") neonPopulateDropdowns();
   } catch(e) {
     showToast("Error al guardar catálogo", "err");
   } finally {
@@ -7289,6 +7350,7 @@ function renderAllCatalog() {
   if (!catalog) return;
   renderLaminas(); renderLedsCanal(); renderLedsCaja();
   renderFuentes(); renderPegamentos(); renderPreciosBase(); renderSilvatrim(); renderVinilos();
+  renderNeon();
   updateMultiplicadoresSelect();
 }
 
@@ -7548,6 +7610,251 @@ function updateMultiplicadoresSelect() {
   sel.innerHTML = Object.entries(mults).map(([key, val]) =>
     `<option value="${key}"${key === current ? ' selected' : ''}>${_MULT_LABELS[key] || key}  ×${val}</option>`
   ).join("");
+}
+
+// ══════════════════ CATÁLOGO NEÓN ══════════════════
+// Inline edit: cada input trae data-neon-* que collectNeon() lee antes de guardar.
+// Cambios visuales → catalog.neon_perfiles / catalog.neon_params en memoria.
+// Persistencia a catalog.json vía POST /api/catalog (mismo flujo del resto).
+
+function renderNeonPerfiles() {
+  const rows = catalog.neon_perfiles || [];
+  const opts = ["Blanco cálido","Blanco frío","Azul","Rojo","Rosa","Morado",
+                "Amarillo","Verde","RGB","RGB direccionable"];
+  let html = `<table class="cat-table"><thead><tr>
+    <th style="width:130px">ID</th><th>Nombre</th><th style="width:150px">Color</th>
+    <th style="width:100px">$/m</th><th style="width:80px">W/m</th>
+    <th style="width:100px">Altura mín (cm)</th><th style="width:70px">Activo</th><th style="width:36px"></th>
+  </tr></thead><tbody>`;
+  rows.forEach((p, i) => {
+    const colorOpts = opts.map(c => `<option value="${c}"${c===p.color?' selected':''}>${c}</option>`).join("");
+    html += `<tr>
+      <td><input data-neon-perfil="${i}" data-k="id" value="${p.id||''}" class="np-input"></td>
+      <td><input data-neon-perfil="${i}" data-k="nombre" value="${p.nombre||''}" class="np-input"></td>
+      <td><select data-neon-perfil="${i}" data-k="color" class="np-input">${colorOpts}</select></td>
+      <td><input type="number" data-neon-perfil="${i}" data-k="precio_m" value="${p.precio_m||0}" step="5" class="np-input np-num"></td>
+      <td><input type="number" data-neon-perfil="${i}" data-k="watts_m" value="${p.watts_m||0}" step="1" class="np-input np-num"></td>
+      <td><input type="number" data-neon-perfil="${i}" data-k="altura_min_cm" value="${p.altura_min_cm||0}" step="1" class="np-input np-num"></td>
+      <td style="text-align:center"><input type="checkbox" data-neon-perfil="${i}" data-k="activo" ${p.activo!==false?'checked':''}></td>
+      <td class="actions"><button class="btn-del" onclick="delNeonPerfil(${i})">✕</button></td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("tbl-neon-perfiles-wrap").innerHTML = html;
+}
+
+function renderNeonBases() {
+  const rows = catalog.neon_params?.bases || [];
+  let html = `<table class="cat-table"><thead><tr>
+    <th style="width:130px">ID</th><th>Nombre</th><th style="width:100px">Tipo precio</th>
+    <th style="width:90px">Lámina W</th><th style="width:90px">Lámina H</th>
+    <th style="width:110px">$/lám o $/m²</th><th style="width:70px">Activo</th><th style="width:36px"></th>
+  </tr></thead><tbody>`;
+  rows.forEach((b, i) => {
+    const esLamina = (b.tipo_precio || (b.precio_lamina ? 'lamina' : 'pieza')) === 'lamina';
+    const precio = esLamina ? (b.precio_lamina || 0) : (b.precio_m2 || 0);
+    html += `<tr>
+      <td><input data-neon-base="${i}" data-k="id" value="${b.id||''}" class="np-input"></td>
+      <td><input data-neon-base="${i}" data-k="nombre" value="${b.nombre||''}" class="np-input"></td>
+      <td>
+        <select data-neon-base="${i}" data-k="tipo_precio" class="np-input" onchange="renderNeonBases()">
+          <option value="lamina" ${esLamina?'selected':''}>Lámina</option>
+          <option value="pieza"  ${!esLamina?'selected':''}>Pieza (m²)</option>
+        </select>
+      </td>
+      <td><input type="number" data-neon-base="${i}" data-k="lamina_w" value="${b.lamina_w||120}" step="1"
+                 class="np-input np-num" ${!esLamina?'disabled':''}></td>
+      <td><input type="number" data-neon-base="${i}" data-k="lamina_h" value="${b.lamina_h||240}" step="1"
+                 class="np-input np-num" ${!esLamina?'disabled':''}></td>
+      <td><input type="number" data-neon-base="${i}" data-k="${esLamina?'precio_lamina':'precio_m2'}"
+                 value="${precio}" step="10" class="np-input np-num"></td>
+      <td style="text-align:center"><input type="checkbox" data-neon-base="${i}" data-k="activo" ${b.activo!==false?'checked':''}></td>
+      <td class="actions"><button class="btn-del" onclick="delNeonBase(${i})">✕</button></td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("tbl-neon-bases-wrap").innerHTML = html;
+}
+
+function renderNeonParams() {
+  const p = catalog.neon_params || {};
+  const fld = (k, label, hint, step) => `
+    <tr>
+      <td style="width:230px"><strong>${label}</strong>
+        <div style="font-size:10.5px;color:#9fb0cb;line-height:1.3">${hint}</div>
+      </td>
+      <td style="width:130px"><input type="number" data-neon-param="${k}" value="${p[k] ?? 0}"
+             step="${step}" class="np-input np-num"></td>
+    </tr>`;
+  let html = `<table class="cat-table"><tbody>
+    ${fld('cable_m',          'Cable ($/m)',            'Radox 080-4 cal. 22, ~$2.5/m', '0.1')}
+    ${fld('acces_m',          'Accesorios ($/m)',       'Grapas, tornillos, conectores', '1')}
+    ${fld('consumibles_pct',  'Consumibles (fracción)', '0.08 = 8% sobre materiales (cianoacrilato + soldadura)', '0.01')}
+    ${fld('fuente_factor',    'Factor fuente (0-1)',    'Usar solo el 80% (0.8) de la capacidad nominal', '0.05')}
+    ${fld('m_por_min',        'Metros/minuto (MO)',     'Metros de neón instalados por minuto por el técnico', '0.1')}
+    ${fld('tarifa_hora',      'Tarifa/hora MO ($)',     'MXN por hora del técnico de instalación', '10')}
+    ${fld('merma',            'Merma (fracción)',       '0.05 = 5% sobre costo directo', '0.01')}
+    ${fld('margen',           'Margen (fracción)',      '0.35 = 35% sobre costo directo', '0.05')}
+    ${fld('soporte_precio',   'Kit soporte ($)',        'Separadores/soportes por anuncio (modo lámina)', '10')}
+    ${fld('desperdicio_umbral_cm', 'Umbral desperdicio (cm)', 'Tiras sobrantes ≤ este valor se cobran (no reutilizables)', '1')}
+  </tbody></table>`;
+  document.getElementById("tbl-neon-params-wrap").innerHTML = html;
+}
+
+function renderNeonFab3d() {
+  const f = catalog.neon_params?.fab3d || {};
+  const fld = (k, label, hint, step) => `
+    <tr>
+      <td style="width:230px"><strong>${label}</strong>
+        <div style="font-size:10.5px;color:#9fb0cb;line-height:1.3">${hint}</div>
+      </td>
+      <td style="width:130px"><input type="number" data-neon-fab3d="${k}" value="${f[k] ?? 0}"
+             step="${step}" class="np-input np-num"></td>
+    </tr>`;
+  let html = `<table class="cat-table"><tbody>
+    ${fld('filamento_mxn_g',  'Filamento ($/g)',      'PETG rollo 1 kg ≈ $600 → $0.60/g', '0.01')}
+    ${fld('filamento_dens_g', 'Densidad PETG (g/cm³)', 'Para auto-peso por sección', '0.01')}
+    ${fld('peso_gr_m',        'Peso fallback (g/m)',   'Cuando no se define sección del canal', '1')}
+    ${fld('horas_m_por_hora', 'Metros/hora impresora', 'Velocidad efectiva de impresión de canal', '0.1')}
+    ${fld('horas_mxn_hora',   'Horas impresora ($/h)', 'Energía + amortización', '1')}
+    ${fld('anclo_precio',     'Anclaje ($/pza)',       'Tornillo + taco', '0.5')}
+    ${fld('puente_precio',    'Puente ($/pza)',        'Crossover entre trazos', '0.5')}
+  </tbody></table>`;
+  document.getElementById("tbl-neon-fab3d-wrap").innerHTML = html;
+}
+
+function renderNeonFormas() {
+  const rows = catalog.neon_params?.formas || [];
+  let html = `<table class="cat-table"><thead><tr>
+    <th style="width:130px">ID</th><th>Nombre</th>
+    <th style="width:110px">Factor área</th><th style="width:110px">Corte ($/m)</th>
+  </tr></thead><tbody>`;
+  rows.forEach((f, i) => {
+    html += `<tr>
+      <td><input data-neon-forma="${i}" data-k="id" value="${f.id||''}" class="np-input"></td>
+      <td><input data-neon-forma="${i}" data-k="nombre" value="${f.nombre||''}" class="np-input"></td>
+      <td><input type="number" data-neon-forma="${i}" data-k="factor_area" value="${f.factor_area||1}" step="0.01" class="np-input np-num"></td>
+      <td><input type="number" data-neon-forma="${i}" data-k="corte_m" value="${f.corte_m||0}" step="1" class="np-input np-num"></td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("tbl-neon-formas-wrap").innerHTML = html;
+}
+
+function renderNeonUrgencias() {
+  const rows = catalog.neon_params?.urgencias || [];
+  let html = `<table class="cat-table"><thead><tr>
+    <th style="width:130px">ID</th><th>Nombre</th><th>Días</th><th style="width:110px">Multiplicador</th>
+  </tr></thead><tbody>`;
+  rows.forEach((u, i) => {
+    html += `<tr>
+      <td><input data-neon-urg="${i}" data-k="id" value="${u.id||''}" class="np-input"></td>
+      <td><input data-neon-urg="${i}" data-k="nombre" value="${u.nombre||''}" class="np-input"></td>
+      <td><input data-neon-urg="${i}" data-k="dias" value="${u.dias||''}" class="np-input"></td>
+      <td><input type="number" data-neon-urg="${i}" data-k="mult" value="${u.mult||1}" step="0.05" class="np-input np-num"></td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("tbl-neon-urgencias-wrap").innerHTML = html;
+}
+
+function renderNeon() {
+  if (!catalog.neon_perfiles) catalog.neon_perfiles = [];
+  if (!catalog.neon_params)   catalog.neon_params   = { fab3d: {}, bases: [], formas: [], urgencias: [], fuentes: [] };
+  renderNeonPerfiles();
+  renderNeonBases();
+  renderNeonParams();
+  renderNeonFab3d();
+  renderNeonFormas();
+  renderNeonUrgencias();
+}
+
+// Recoge todos los inputs data-neon-* y sobrescribe catalog.neon_* en memoria.
+// Corre justo antes de POST /api/catalog. Convierte checkboxes a booleanos y
+// números a floats (0 si vacío).
+function collectNeon() {
+  if (!catalog) return;
+  const numKeys = new Set(['precio_m','watts_m','altura_min_cm','lamina_w','lamina_h',
+                            'precio_lamina','precio_m2','factor_area','corte_m','mult']);
+  // Perfiles
+  document.querySelectorAll('[data-neon-perfil]').forEach(el => {
+    const i = parseInt(el.dataset.neonPerfil);
+    const k = el.dataset.k;
+    if (!catalog.neon_perfiles[i]) return;
+    if (el.type === 'checkbox') catalog.neon_perfiles[i][k] = !!el.checked;
+    else if (numKeys.has(k))    catalog.neon_perfiles[i][k] = parseFloat(el.value) || 0;
+    else                         catalog.neon_perfiles[i][k] = el.value.trim();
+  });
+  // Bases
+  document.querySelectorAll('[data-neon-base]').forEach(el => {
+    const i = parseInt(el.dataset.neonBase);
+    const k = el.dataset.k;
+    if (!catalog.neon_params.bases[i]) return;
+    if (el.type === 'checkbox') catalog.neon_params.bases[i][k] = !!el.checked;
+    else if (numKeys.has(k))    catalog.neon_params.bases[i][k] = parseFloat(el.value) || 0;
+    else                         catalog.neon_params.bases[i][k] = el.value.trim();
+  });
+  // Params generales (top-level de neon_params)
+  document.querySelectorAll('[data-neon-param]').forEach(el => {
+    const k = el.dataset.neonParam;
+    catalog.neon_params[k] = parseFloat(el.value) || 0;
+  });
+  // fab3d
+  if (!catalog.neon_params.fab3d) catalog.neon_params.fab3d = {};
+  document.querySelectorAll('[data-neon-fab3d]').forEach(el => {
+    const k = el.dataset.neonFab3d;
+    catalog.neon_params.fab3d[k] = parseFloat(el.value) || 0;
+  });
+  // Formas
+  document.querySelectorAll('[data-neon-forma]').forEach(el => {
+    const i = parseInt(el.dataset.neonForma);
+    const k = el.dataset.k;
+    if (!catalog.neon_params.formas[i]) return;
+    if (numKeys.has(k)) catalog.neon_params.formas[i][k] = parseFloat(el.value) || 0;
+    else                catalog.neon_params.formas[i][k] = el.value.trim();
+  });
+  // Urgencias
+  document.querySelectorAll('[data-neon-urg]').forEach(el => {
+    const i = parseInt(el.dataset.neonUrg);
+    const k = el.dataset.k;
+    if (!catalog.neon_params.urgencias[i]) return;
+    if (numKeys.has(k)) catalog.neon_params.urgencias[i][k] = parseFloat(el.value) || 0;
+    else                catalog.neon_params.urgencias[i][k] = el.value.trim();
+  });
+}
+
+// ── Handlers de agregar/eliminar ──
+function addNeonPerfil() {
+  if (!catalog.neon_perfiles) catalog.neon_perfiles = [];
+  const n = catalog.neon_perfiles.length + 1;
+  catalog.neon_perfiles.push({
+    id: `custom-${n}`, nombre: "Nuevo perfil", color: "Blanco cálido",
+    precio_m: 200, watts_m: 12, altura_min_cm: 10, activo: true,
+  });
+  renderNeonPerfiles();
+  showToast("Perfil agregado — no olvides guardar", "ok");
+}
+function delNeonPerfil(i) {
+  collectNeon();  // preserva ediciones no guardadas de otras filas
+  catalog.neon_perfiles.splice(i, 1);
+  renderNeonPerfiles();
+}
+function addNeonBase() {
+  if (!catalog.neon_params) catalog.neon_params = { bases: [] };
+  if (!catalog.neon_params.bases) catalog.neon_params.bases = [];
+  const n = catalog.neon_params.bases.length + 1;
+  catalog.neon_params.bases.push({
+    id: `custom-base-${n}`, nombre: "Nueva base",
+    tipo_precio: "lamina", lamina_w: 120, lamina_h: 240, precio_lamina: 1000,
+    activo: true,
+  });
+  renderNeonBases();
+  showToast("Base agregada — no olvides guardar", "ok");
+}
+function delNeonBase(i) {
+  collectNeon();
+  catalog.neon_params.bases.splice(i, 1);
+  renderNeonBases();
 }
 
 // ── MODAL ─────────────────────────────────────────────────────────────────────
