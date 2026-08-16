@@ -2050,7 +2050,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
       </div>
       <span class="brand__name">SGI Cotizador</span>
-      <span class="brand__v" id="brand-version">v1.23.1</span>
+      <span class="brand__v" id="brand-version">v1.24.0</span>
     </div>
     <div class="crumbs" id="topbar-crumbs">
       <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
@@ -2140,7 +2140,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.23.1</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.24.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -2522,9 +2522,14 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
       </div>
 
       <label>Perfil de manguera</label>
-      <select id="neon-perfil">
+      <select id="neon-perfil" onchange="_neonUpdateGen2Aviso()">
         <option value="">Cargando…</option>
       </select>
+      <div id="neon-gen2-aviso" class="info-tag" style="display:none;background:rgba(232,163,56,.14);
+           border-left:3px solid var(--am);margin-top:-2px;margin-bottom:8px;line-height:1.4">
+        ⚡ <b>Neón 2ª generación</b> — requiere acrílico ranurado en CNC (~1.9× costo de corte externo).
+        Base recomendada: acrílico transparente o negro.
+      </div>
 
       <div style="display:flex;gap:8px">
         <div style="flex:1">
@@ -3747,6 +3752,29 @@ function _neonLeerGastos() {
   return out;
 }
 
+// Muestra el aviso de 2ª generación si el perfil elegido tiene generacion=2.
+// Se dispara en cambio de perfil y también desde _neonUpdateAprovInfo para
+// que refleje el estado combinado.
+function _neonUpdateGen2Aviso() {
+  const aviso = document.getElementById("neon-gen2-aviso");
+  if (!aviso) return;
+  const perfilId = document.getElementById("neon-perfil")?.value || "";
+  const perfil = (catalog?.neon_perfiles || []).find(p => p.id === perfilId);
+  const es2g = (perfil?.generacion || 1) === 2;
+  aviso.style.display = es2g ? "" : "none";
+  if (es2g) {
+    // Además chequear si la base actual NO es acrílico → aviso adicional
+    const baseId = document.getElementById("neon-base")?.value;
+    const base = (catalog?.neon_params?.bases || []).find(b => b.id === baseId);
+    const esAcr = /acr|acrilic/i.test(base?.id || "") || /acr[íi]lico/i.test(base?.nombre || "");
+    if (!esAcr && base) {
+      aviso.innerHTML = `⚠️ <b>2ª gen sobre base no acrílico</b> — funciona pero no se cobra ranurado. Para el efecto profesional se recomienda acrílico transparente/negro.`;
+    } else {
+      aviso.innerHTML = `⚡ <b>Neón 2ª generación</b> — requiere acrílico ranurado en CNC (~1.9× costo de corte externo). Base recomendada: acrílico transparente o negro.`;
+    }
+  }
+}
+
 // Muestra info del modo de aprovisionamiento efectivo (default del catálogo o
 // el override elegido para esta cotización) y muestra/oculta el input manual
 // de la pieza.
@@ -3771,6 +3799,8 @@ function _neonUpdateAprovInfo() {
                        : aprov === "corto_afuera"  ? "rgba(74,158,255,.10)"
                        : "rgba(90,220,150,.10)";
   wrap.style.display = (aprov === "compro_pieza") ? "" : "none";
+  // El aviso de 2ª gen depende de la combinación perfil × base
+  if (typeof _neonUpdateGen2Aviso === "function") _neonUpdateGen2Aviso();
 }
 
 function setNeonModo(modo, btn) {
@@ -4295,18 +4325,25 @@ async function neonPopulateDropdowns() {
 
   const selPerfil = document.getElementById("neon-perfil");
   if (selPerfil && perfiles.length) {
-    const groups = {};
-    for (const p of perfiles) {
-      if (p.activo === false) continue;
-      (groups[p.nombre] = groups[p.nombre] || []).push(p);
-    }
-    selPerfil.innerHTML = Object.entries(groups).map(([nombre, arr]) => `
+    // Agrupar por generación primero (1ª gen y 2ª gen bien separadas), luego
+    // por familia (nombre del producto)
+    const gen1 = perfiles.filter(p => p.activo !== false && (p.generacion || 1) === 1);
+    const gen2 = perfiles.filter(p => p.activo !== false && (p.generacion || 1) === 2);
+    const grpBy = (arr) => {
+      const g = {};
+      for (const p of arr) (g[p.nombre] = g[p.nombre] || []).push(p);
+      return g;
+    };
+    const renderGrupos = (grupos) => Object.entries(grupos).map(([nombre, arr]) => `
       <optgroup label="${nombre}">
         ${arr.map(p => `
           <option value="${p.id}">${p.color || ''} — $${p.precio_m}/m · ${p.watts_m}W/m</option>
         `).join("")}
-      </optgroup>
-    `).join("");
+      </optgroup>`).join("");
+    let html = '';
+    if (gen1.length) html += `<optgroup label="━━ 1ª GENERACIÓN (manguera PVC clásica) ━━" disabled></optgroup>` + renderGrupos(grpBy(gen1));
+    if (gen2.length) html += `<optgroup label="━━ 2ª GENERACIÓN (silicona sobre acrílico ranurado) ━━" disabled></optgroup>` + renderGrupos(grpBy(gen2));
+    selPerfil.innerHTML = html;
     // Default: primer estándar blanco cálido si existe
     const def = perfiles.find(p => p.id === "std-blanco");
     if (def) selPerfil.value = "std-blanco";
@@ -7753,15 +7790,24 @@ function renderNeonPerfiles() {
   const opts = ["Blanco cálido","Blanco frío","Azul","Rojo","Rosa","Morado",
                 "Amarillo","Verde","RGB","RGB direccionable"];
   let html = `<table class="cat-table"><thead><tr>
-    <th style="width:130px">ID</th><th>Nombre</th><th style="width:150px">Color</th>
-    <th style="width:100px">$/m</th><th style="width:80px">W/m</th>
-    <th style="width:100px">Altura mín (cm)</th><th style="width:70px">Activo</th><th style="width:36px"></th>
+    <th style="width:110px">ID</th><th>Nombre</th>
+    <th style="width:70px" title="Generación: 1ª = manguera PVC clásica · 2ª = silicona sobre acrílico ranurado">Gen</th>
+    <th style="width:150px">Color</th>
+    <th style="width:90px">$/m</th><th style="width:70px">W/m</th>
+    <th style="width:90px">Altura mín (cm)</th><th style="width:60px">Activo</th><th style="width:36px"></th>
   </tr></thead><tbody>`;
   rows.forEach((p, i) => {
     const colorOpts = opts.map(c => `<option value="${c}"${c===p.color?' selected':''}>${c}</option>`).join("");
+    const gen = p.generacion || 1;
     html += `<tr>
       <td><input data-neon-perfil="${i}" data-k="id" value="${p.id||''}" class="np-input"></td>
       <td><input data-neon-perfil="${i}" data-k="nombre" value="${p.nombre||''}" class="np-input"></td>
+      <td>
+        <select data-neon-perfil="${i}" data-k="generacion" class="np-input">
+          <option value="1" ${gen===1?'selected':''}>1ª</option>
+          <option value="2" ${gen===2?'selected':''}>2ª</option>
+        </select>
+      </td>
       <td><select data-neon-perfil="${i}" data-k="color" class="np-input">${colorOpts}</select></td>
       <td><input type="number" data-neon-perfil="${i}" data-k="precio_m" value="${p.precio_m||0}" step="5" class="np-input np-num"></td>
       <td><input type="number" data-neon-perfil="${i}" data-k="watts_m" value="${p.watts_m||0}" step="1" class="np-input np-num"></td>
@@ -7837,6 +7883,7 @@ function renderNeonParams() {
     ${fld('soporte_precio',   'Kit soporte ($)',        'Separadores/soportes por anuncio (modo lámina)', '10')}
     ${fld('desperdicio_umbral_cm', 'Umbral desperdicio (cm)', 'Tiras sobrantes ≤ este valor se cobran (no reutilizables)', '1')}
     ${fld('corte_externo_m2_default', 'Corte externo default ($/m²)', 'Fallback global cuando un material sin este campo usa "corto afuera"', '10')}
+    ${fld('ranurado_cnc_mult', 'Multiplicador ranurado CNC (2ª gen)', 'Multiplicador sobre corte externo cuando neón 2ª gen va sobre acrílico (típico 1.8-2.2)', '0.1')}
   </tbody></table>`;
   document.getElementById("tbl-neon-params-wrap").innerHTML = html;
 }
@@ -7914,9 +7961,9 @@ function renderNeon() {
 // números a floats (0 si vacío).
 function collectNeon() {
   if (!catalog) return;
-  const numKeys = new Set(['precio_m','watts_m','altura_min_cm','lamina_w','lamina_h',
-                            'precio_lamina','precio_m2','corte_externo_m2',
-                            'factor_area','corte_m','mult']);
+  const numKeys = new Set(['precio_m','watts_m','altura_min_cm','generacion',
+                            'lamina_w','lamina_h','precio_lamina','precio_m2',
+                            'corte_externo_m2','factor_area','corte_m','mult']);
   // Perfiles
   document.querySelectorAll('[data-neon-perfil]').forEach(el => {
     const i = parseInt(el.dataset.neonPerfil);
@@ -7970,7 +8017,7 @@ function addNeonPerfil() {
   const n = catalog.neon_perfiles.length + 1;
   catalog.neon_perfiles.push({
     id: `custom-${n}`, nombre: "Nuevo perfil", color: "Blanco cálido",
-    precio_m: 200, watts_m: 12, altura_min_cm: 10, activo: true,
+    precio_m: 200, watts_m: 12, altura_min_cm: 10, generacion: 1, activo: true,
   });
   renderNeonPerfiles();
   showToast("Perfil agregado — no olvides guardar", "ok");

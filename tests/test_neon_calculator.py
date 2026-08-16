@@ -262,6 +262,74 @@ def test_09_merge_params_sin_fab3d():
     assert len(m["fab3d"]["tiras_led"]) == 5
 
 
+# ═══ TESTS 2ª GENERACIÓN (Fase 9) ═══════════════════════════════════════════
+# Perfiles con generacion=2 (manguera silicona sobre acrílico ranurado) suman
+# ranurado_cnc_mult × corte_externo_m2 cuando la base es acrílico. Con base no
+# acrílico (MDF, PVC, etc.) el multiplicador NO aplica.
+
+PERFIL_GEN2 = {
+    "id": "gen2-blanco", "nombre": "Neón 2ª gen · silicona 12mm",
+    "color": "Blanco cálido", "precio_m": 320, "watts_m": 10,
+    "altura_min_cm": 8, "generacion": 2,
+}
+
+
+def test_11_gen2_sobre_acrilico_aplica_ranurado():
+    """2ª gen sobre acrílico → corte externo × ranurado_cnc_mult (1.9 por default).
+    Comparado con 1ª gen misma configuración, el corte externo debe ser ~1.9× mayor."""
+    r_gen1 = cotizar_neon(
+        Lm=5, uniones=3, perfil=PERFIL_BLANCO, fuente=FUENTE_100,
+        dimensiones={"ancho_cm": 120, "alto_cm": 40},
+        base={"material": _base_by_id("acr-3-tr"), "forma": _forma_by_id("rect"),
+              "incluir_soporte": True},
+        params=P, urgencia_mult=1,
+    )
+    r_gen2 = cotizar_neon(
+        Lm=5, uniones=3, perfil=PERFIL_GEN2, fuente=FUENTE_100,
+        dimensiones={"ancho_cm": 120, "alto_cm": 40},
+        base={"material": _base_by_id("acr-3-tr"), "forma": _forma_by_id("rect"),
+              "incluir_soporte": True},
+        params=P, urgencia_mult=1,
+    )
+    assert r_gen1.importe_corte_externo > 0
+    assert r_gen2.importe_corte_externo == pytest.approx(
+        r_gen1.importe_corte_externo * P["ranurado_cnc_mult"], abs=1)
+
+
+def test_12_gen2_sobre_mdf_no_aplica_ranurado():
+    """2ª gen sobre MDF (compro_pieza) NO tiene corte externo — la lógica del
+    ranurado solo aplica cuando también hay corte externo (corto_afuera). El
+    usuario captura manualmente el costo de la pieza."""
+    r = cotizar_neon(
+        Lm=5, uniones=3, perfil=PERFIL_GEN2, fuente=FUENTE_100,
+        dimensiones={"ancho_cm": 120, "alto_cm": 40},
+        base={"material": _base_by_id("mdf-6-crudo"), "forma": _forma_by_id("rect"),
+              "pieza_costo_override": 300},
+        params=P, urgencia_mult=1,
+    )
+    assert r.aprovisionamiento == "compro_pieza"
+    assert r.importe_corte_externo == 0
+
+
+def test_13_gen2_sobre_pvc_no_aplica_ranurado():
+    """2ª gen sobre PVC (base no acrílico, corto_afuera): cobra corte externo
+    NORMAL, no ranurado. El multiplicador solo aplica cuando la base es acrílico."""
+    r_gen1 = cotizar_neon(
+        Lm=5, perfil=PERFIL_BLANCO, fuente=FUENTE_100,
+        dimensiones={"ancho_cm": 120, "alto_cm": 40},
+        base={"material": _base_by_id("pvc-3"), "forma": _forma_by_id("rect")},
+        params=P, urgencia_mult=1,
+    )
+    r_gen2 = cotizar_neon(
+        Lm=5, perfil=PERFIL_GEN2, fuente=FUENTE_100,
+        dimensiones={"ancho_cm": 120, "alto_cm": 40},
+        base={"material": _base_by_id("pvc-3"), "forma": _forma_by_id("rect")},
+        params=P, urgencia_mult=1,
+    )
+    # Sin ranurado → mismo importe de corte externo
+    assert r_gen2.importe_corte_externo == pytest.approx(r_gen1.importe_corte_externo, abs=0.5)
+
+
 # ═══ TEST 10 · merge_neon_params: fab3d parcial ══════════════════════════════
 def test_10_merge_params_fab3d_parcial():
     """Un override dentro de fab3d no debe borrar los demás campos."""

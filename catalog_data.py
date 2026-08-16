@@ -1614,14 +1614,23 @@ def _catalog_merge(raw: dict):
         _apply_icf(raw["icf"])
     if isinstance(raw.get("neon_perfiles"), list):
         # perfiles: merge por id (preserva perfiles nuevos del código no en JSON)
+        # Los perfiles del JSON pueden carecer del campo `generacion` (schema
+        # viejo pre-Fase 9); se les infiere 1 al aplicarlos.
         raw_by_id = {p["id"]: p for p in raw["neon_perfiles"] if "id" in p}
         for perfil in NEON_PERFILES:
             if perfil.get("id") in raw_by_id:
-                perfil.update(raw_by_id[perfil["id"]])
+                override = dict(raw_by_id[perfil["id"]])
+                # Preservar `generacion` del código si el JSON no lo trae
+                # (así los perfiles 2ª gen recién sembrados no se degradan a 1)
+                if "generacion" not in override and "generacion" in perfil:
+                    override["generacion"] = perfil["generacion"]
+                perfil.update(override)
         existing = {p.get("id") for p in NEON_PERFILES}
         for perfil in raw["neon_perfiles"]:
             if perfil.get("id") not in existing:
-                NEON_PERFILES.append(copy.deepcopy(perfil))
+                p_new = copy.deepcopy(perfil)
+                p_new.setdefault("generacion", 1)  # default 1ª gen si no viene
+                NEON_PERFILES.append(p_new)
     if isinstance(raw.get("neon_params"), dict):
         _apply_neon_params(raw["neon_params"], full_replace=False)
 

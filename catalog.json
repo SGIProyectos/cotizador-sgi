@@ -1362,6 +1362,76 @@
       "watts_m": 18,
       "altura_min_cm": 15,
       "activo": true
+    },
+    {
+      "id": "gen2-blanco",
+      "nombre": "Neón 2ª gen · silicona 12mm",
+      "color": "Blanco cálido",
+      "precio_m": 320,
+      "watts_m": 10,
+      "altura_min_cm": 8,
+      "generacion": 2,
+      "activo": true
+    },
+    {
+      "id": "gen2-blancof",
+      "nombre": "Neón 2ª gen · silicona 12mm",
+      "color": "Blanco frío",
+      "precio_m": 320,
+      "watts_m": 10,
+      "altura_min_cm": 8,
+      "generacion": 2,
+      "activo": true
+    },
+    {
+      "id": "gen2-azul",
+      "nombre": "Neón 2ª gen · silicona 12mm",
+      "color": "Azul",
+      "precio_m": 350,
+      "watts_m": 10,
+      "altura_min_cm": 8,
+      "generacion": 2,
+      "activo": true
+    },
+    {
+      "id": "gen2-rojo",
+      "nombre": "Neón 2ª gen · silicona 12mm",
+      "color": "Rojo",
+      "precio_m": 350,
+      "watts_m": 10,
+      "altura_min_cm": 8,
+      "generacion": 2,
+      "activo": true
+    },
+    {
+      "id": "gen2-rosa",
+      "nombre": "Neón 2ª gen · silicona 12mm",
+      "color": "Rosa",
+      "precio_m": 380,
+      "watts_m": 10,
+      "altura_min_cm": 8,
+      "generacion": 2,
+      "activo": true
+    },
+    {
+      "id": "gen2-verde",
+      "nombre": "Neón 2ª gen · silicona 12mm",
+      "color": "Verde",
+      "precio_m": 350,
+      "watts_m": 10,
+      "altura_min_cm": 8,
+      "generacion": 2,
+      "activo": true
+    },
+    {
+      "id": "gen2-rgb",
+      "nombre": "Neón 2ª gen · silicona 16mm",
+      "color": "RGB direccionable",
+      "precio_m": 620,
+      "watts_m": 14,
+      "altura_min_cm": 12,
+      "generacion": 2,
+      "activo": true
     }
   ],
   "neon_params": {
@@ -1636,6 +1706,7 @@
     ],
     "soporte_precio": 180,
     "corte_externo_m2_default": 380,
+    "ranurado_cnc_mult": 1.9,
     "urgencias": [
       {
         "id": "normal",

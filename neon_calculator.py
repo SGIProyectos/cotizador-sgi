@@ -277,6 +277,16 @@ def cotizar_neon(
             # El costo por m² vive en el material o (fallback) en params.
             corte_m2 = _num(b_mat.get("corte_externo_m2"),
                             _num(p.get("corte_externo_m2_default"), 0))
+            # Neón 2ª generación sobre base acrílico requiere RANURADO en CNC
+            # (el canal donde va la manguera silicona). Cuesta ~2× el corte
+            # perimetral solo. El multiplicador vive en params y aplica solo
+            # cuando el perfil dominante es gen 2 Y la base es acrílico.
+            usa_gen2 = any(int(t["perfil"].get("generacion") or 1) == 2 for t in g_tramos)
+            es_acrilico = "acrilico" in (b_mat.get("nombre") or "").lower() \
+                          or "acrilico" in (b_mat.get("id") or "").lower() \
+                          or "acr" in (b_mat.get("id") or "").lower()
+            if usa_gen2 and es_acrilico:
+                corte_m2 = corte_m2 * _num(p.get("ranurado_cnc_mult"), 1.9)
             importe_corte_externo = _round2(area_m2 * corte_m2)
 
     importe_corte       = 0.0 if modo_fab == "3d" else _round2(perim_m * _num(b_for.get("corte_m"), 0))
@@ -532,6 +542,10 @@ def merge_neon_params(raw: dict | None) -> dict:
 # Fuente: SGI (Puebla, México). Precios en MXN. Editables desde /api/catalog.
 
 NEON_PERFILES_DEFAULTS: list[dict] = [
+    # ── 1ª generación (manguera PVC clásica, tira LED encapsulada rígida) ──
+    # Se monta sobre cualquier base (acrílico, MDF, PVC, alucobond, etc.).
+    # Grabado del perfil se hace en el perímetro (no se ranura la base).
+    # generacion=1 es el default si no se especifica (retrocompat).
     {"id": "mini-blanco",  "nombre": "Neón Mini 6mm",       "color": "Blanco cálido",         "precio_m": 180, "watts_m":  8, "altura_min_cm":  5, "activo": True},
     {"id": "mini-azul",    "nombre": "Neón Mini 6mm",       "color": "Azul",                  "precio_m": 200, "watts_m":  8, "altura_min_cm":  5, "activo": True},
     {"id": "mini-rojo",    "nombre": "Neón Mini 6mm",       "color": "Rojo",                  "precio_m": 200, "watts_m":  8, "altura_min_cm":  5, "activo": True},
@@ -547,6 +561,19 @@ NEON_PERFILES_DEFAULTS: list[dict] = [
     {"id": "std-rgb",      "nombre": "Neón Estándar 12mm",  "color": "RGB",                   "precio_m": 420, "watts_m": 14, "altura_min_cm": 10, "activo": True},
     {"id": "prem-blanco",  "nombre": "Neón Premium 16mm",   "color": "Blanco cálido",         "precio_m": 340, "watts_m": 16, "altura_min_cm": 15, "activo": True},
     {"id": "prem-rgb",     "nombre": "Neón Premium 16mm",   "color": "RGB direccionable",     "precio_m": 580, "watts_m": 18, "altura_min_cm": 15, "activo": True},
+
+    # ── 2ª generación (manguera silicona flexible, tira LED encapsulada) ──
+    # Se instala en ACRÍLICO RANURADO EN CNC. La 2ª gen se ve "profesional"
+    # sin puntos visibles porque la silicona es difusor uniforme; se vende
+    # en carrete 25 m a 12V DC. Precios calibrados feb 2026 (Amateras, NeonLux).
+    # generacion=2 activa el multiplicador ranurado_cnc_mult sobre corte externo.
+    {"id": "gen2-blanco",  "nombre": "Neón 2ª gen · silicona 12mm", "color": "Blanco cálido",     "precio_m": 320, "watts_m": 10, "altura_min_cm":  8, "generacion": 2, "activo": True},
+    {"id": "gen2-blancof", "nombre": "Neón 2ª gen · silicona 12mm", "color": "Blanco frío",       "precio_m": 320, "watts_m": 10, "altura_min_cm":  8, "generacion": 2, "activo": True},
+    {"id": "gen2-azul",    "nombre": "Neón 2ª gen · silicona 12mm", "color": "Azul",              "precio_m": 350, "watts_m": 10, "altura_min_cm":  8, "generacion": 2, "activo": True},
+    {"id": "gen2-rojo",    "nombre": "Neón 2ª gen · silicona 12mm", "color": "Rojo",              "precio_m": 350, "watts_m": 10, "altura_min_cm":  8, "generacion": 2, "activo": True},
+    {"id": "gen2-rosa",    "nombre": "Neón 2ª gen · silicona 12mm", "color": "Rosa",              "precio_m": 380, "watts_m": 10, "altura_min_cm":  8, "generacion": 2, "activo": True},
+    {"id": "gen2-verde",   "nombre": "Neón 2ª gen · silicona 12mm", "color": "Verde",             "precio_m": 350, "watts_m": 10, "altura_min_cm":  8, "generacion": 2, "activo": True},
+    {"id": "gen2-rgb",     "nombre": "Neón 2ª gen · silicona 16mm", "color": "RGB direccionable", "precio_m": 620, "watts_m": 14, "altura_min_cm": 12, "generacion": 2, "activo": True},
 ]
 
 
@@ -650,6 +677,13 @@ NEON_PARAMS_DEFAULTS: dict = {
     # su propio `corte_externo_m2`. Los talleres cobran típicamente por hoja/
     # pieza, pero prorrateado a m² anda ~$350-$450 en México (feb 2026).
     "corte_externo_m2_default": 380,
+
+    # Multiplicador aplicado al corte láser externo cuando se usa NEÓN 2ª
+    # GENERACIÓN sobre base acrílico. La 2ª gen requiere que el acrílico se
+    # RANURE en CNC (canal donde encaja la manguera silicona), no solo se
+    # corte perimetralmente — es más lento y cuesta más. Referencia: cotizadores
+    # de Ingraf y NeonLux (feb 2026) reportan ~1.8×–2.2× el corte perimetral.
+    "ranurado_cnc_mult": 1.9,
 
     "urgencias": [
         {"id": "normal",  "nombre": "Normal",  "dias": "7–10 días", "mult": 1.00},
