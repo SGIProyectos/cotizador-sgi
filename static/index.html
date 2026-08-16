@@ -2050,7 +2050,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
       </div>
       <span class="brand__name">SGI Cotizador</span>
-      <span class="brand__v" id="brand-version">v1.26.3</span>
+      <span class="brand__v" id="brand-version">v1.26.4</span>
     </div>
     <div class="crumbs" id="topbar-crumbs">
       <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
@@ -2140,7 +2140,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.26.3</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.26.4</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -12895,15 +12895,9 @@ window.v3d_render = function(args) {
   // Paleta neón — solo para tipo=neon (color en vivo + toggle encendido/apagado)
   const neonPal = document.getElementById('neon-color-palette');
   if (neonPal) neonPal.style.display = (tipo === 'neon') ? 'flex' : 'none';
-  // Explode para neón: separa la manguera de la base con animación
-  const btnExp = document.getElementById('btn-explode');
-  if (btnExp && tipo === 'neon') {
-    btnExp.style.display = 'inline-flex';
-    btnExp.textContent = '💥 Separar manguera';
-  }
 
   if (!REN) initScene(canvas);
-  clearMeshes();
+  clearMeshes();   // OJO: esto oculta btn-explode → hay que mostrarlo DESPUÉS
 
   // Factor de escala (misma lógica que Python)
   const PT_TO_CM = 2.54 / 72;
@@ -12943,6 +12937,16 @@ window.v3d_render = function(args) {
   // v3d_snapshot funciona igual porque toma del grupo activo en la escena `S`.
   const btnFach = document.getElementById('btn-fachada');
   if (btnFach) btnFach.style.display = 'inline-flex';
+
+  // Explode neón: mostrar el botón AQUÍ (después de clearMeshes que lo oculta).
+  // El explode neón anima las 3 capas: ranura + LEDs + funda (ver _buildNeon).
+  if (tipo === 'neon') {
+    const btnExp = document.getElementById('btn-explode');
+    if (btnExp) {
+      btnExp.style.display = 'inline-flex';
+      btnExp.textContent = '💥 Separar capas';
+    }
+  }
 
   // Ajustar cámara al grupo
   const bb = new THREE.Box3().setFromObject(grp);
@@ -13332,10 +13336,14 @@ function _buildNeon(svgText, sf, args) {
   if (modoFab === 'lamina') {
     const baseW = Math.max(wCm * 1.08, 12);
     const baseH = Math.max(hCm * 1.08, 12);
-    baseThick = 0.3;
+    // 2ª gen: base MÁS gruesa (para alojar el ranurado profundo) y menos
+    // translúcida para que se vean bien los canales trabajados.
+    baseThick = es2G ? 0.6 : 0.3;
     const baseGeo = new THREE.BoxGeometry(baseW, baseH, baseThick);
     const baseMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff, transparent: true, opacity: 0.32,
+      color: 0xffffff,
+      transparent: true,
+      opacity: es2G ? 0.55 : 0.32,   // 2ª gen: más opaco, se ve el material
       roughness: 0.1, metalness: 0.15,
     });
     const baseMesh = new THREE.Mesh(baseGeo, baseMat);
@@ -13364,12 +13372,17 @@ function _buildNeon(svgText, sf, args) {
 
   // ═══ 3 CAPAS que se separan al explotar ═══
   //
-  // Capa 1 — RANURA en la base (canal oscuro empotrado siguiendo el trazo)
-  //   Se ve cuando la manguera se separa. En 2ª gen es más profunda (para
-  //   alojar la silicona); en 1ª gen es una guía sutil.
-  const ranuraColor = 0x14161a;
-  const ranuraMat = new THREE.MeshStandardMaterial({
-    color: ranuraColor, roughness: 0.9, metalness: 0.05,
+  // Capa 1 — RANURA en la base (canal profundo trabajado con router siguiendo
+  //   el trazo). Se compone de 2 tubos concéntricos para simular el surco:
+  //     · anillo oscuro exterior (borde del canal, bisel del router)
+  //     · canal interior más oscuro (fondo del ranurado)
+  //   En 2ª gen es más ancho y profundo (aloja la silicona); en 1ª gen es
+  //   una guía sutil para pegar la manguera.
+  const ranuraBiselMat = new THREE.MeshStandardMaterial({
+    color: 0x2a2c31, roughness: 0.75, metalness: 0.15,   // bisel medio
+  });
+  const ranuraFondoMat = new THREE.MeshStandardMaterial({
+    color: 0x0e0f12, roughness: 0.95, metalness: 0.05,   // fondo del canal
   });
 
   // Capa 2 — TIRA LED interior brillante (el corazón del neón)
@@ -13400,15 +13413,26 @@ function _buildNeon(svgText, sf, args) {
         const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
         const segs = Math.max(pts.length * 4, 80);
 
-        // ─ Capa 1: ranura en la base (empotrada, Z al nivel de la base)
-        const ranuraDepth = es2G ? radioCm * 0.9 : radioCm * 0.3;
-        const ranuraPts = pts.map(p => new THREE.Vector3(p.x, p.y, -baseThick * 0.15));
-        const ranuraCurve = new THREE.CatmullRomCurve3(ranuraPts, false, 'catmullrom', 0.5);
-        const ranuraGeo = new THREE.TubeGeometry(ranuraCurve, segs,
-                                                  radioCm * (es2G ? 1.05 : 0.85),
-                                                  10, false);
-        const ranura = new THREE.Mesh(ranuraGeo, ranuraMat);
-        grp.add(ranura); window._v3dNeon.ranuras.push(ranura);
+        // ─ Capa 1: ranura profunda en la base (2 tubos concéntricos)
+        //   El bisel exterior queda a la altura de la superficie de la base
+        //   (Z ligeramente positivo para que sobresalga del acrílico). El
+        //   fondo del canal queda hundido dentro de la base (Z negativo).
+        const biselRadio = radioCm * (es2G ? 1.30 : 0.95);
+        const fondoRadio = radioCm * (es2G ? 1.05 : 0.75);
+        const biselZ = 0.02;                                 // apenas sobresale
+        const fondoZ = -baseThick * (es2G ? 0.45 : 0.20);    // hundido
+        // Bisel (anillo del contorno del canal — se ve marcado desde el frente)
+        const biselPts = pts.map(p => new THREE.Vector3(p.x, p.y, biselZ));
+        const biselCurve = new THREE.CatmullRomCurve3(biselPts, false, 'catmullrom', 0.5);
+        const biselGeo = new THREE.TubeGeometry(biselCurve, segs, biselRadio, 12, false);
+        const bisel = new THREE.Mesh(biselGeo, ranuraBiselMat);
+        grp.add(bisel); window._v3dNeon.ranuras.push(bisel);
+        // Fondo del canal (más oscuro, dentro del bisel — sombra del ranurado)
+        const fondoPts = pts.map(p => new THREE.Vector3(p.x, p.y, fondoZ));
+        const fondoCurve = new THREE.CatmullRomCurve3(fondoPts, false, 'catmullrom', 0.5);
+        const fondoGeo = new THREE.TubeGeometry(fondoCurve, segs, fondoRadio, 12, false);
+        const fondo = new THREE.Mesh(fondoGeo, ranuraFondoMat);
+        grp.add(fondo); window._v3dNeon.ranuras.push(fondo);
 
         // ─ Capa 2: tira LED interior (radio pequeño, muy emissive)
         const ledGeo = new THREE.TubeGeometry(curve, segs, radioCm * 0.35, 10, false);
