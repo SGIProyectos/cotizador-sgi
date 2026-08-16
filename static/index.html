@@ -1470,6 +1470,43 @@ svg g.pieza-labels                 { pointer-events: none; }
 }
 /* Override para segmentados internos de 2 opciones (ej. modo Lámina/3D del neón) */
 .sgi-shell .sidebar #neon-modo-btns{grid-template-columns:1fr 1fr}
+
+/* ══════════════════ VISOR NEÓN ══════════════════
+   Cuando el usuario está cotizando neón, el visor cambia a fondo oscuro
+   para que la manguera brille (los filtros SVG buildTubeFilter necesitan
+   fondo negro/gris muy oscuro para que el bloom se lea). Solo aplica al
+   contenedor del preview, no al resto de la UI. */
+body.neon-mode-viewer #svg-preview-box{
+  background:radial-gradient(ellipse at center, #14161c 0%, #08090c 100%);
+  border-color:#1a1c22;
+}
+body.neon-mode-viewer .sgi-shell #svg-preview-box{
+  background:radial-gradient(ellipse at center, #14161c 0%, #08090c 100%);
+}
+
+/* Barra de controles del visor neón — se muestra solo con tipo=neon */
+#neon-viewer-bar{
+  display:none;align-items:center;flex-wrap:wrap;gap:6px;
+  padding:8px 12px;margin:0 0 6px;
+  background:var(--k2);border-bottom:1px solid var(--borde);
+  font-size:11.5px;color:var(--txt2);
+}
+#neon-viewer-bar .nvb-lbl{font-size:10.5px;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em;margin-right:2px}
+#neon-viewer-bar .nvb-group{display:flex;gap:0;border-radius:5px;overflow:hidden;border:1px solid var(--line2)}
+#neon-viewer-bar .nvb-btn{
+  padding:4px 10px;font-size:11px;font-weight:500;
+  background:#161b22;color:var(--txt2);border:none;cursor:pointer;
+  transition:.15s;font-family:var(--sans);
+}
+#neon-viewer-bar .nvb-btn + .nvb-btn{border-left:1px solid var(--line2)}
+#neon-viewer-bar .nvb-btn:hover{background:#1e242c;color:var(--txt)}
+#neon-viewer-bar .nvb-btn.active{background:var(--am);color:#0b0e13}
+#neon-viewer-bar .nvb-sep{width:1px;height:16px;background:var(--borde);margin:0 4px}
+#neon-viewer-bar .nvb-info{font-size:11px;color:var(--txt3);margin-left:auto}
+#neon-viewer-bar .nvb-info b{color:var(--am);font-family:var(--n-mono);font-variant-numeric:tabular-nums}
+
+/* Estado excluido de un trazo (click para "no lleva neón") */
+[data-neon-excluded="1"]{opacity:.18;stroke-dasharray:4 3 !important}
 .sgi-shell .sidebar .tipo-btn{
   padding:7px 4px;font-size:11.5px;font-weight:500;
   color:var(--n-tx-3);
@@ -1991,7 +2028,7 @@ svg g.pieza-labels                 { pointer-events: none; }
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
       </div>
       <span class="brand__name">SGI Cotizador</span>
-      <span class="brand__v" id="brand-version">v1.22.0-alpha</span>
+      <span class="brand__v" id="brand-version">v1.22.0-beta</span>
     </div>
     <div class="crumbs" id="topbar-crumbs">
       <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
@@ -2081,7 +2118,7 @@ svg g.pieza-labels                 { pointer-events: none; }
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.22.0-alpha</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.22.0-beta</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -2654,6 +2691,26 @@ svg g.pieza-labels                 { pointer-events: none; }
           style="padding:3px 11px;font-size:11px;border-radius:0 5px 5px 0;
                  border:1px solid #c8d4e8;border-left:none;background:#fff;
                  color:#6a7a8a;cursor:pointer;transition:.15s">3D</button>
+      </div>
+      <!-- Controles del visor neón — visibles solo con tipoActual='neon' -->
+      <div id="neon-viewer-bar">
+        <span class="nvb-lbl">Iluminación</span>
+        <div class="nvb-group">
+          <button class="nvb-btn active" data-neon-mode="tube" onclick="_neonSetMode('tube')" title="Manguera neón brillando">💡 Encendido</button>
+          <button class="nvb-btn" data-neon-mode="apag" onclick="_neonSetMode('apag')" title="Vista de día, sin luz">🌙 Apagado</button>
+        </div>
+        <span class="nvb-sep"></span>
+        <span class="nvb-lbl" id="neon-target-lbl" style="display:none">Estilo</span>
+        <div class="nvb-group" id="neon-target-group" style="display:none">
+          <button class="nvb-btn active" data-neon-target="tube" onclick="_neonSetTarget('tube')" title="Solo la manguera">✨ Neón</button>
+          <button class="nvb-btn" data-neon-target="canal" onclick="_neonSetTarget('canal')" title="Canal PETG impreso con LED dentro">🖨️ Canal 3D</button>
+        </div>
+        <span class="nvb-sep" id="neon-target-sep" style="display:none"></span>
+        <span class="nvb-lbl">Click en trazo</span>
+        <div class="nvb-group">
+          <button class="nvb-btn active" title="Excluye/incluye el trazo del cálculo de neón">🚫 Excluir</button>
+        </div>
+        <span class="nvb-info" id="neon-viewer-info">Sube un SVG</span>
       </div>
       <div id="svg-preview-box">
         <div class="svg-empty">
@@ -3518,6 +3575,14 @@ function setTipo(tipo, btn) {
     const svgEl = document.getElementById("svg-preview-box")?.querySelector("svg");
     if (svgEl) colorizePaths(svgEl, svgPathsRaw);
   }
+  // Chrome del visor neón (fondo oscuro + barra de controles)
+  if (typeof _neonUpdateChrome === "function") _neonUpdateChrome();
+  // Si el usuario cambia A neón y ya había SVG cargado, re-pintar con filtros
+  if (tipo === "neon" && currentSvgText && typeof _neonAfterUpload === "function") {
+    // renderWallPreview() se llama al cargar el SVG en el visor — el SVG
+    // ya está en el DOM. Solo pintamos filtros sin re-subir.
+    _neonAfterUpload();
+  }
   updateEstimacionLive();
 }
 
@@ -3532,28 +3597,138 @@ function setNeonModo(modo, btn) {
   btn.classList.add("active");
   document.getElementById("neon-modo-lamina").style.display = (modo === "lamina") ? "" : "none";
   document.getElementById("neon-modo-3d").style.display     = (modo === "3d")     ? "" : "none";
+  // Cambio de modo cambia el toggle Neón/Canal disponible + re-pinta filtros
+  if (modo === "lamina" && neonUI.target === "canal") neonUI.target = "tube";
+  if (typeof _neonUpdateChrome === "function") _neonUpdateChrome();
+  const svg = document.getElementById("svg-preview-box")?.querySelector("svg");
+  if (svg && tipoActual === "neon") _neonPintar(svg);
   updateEstimacionLive();
 }
 
-// Corre después de subir un SVG con tipoActual='neon'. Auto-calcula Lm total
-// sumando el perímetro real de cada trazo con getTotalLength() (API del DOM;
-// exacto y sin depender del backend). Escala px → cm usando el ancho real
-// ya capturado (data.artboard_w_cm o el input #ancho-real). Llena los inputs
-// #neon-lm, #neon-ancho, #neon-alto para que el usuario vea números listos.
-function _neonAfterUpload() {
-  const svgEl = document.getElementById("svg-preview-box")?.querySelector("svg");
-  if (!svgEl) return;
+// Estado del visor neón — persiste entre llamadas (modo iluminación,
+// estilo tube/canal, trazos excluidos, escala px→cm cacheada).
+const neonUI = {
+  mode: 'tube',           // 'tube' (encendido) | 'apag' (apagado)
+  target: 'tube',         // 'tube' (manguera) | 'canal' (canal 3D — solo modo 3D)
+  excluded: new Set(),    // índices de trazos que el usuario marcó como "no lleva neón"
+  scaleCmPerPx: 0,        // cacheada para no recalcularla en cada click
+  uid: 'sgi-neon',        // id único de los filtros SVG (evita colisiones)
+  trazos: [],             // [{idx, lenPx, el}] — snapshot al montar
+};
 
-  // Escala px → cm. Prioridad: artboard_w_cm del backend (si el SVG declara
-  // unidad física); fallback: input #ancho-real / viewBox width.
-  const anchoInput = parseFloat(document.getElementById("ancho-real")?.value) || 0;
-  const scaleCmPerPx = (svgArtboardWCm > 0 && svgViewboxW > 0)
-    ? (svgArtboardWCm / svgViewboxW)
-    : (anchoInput > 0 && svgViewboxW > 0 ? anchoInput / svgViewboxW : 0);
+// Color hex del perfil de neón (para pintar el stroke antes de aplicar el
+// filter tube — el bloom toma el color base y lo esparce). Fallback: blanco
+// cálido. Mapa curado (no es un color-picker exhaustivo — son los 15
+// perfiles del catálogo).
+const NEON_COLOR_MAP = {
+  'Blanco cálido':      '#FFECC0',
+  'Blanco frío':        '#EEF4FF',
+  'Azul':               '#4EAAFF',
+  'Rojo':               '#FF3E5C',
+  'Rosa':               '#FF7EBC',
+  'Morado':             '#B970FF',
+  'Amarillo':           '#FFE05A',
+  'Verde':              '#78FF6B',
+  'RGB':                '#FF6BC3',
+  'RGB direccionable':  '#6BF7FF',
+};
+function _neonColorHex(perfilId) {
+  const perfil = (catalog?.neon_perfiles || []).find(p => p.id === perfilId);
+  return NEON_COLOR_MAP[perfil?.color] || '#FFECC0';
+}
 
-  // Sumar getTotalLength() de todos los elementos medibles del SVG. Filtramos
-  // los que están dentro de <defs>/<clipPath>/<mask>/<symbol>/<pattern>/<marker>
-  // (son plantillas, no se pintan).
+// Inyecta los 3 filtros SVG (tube = manguera realista con bloom, canal =
+// canal PETG con LED brillando dentro, apag = tubo apagado con sombra).
+// Idempotente: si ya existen para este uid, no duplica.
+function _neonInjectFilters(svg, uid) {
+  const vb = (svg.getAttribute('viewBox') || '0 0 300 300').split(/[\s,]+/).map(parseFloat);
+  const size = Math.max(vb[2] || 300, vb[3] || 300);
+  let defs = svg.querySelector('defs');
+  if (!defs) {
+    defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    svg.insertBefore(defs, svg.firstChild);
+  }
+  const tubeId = `${uid}-tube`, canalId = `${uid}-canal`, apagId = `${uid}-apag`;
+  if (defs.querySelector(`#${tubeId}`)) return { tube:tubeId, canal:canalId, apag:apagId };
+
+  const bloomBig   = (size * 0.045).toFixed(2);
+  const bloomMed   = (size * 0.020).toFixed(2);
+  const bloomSmall = (size * 0.008).toFixed(2);
+  const erodeCore  = (size * 0.0015).toFixed(3);
+  const shadowOff  = (size * 0.006).toFixed(2);
+  const alphaBlur  = (size * 0.003).toFixed(2);
+  const canalErode = (size * 0.0025).toFixed(3);
+  const ledBlur    = (size * 0.006).toFixed(2);
+  const apagBlur   = (size * 0.003).toFixed(2);
+  const apagShadow = (size * 0.004).toFixed(2);
+
+  defs.insertAdjacentHTML('beforeend', `
+    <filter id="${tubeId}" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="${bloomBig}"   result="bloomHalo"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="${bloomMed}"   result="bloomMed"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="${bloomSmall}" result="bloomTight"/>
+      <feMorphology in="SourceGraphic" operator="erode" radius="${erodeCore}" result="coreErode"/>
+      <feColorMatrix in="coreErode" type="matrix"
+        values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1 0" result="coreWhite"/>
+      <feMerge>
+        <feMergeNode in="bloomHalo"/>
+        <feMergeNode in="bloomHalo"/>
+        <feMergeNode in="bloomMed"/>
+        <feMergeNode in="bloomTight"/>
+        <feMergeNode in="SourceGraphic"/>
+        <feMergeNode in="coreWhite"/>
+      </feMerge>
+    </filter>
+    <filter id="${canalId}" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="${alphaBlur}" result="alphaBlur"/>
+      <feOffset in="alphaBlur" dx="0" dy="${shadowOff}" result="shadow1"/>
+      <feFlood flood-color="rgba(0,0,0,.7)"/>
+      <feComposite in2="shadow1" operator="in" result="shadow"/>
+      <feFlood flood-color="#1c1c20" result="wallColor"/>
+      <feComposite in="wallColor" in2="SourceGraphic" operator="in" result="wall"/>
+      <feMorphology in="SourceGraphic" operator="erode" radius="${canalErode}" result="ledErode"/>
+      <feGaussianBlur in="ledErode" stdDeviation="${ledBlur}" result="ledBloom"/>
+      <feMerge>
+        <feMergeNode in="shadow"/>
+        <feMergeNode in="wall"/>
+        <feMergeNode in="ledBloom"/>
+        <feMergeNode in="ledErode"/>
+      </feMerge>
+    </filter>
+    <filter id="${apagId}" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="${apagBlur}"/>
+      <feOffset dy="${apagShadow}" result="drop"/>
+      <feFlood flood-color="rgba(0,0,0,.4)"/>
+      <feComposite in2="drop" operator="in" result="shadow"/>
+      <feMerge>
+        <feMergeNode in="shadow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  `);
+  svg.style.overflow = 'visible';   // no cortar el bloom
+  return { tube:tubeId, canal:canalId, apag:apagId };
+}
+
+// Aplica los filtros + color de manguera a todos los trazos medibles del SVG.
+// Marca cada elemento con data-neon-idx (para click-to-exclude) y respeta
+// neonUI.excluded (los deja "apagados" visualmente).
+function _neonPintar(svg) {
+  if (!svg) return;
+  const ids = _neonInjectFilters(svg, neonUI.uid);
+  const vb = (svg.getAttribute('viewBox') || '0 0 300 300').split(/[\s,]+/).map(parseFloat);
+  const size = Math.max(vb[2] || 300, vb[3] || 300);
+  // Ancho de la manguera proporcional al viewBox — la tira LED del catálogo
+  // define el grosor real pero visualmente escalamos por el tamaño del dibujo.
+  const strokeW = (size * 0.018).toFixed(2);
+  const color = _neonColorHex(document.getElementById("neon-perfil")?.value || "");
+
+  // El filtro decide si es tube (manguera) o canal (3D). En modo apagado
+  // usamos apag independientemente del target — no tiene sentido "canal
+  // apagado".
+  const filterId = (neonUI.mode === 'apag') ? ids.apag
+                 : (neonUI.target === 'canal' ? ids.canal : ids.tube);
+
   const MEASURABLE = ['path','line','polyline','polygon','circle','ellipse','rect'];
   const TEMPLATE = new Set(['defs','clippath','mask','symbol','pattern','marker']);
   const isInTemplate = (el) => {
@@ -3565,51 +3740,155 @@ function _neonAfterUpload() {
     }
     return false;
   };
-  let totalPx = 0, trazos = 0;
+
+  let idx = 0;
+  const nuevos = [];
   for (const tag of MEASURABLE) {
-    for (const el of svgEl.querySelectorAll(tag)) {
+    for (const el of svg.querySelectorAll(tag)) {
       if (isInTemplate(el)) continue;
       let len = 0;
       try {
-        if (['path','line','polyline','polygon'].includes(tag)) {
-          len = el.getTotalLength();
-        } else if (tag === 'circle') {
-          len = 2 * Math.PI * (parseFloat(el.getAttribute('r')) || 0);
-        } else if (tag === 'ellipse') {
+        if (['path','line','polyline','polygon'].includes(tag)) len = el.getTotalLength();
+        else if (tag === 'circle')  len = 2 * Math.PI * (parseFloat(el.getAttribute('r')) || 0);
+        else if (tag === 'ellipse') {
           const rx = parseFloat(el.getAttribute('rx')) || 0;
           const ry = parseFloat(el.getAttribute('ry')) || 0;
           const h = Math.pow((rx - ry) / ((rx + ry) || 1), 2);
           len = Math.PI * (rx + ry) * (1 + 3*h / (10 + Math.sqrt(4 - 3*h)));
         } else if (tag === 'rect') {
-          const w = parseFloat(el.getAttribute('width')) || 0;
-          const h = parseFloat(el.getAttribute('height')) || 0;
-          len = 2 * (w + h);
+          len = 2 * ((parseFloat(el.getAttribute('width'))||0) + (parseFloat(el.getAttribute('height'))||0));
         }
-      } catch (_) { /* getTotalLength puede fallar en paths inválidos */ }
-      if (len > 0.5) {
-        totalPx += len;
-        trazos++;
+      } catch (_) {}
+      if (len < 0.5) continue;
+
+      el.setAttribute('data-neon-idx', String(idx));
+      // Estilo de manguera: fill vacío, stroke del color, capsulado
+      el.style.fill = 'none';
+      el.style.stroke = color;
+      el.style.strokeWidth = strokeW;
+      el.style.strokeLinecap = 'round';
+      el.style.strokeLinejoin = 'round';
+      el.style.cursor = 'pointer';
+      el.style.transition = 'opacity .15s';
+
+      if (neonUI.excluded.has(idx)) {
+        el.setAttribute('data-neon-excluded', '1');
+        el.style.filter = 'none';
+      } else {
+        el.removeAttribute('data-neon-excluded');
+        el.style.filter = `url(#${filterId})`;
       }
+      el.onclick = _neonClickTrazo;
+      nuevos.push({ idx, lenPx: len, el });
+      idx++;
     }
   }
+  neonUI.trazos = nuevos;
 
-  // Convertir px → metros. Si no tenemos escala, dejamos el input como está
-  // y avisamos al usuario que capture el ancho real primero.
-  if (scaleCmPerPx > 0 && totalPx > 0) {
-    const lmMetros = (totalPx * scaleCmPerPx) / 100;
-    const inputLm = document.getElementById("neon-lm");
-    if (inputLm) inputLm.value = lmMetros.toFixed(2);
+  // Actualizar botones activos en la barra
+  document.querySelectorAll('#neon-viewer-bar [data-neon-mode]').forEach(b => {
+    b.classList.toggle('active', b.dataset.neonMode === neonUI.mode);
+  });
+  document.querySelectorAll('#neon-viewer-bar [data-neon-target]').forEach(b => {
+    b.classList.toggle('active', b.dataset.neonTarget === neonUI.target);
+  });
+}
 
-    // Dimensiones del bbox conjunto → llenar ancho/alto del neón (en cm)
-    if (svgPathsRaw.length > 0) {
-      const minX = Math.min(...svgPathsRaw.map(p => p.bbox.x));
-      const maxX = Math.max(...svgPathsRaw.map(p => p.bbox.x + p.bbox.w));
-      const minY = Math.min(...svgPathsRaw.map(p => p.bbox.y));
-      const maxY = Math.max(...svgPathsRaw.map(p => p.bbox.y + p.bbox.h));
-      document.getElementById("neon-ancho").value = ((maxX - minX) * scaleCmPerPx).toFixed(0);
-      document.getElementById("neon-alto").value  = ((maxY - minY) * scaleCmPerPx).toFixed(0);
-    }
-    showToast(`✨ Neón detectado: ${lmMetros.toFixed(2)} m sobre ${trazos} trazo${trazos===1?"":"s"}`, "ok");
+function _neonSetMode(mode) {
+  neonUI.mode = mode;
+  const svg = document.getElementById("svg-preview-box")?.querySelector("svg");
+  if (svg) _neonPintar(svg);
+}
+function _neonSetTarget(target) {
+  neonUI.target = target;
+  const svg = document.getElementById("svg-preview-box")?.querySelector("svg");
+  if (svg) _neonPintar(svg);
+}
+
+function _neonClickTrazo(e) {
+  const idx = parseInt(e.currentTarget.dataset.neonIdx);
+  if (isNaN(idx)) return;
+  if (neonUI.excluded.has(idx)) neonUI.excluded.delete(idx);
+  else                          neonUI.excluded.add(idx);
+  const svg = document.getElementById("svg-preview-box")?.querySelector("svg");
+  if (svg) _neonPintar(svg);
+  _neonRecalcularLm();
+  e.stopPropagation();
+}
+
+// Suma la longitud de todos los trazos NO excluidos (escalados a metros) y
+// llena #neon-lm. Actualiza también el badge de info en la barra del visor.
+function _neonRecalcularLm() {
+  const scale = neonUI.scaleCmPerPx;
+  const activos = neonUI.trazos.filter(t => !neonUI.excluded.has(t.idx));
+  const totalPx = activos.reduce((s, t) => s + t.lenPx, 0);
+  const info = document.getElementById("neon-viewer-info");
+  if (scale > 0 && totalPx > 0) {
+    const lm = (totalPx * scale) / 100;
+    const el = document.getElementById("neon-lm");
+    if (el) el.value = lm.toFixed(2);
+    if (info) info.innerHTML = `<b>${lm.toFixed(2)} m</b> · ${activos.length}/${neonUI.trazos.length} trazos`;
+    updateEstimacionLive();
+  } else if (info) {
+    info.textContent = `${activos.length}/${neonUI.trazos.length} trazos`;
+  }
+}
+
+// Alterna el body.neon-mode-viewer + barra visible según tipoActual.
+// Se llama desde setTipo() y al inicio si el usuario empieza en neón.
+function _neonUpdateChrome() {
+  const on = (tipoActual === "neon");
+  document.body.classList.toggle("neon-mode-viewer", on);
+  const bar = document.getElementById("neon-viewer-bar");
+  if (bar) bar.style.display = on ? "flex" : "none";
+  // El toggle Neón/Canal solo tiene sentido en modo 3D
+  const es3D = on && neonModoActual === "3d";
+  const tLbl = document.getElementById("neon-target-lbl");
+  const tGrp = document.getElementById("neon-target-group");
+  const tSep = document.getElementById("neon-target-sep");
+  if (tLbl) tLbl.style.display = es3D ? "" : "none";
+  if (tGrp) tGrp.style.display = es3D ? "flex" : "none";
+  if (tSep) tSep.style.display = es3D ? "" : "none";
+}
+
+// Corre después de subir un SVG con tipoActual='neon'. Auto-calcula Lm total,
+// aplica filtros neón realistas, wire click-to-exclude, llena inputs.
+function _neonAfterUpload() {
+  const svgEl = document.getElementById("svg-preview-box")?.querySelector("svg");
+  if (!svgEl) return;
+
+  // Reset del estado del visor (nueva subida = nuevo diseño, sin exclusiones)
+  neonUI.excluded.clear();
+  neonUI.mode = 'tube';
+
+  // Escala px → cm. Prioridad: artboard_w_cm del backend (si el SVG declara
+  // unidad física); fallback: input #ancho-real / viewBox width.
+  const anchoInput = parseFloat(document.getElementById("ancho-real")?.value) || 0;
+  neonUI.scaleCmPerPx = (svgArtboardWCm > 0 && svgViewboxW > 0)
+    ? (svgArtboardWCm / svgViewboxW)
+    : (anchoInput > 0 && svgViewboxW > 0 ? anchoInput / svgViewboxW : 0);
+
+  // Pinta filtros + marca data-neon-idx en cada trazo (poblará neonUI.trazos)
+  _neonPintar(svgEl);
+  _neonUpdateChrome();
+
+  // Dimensiones del bbox conjunto → llenar ancho/alto del neón (en cm)
+  if (neonUI.scaleCmPerPx > 0 && svgPathsRaw.length > 0) {
+    const minX = Math.min(...svgPathsRaw.map(p => p.bbox.x));
+    const maxX = Math.max(...svgPathsRaw.map(p => p.bbox.x + p.bbox.w));
+    const minY = Math.min(...svgPathsRaw.map(p => p.bbox.y));
+    const maxY = Math.max(...svgPathsRaw.map(p => p.bbox.y + p.bbox.h));
+    document.getElementById("neon-ancho").value = ((maxX - minX) * neonUI.scaleCmPerPx).toFixed(0);
+    document.getElementById("neon-alto").value  = ((maxY - minY) * neonUI.scaleCmPerPx).toFixed(0);
+  }
+
+  // Calcula Lm inicial (nada excluido) y lo mete en el input
+  _neonRecalcularLm();
+
+  const nTrazos = neonUI.trazos.length;
+  if (neonUI.scaleCmPerPx > 0) {
+    const lm = parseFloat(document.getElementById("neon-lm").value) || 0;
+    showToast(`✨ Neón detectado: ${lm.toFixed(2)} m sobre ${nTrazos} trazo${nTrazos===1?"":"s"}`, "ok");
   } else {
     showToast(`SVG cargado — captura el ancho real y recalcularé los metros`, "ok");
   }
@@ -3794,6 +4073,17 @@ function updateEstimacionLive() {
         el._chipWired = true;
       }
     });
+    // Cambio de perfil (color) → re-pinta el visor neón con el nuevo color
+    const selPerfil = document.getElementById("neon-perfil");
+    if (selPerfil && !selPerfil._neonWired) {
+      selPerfil.addEventListener("change", () => {
+        if (tipoActual === "neon") {
+          const svg = document.getElementById("svg-preview-box")?.querySelector("svg");
+          if (svg) _neonPintar(svg);
+        }
+      });
+      selPerfil._neonWired = true;
+    }
     updateEstimacionLive();
   };
   if (document.readyState === "loading") {
