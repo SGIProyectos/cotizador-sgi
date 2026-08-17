@@ -1235,7 +1235,12 @@
       "precio_m": 180,
       "watts_m": 8,
       "altura_min_cm": 5,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 2.5,
+      "radio_min_cm": 1.5,
+      "fpcb_offset_mm": 1.8,
+      "led_pitch_cm": 0.8,
+      "calibrado_taller": false
     },
     {
       "id": "mini-azul",
@@ -1244,7 +1249,12 @@
       "precio_m": 200,
       "watts_m": 8,
       "altura_min_cm": 5,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 2.5,
+      "radio_min_cm": 1.5,
+      "fpcb_offset_mm": 1.8,
+      "led_pitch_cm": 0.8,
+      "calibrado_taller": false
     },
     {
       "id": "mini-rojo",
@@ -1253,7 +1263,12 @@
       "precio_m": 200,
       "watts_m": 8,
       "altura_min_cm": 5,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 2.5,
+      "radio_min_cm": 1.5,
+      "fpcb_offset_mm": 1.8,
+      "led_pitch_cm": 0.8,
+      "calibrado_taller": false
     },
     {
       "id": "mini-verde",
@@ -1262,7 +1277,12 @@
       "precio_m": 200,
       "watts_m": 8,
       "altura_min_cm": 5,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 2.5,
+      "radio_min_cm": 1.5,
+      "fpcb_offset_mm": 1.8,
+      "led_pitch_cm": 0.8,
+      "calibrado_taller": false
     },
     {
       "id": "std-blanco",
@@ -1271,7 +1291,12 @@
       "precio_m": 240,
       "watts_m": 12,
       "altura_min_cm": 10,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 3.75,
+      "radio_min_cm": 3.0,
+      "fpcb_offset_mm": 2.5,
+      "led_pitch_cm": 1.25,
+      "calibrado_taller": false
     },
     {
       "id": "std-blancof",
@@ -1280,7 +1305,12 @@
       "precio_m": 240,
       "watts_m": 12,
       "altura_min_cm": 10,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 3.75,
+      "radio_min_cm": 3.0,
+      "fpcb_offset_mm": 2.5,
+      "led_pitch_cm": 1.25,
+      "calibrado_taller": false
     },
     {
       "id": "std-azul",
@@ -1289,7 +1319,12 @@
       "precio_m": 260,
       "watts_m": 12,
       "altura_min_cm": 10,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 3.75,
+      "radio_min_cm": 3.0,
+      "fpcb_offset_mm": 2.5,
+      "led_pitch_cm": 1.25,
+      "calibrado_taller": false
     },
     {
       "id": "std-rojo",
@@ -1298,7 +1333,12 @@
       "precio_m": 260,
       "watts_m": 12,
       "altura_min_cm": 10,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 3.75,
+      "radio_min_cm": 3.0,
+      "fpcb_offset_mm": 2.5,
+      "led_pitch_cm": 1.25,
+      "calibrado_taller": false
     },
     {
       "id": "std-rosa",
@@ -1307,7 +1347,12 @@
       "precio_m": 280,
       "watts_m": 12,
       "altura_min_cm": 10,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 3.75,
+      "radio_min_cm": 3.0,
+      "fpcb_offset_mm": 2.5,
+      "led_pitch_cm": 1.25,
+      "calibrado_taller": false
     },
     {
       "id": "std-morado",
@@ -1316,7 +1361,12 @@
       "precio_m": 280,
       "watts_m": 12,
       "altura_min_cm": 10,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 3.75,
+      "radio_min_cm": 3.0,
+      "fpcb_offset_mm": 2.5,
+      "led_pitch_cm": 1.25,
+      "calibrado_taller": false
     },
     {
       "id": "std-amarillo",
@@ -1325,7 +1375,12 @@
       "precio_m": 260,
       "watts_m": 12,
       "altura_min_cm": 10,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 3.75,
+      "radio_min_cm": 3.0,
+      "fpcb_offset_mm": 2.5,
+      "led_pitch_cm": 1.25,
+      "calibrado_taller": false
     },
     {
       "id": "std-verde",
@@ -1334,7 +1389,12 @@
       "precio_m": 260,
       "watts_m": 12,
       "altura_min_cm": 10,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 3.75,
+      "radio_min_cm": 3.0,
+      "fpcb_offset_mm": 2.5,
+      "led_pitch_cm": 1.25,
+      "calibrado_taller": false
     },
     {
       "id": "std-rgb",
@@ -1343,7 +1403,12 @@
       "precio_m": 420,
       "watts_m": 14,
       "altura_min_cm": 10,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 3.75,
+      "radio_min_cm": 3.0,
+      "fpcb_offset_mm": 2.5,
+      "led_pitch_cm": 1.25,
+      "calibrado_taller": false
     },
     {
       "id": "prem-blanco",
@@ -1352,7 +1417,12 @@
       "precio_m": 340,
       "watts_m": 16,
       "altura_min_cm": 15,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 5.0,
+      "radio_min_cm": 5.0,
+      "fpcb_offset_mm": 3.0,
+      "led_pitch_cm": 1.67,
+      "calibrado_taller": false
     },
     {
       "id": "prem-rgb",
@@ -1361,7 +1431,12 @@
       "precio_m": 580,
       "watts_m": 18,
       "altura_min_cm": 15,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 5.0,
+      "radio_min_cm": 5.0,
+      "fpcb_offset_mm": 3.0,
+      "led_pitch_cm": 1.67,
+      "calibrado_taller": false
     },
     {
       "id": "gen2-blanco",
@@ -1371,7 +1446,12 @@
       "watts_m": 10,
       "altura_min_cm": 8,
       "generacion": 2,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 2.5,
+      "radio_min_cm": 2.5,
+      "fpcb_offset_mm": 3.5,
+      "led_pitch_cm": 0.83,
+      "calibrado_taller": false
     },
     {
       "id": "gen2-blancof",
@@ -1381,7 +1461,12 @@
       "watts_m": 10,
       "altura_min_cm": 8,
       "generacion": 2,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 2.5,
+      "radio_min_cm": 2.5,
+      "fpcb_offset_mm": 3.5,
+      "led_pitch_cm": 0.83,
+      "calibrado_taller": false
     },
     {
       "id": "gen2-azul",
@@ -1391,7 +1476,12 @@
       "watts_m": 10,
       "altura_min_cm": 8,
       "generacion": 2,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 2.5,
+      "radio_min_cm": 2.5,
+      "fpcb_offset_mm": 3.5,
+      "led_pitch_cm": 0.83,
+      "calibrado_taller": false
     },
     {
       "id": "gen2-rojo",
@@ -1401,7 +1491,12 @@
       "watts_m": 10,
       "altura_min_cm": 8,
       "generacion": 2,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 2.5,
+      "radio_min_cm": 2.5,
+      "fpcb_offset_mm": 3.5,
+      "led_pitch_cm": 0.83,
+      "calibrado_taller": false
     },
     {
       "id": "gen2-rosa",
@@ -1411,7 +1506,12 @@
       "watts_m": 10,
       "altura_min_cm": 8,
       "generacion": 2,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 2.5,
+      "radio_min_cm": 2.5,
+      "fpcb_offset_mm": 3.5,
+      "led_pitch_cm": 0.83,
+      "calibrado_taller": false
     },
     {
       "id": "gen2-verde",
@@ -1421,7 +1521,12 @@
       "watts_m": 10,
       "altura_min_cm": 8,
       "generacion": 2,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 2.5,
+      "radio_min_cm": 2.5,
+      "fpcb_offset_mm": 3.5,
+      "led_pitch_cm": 0.83,
+      "calibrado_taller": false
     },
     {
       "id": "gen2-rgb",
@@ -1431,7 +1536,12 @@
       "watts_m": 14,
       "altura_min_cm": 12,
       "generacion": 2,
-      "activo": true
+      "activo": true,
+      "cut_step_cm": 5.0,
+      "radio_min_cm": 4.0,
+      "fpcb_offset_mm": 4.0,
+      "led_pitch_cm": 1.67,
+      "calibrado_taller": false
     }
   ],
   "neon_params": {

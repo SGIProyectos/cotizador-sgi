@@ -41,6 +41,8 @@ from catalog_data import (
 )
 from excel_gen import generar_xlsx
 from neon_calculator import NeonQuoteResult, cotizar_neon
+from neon_plano import construir_plan as construir_plan_neon
+from neon_plano import plan_a_dict as plan_neon_a_dict
 from pdf_gen import (
     generar_pdf,
     generar_pdf_entrega,
@@ -964,6 +966,62 @@ async def api_cotizar_neon(req: NeonRequest):
     _save_to_db(qid, folio, "neon", result, req, req.svg_text or "")
 
     return _neon_result_to_dict(result, qid)
+
+
+# ─── PLANO DE CONSTRUCCIÓN NEÓN (v0 skeleton — Manual §12) ───────────────────
+
+@app.get("/api/plano-neon/{quote_id}")
+async def api_plano_neon(quote_id: str):
+    """Devuelve el ManufacturingPlan JSON de un anuncio de neón cotizado.
+
+    Motor `neon_plano.construir_plan()` v0 (skeleton):
+      - 1 pieza por path SVG (no fusiona letras)
+      - Terminales en extremos de la polilínea (o seam point para cerrados)
+      - Uniones en cadena lineal por vecinos de bbox (no MST aún)
+      - Función de costo Manual §3.2 evaluada por cada unión
+
+    Iteraciones futuras (v1/v2) rellenan V_RELIEF_90, snap a cut_step_cm,
+    MST real, sin cambiar el shape del JSON de respuesta.
+    """
+    row = db.get_quote(quote_id) or {}
+    if row.get("tipo") != "neon":
+        raise HTTPException(404, "Esta cotización no es de neón LED")
+    svg_text = row.get("svg_text") or ""
+    if not svg_text:
+        raise HTTPException(404, "Esta cotización no tiene SVG para generar el plano")
+
+    try:
+        svg_data = parse_svg(svg_text.encode("utf-8"))
+    except Exception as e:
+        log.exception("plano-neon %s: parse_svg falló", quote_id)
+        raise HTTPException(500, f"Error parseando SVG: {e}") from e
+
+    # Perfil dominante: leído del request guardado (`params_json`)
+    params = row.get("params") or {}
+    perfil_id = params.get("perfil_id") or ""
+    perfil = next((p for p in NEON_PERFILES if p.get("id") == perfil_id), None)
+    if not perfil:
+        # Fallback: si el perfil ya no existe en el catálogo, usa std-blanco
+        perfil = next((p for p in NEON_PERFILES if p.get("id") == "std-blanco"),
+                      {"id": "std-blanco", "cut_step_cm": 3.75, "radio_min_cm": 3.0,
+                       "altura_min_cm": 10})
+
+    # Escala px→cm: prioridad al ancho_cm del request; fallback a artboard_w_cm
+    ancho_cm = float(params.get("ancho_cm") or 0)
+    if ancho_cm > 0 and svg_data.viewbox_w > 0:
+        escala = ancho_cm / svg_data.viewbox_w
+    elif svg_data.artboard_w_cm > 0 and svg_data.viewbox_w > 0:
+        escala = svg_data.artboard_w_cm / svg_data.viewbox_w
+    else:
+        escala = 1.0
+        log.warning("plano-neon %s: sin escala real, usando 1cm/px", quote_id)
+
+    plan = construir_plan_neon(
+        svg_data.paths,
+        perfil=perfil,
+        escala_cm_por_px=escala,
+    )
+    return plan_neon_a_dict(plan)
 
 
 # ─── HISTORIAL DE COTIZACIONES ───────────────────────────────────────────────

@@ -2050,7 +2050,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
       </div>
       <span class="brand__name">SGI Cotizador</span>
-      <span class="brand__v" id="brand-version">v1.26.4</span>
+      <span class="brand__v" id="brand-version">v1.27.0-alpha</span>
     </div>
     <div class="crumbs" id="topbar-crumbs">
       <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
@@ -2140,7 +2140,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.26.4</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.27.0-alpha</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -7254,6 +7254,10 @@ function renderResultNeon(d) {
            onclick="return abrirModalEntrega('${d.quote_id}', ${d.precio_final})"
            style="background:#2e7d32"
            title="Acta de entrega + garantía 3 meses">✅ Acta Entrega</a>
+        <a class="btn-pdf" href="#"
+           onclick="abrirPlanoNeon('${d.quote_id}');return false"
+           style="background:#7c3aed"
+           title="Plano de construcción — piezas, uniones, cable, técnicas">🛠️ Plano Construcción</a>
       </div>
     </div>
 
@@ -15288,6 +15292,211 @@ window.v3d_snapshot = function(targetW = 2200, opts = {}) {
 
   </div>
 </div>
+
+<!-- ══════════════════ MODAL · PLANO DE CONSTRUCCIÓN NEÓN ══════════════════ -->
+<style>
+  #pn-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9500;display:none;
+              align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 12px}
+  #pn-overlay.open{display:flex}
+  #pn-box{background:#eef1f5;color:#1a2b4a;border-radius:10px;max-width:1180px;width:100%;
+          box-shadow:0 12px 32px rgba(0,0,0,.5);font-family:'IBM Plex Sans',system-ui,sans-serif;overflow:hidden}
+  #pn-head{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;
+           background:#1a2b4a;color:#fff}
+  #pn-head h3{font-size:15px;margin:0;font-weight:600}
+  #pn-head .tag{font-family:'JetBrains Mono',monospace;font-size:11px;color:#fbbf24;
+                background:rgba(251,191,36,.12);padding:2px 8px;border-radius:4px;margin-left:10px}
+  #pn-close{background:transparent;border:1px solid #4a5c78;color:#fff;padding:4px 10px;
+            border-radius:4px;cursor:pointer;font-size:13px}
+  #pn-close:hover{background:#4a5c78}
+  #pn-body{padding:18px;display:grid;grid-template-columns:1.4fr 1fr;gap:16px}
+  #pn-body .card{background:#fff;border:1px solid #c8d4e8;border-radius:8px;padding:12px}
+  #pn-body .card h4{font-size:11px;font-weight:700;color:#4a5568;text-transform:uppercase;
+                    letter-spacing:.06em;margin:0 0 8px}
+  #pn-svg-wrap{background:#f8fafc;border:1px solid #d5dde8;border-radius:6px;padding:10px;min-height:280px}
+  #pn-svg-wrap svg{display:block;width:100%;height:auto;max-height:420px}
+  #pn-body table{width:100%;border-collapse:collapse;font-size:11.5px}
+  #pn-body th,#pn-body td{padding:5px 8px;border-bottom:1px solid #e5e9f0;text-align:left}
+  #pn-body th{background:#eef1f5;color:#4a5568;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+  #pn-body td.num{text-align:right;font-family:'JetBrains Mono',monospace}
+  #pn-body .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+  #pn-body .metric{background:#f8fafc;border:1px solid #d5dde8;border-radius:6px;padding:8px 10px}
+  #pn-body .metric .k{font-size:9.5px;color:#6b7d9c;text-transform:uppercase;letter-spacing:.04em}
+  #pn-body .metric .v{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#1a2b4a}
+  #pn-warns{margin-top:10px;padding:8px 10px;border-radius:6px;background:#fef3c7;border:1px solid #fbbf24;
+            font-size:11.5px;color:#78350f;display:none}
+  #pn-warns.on{display:block}
+  #pn-warns b{color:#78350f}
+  .pn-u-mark{fill:#dc2626;stroke:#fff;stroke-width:1.5}
+  .pn-u-label{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;fill:#fff;
+              text-anchor:middle;dominant-baseline:central;pointer-events:none}
+  .pn-u-cable{stroke:#dc2626;stroke-width:1.5;stroke-dasharray:3 2;fill:none;opacity:.9}
+  .pn-piece{fill:none;stroke:#0284c7;stroke-width:2}
+  .pn-piece.closed{stroke:#7c3aed}
+  .pn-piece.warn{stroke:#f59e0b}
+  .pn-piece-lbl{font-family:'JetBrains Mono',monospace;font-size:10px;fill:#4a5568}
+</style>
+<div id="pn-overlay">
+  <div id="pn-box">
+    <div id="pn-head">
+      <div><h3>🛠️ Plano de construcción neón LED</h3>
+        <span id="pn-tag" class="tag">cargando…</span></div>
+      <button id="pn-close" onclick="cerrarPlanoNeon()">Cerrar ✕</button>
+    </div>
+    <div id="pn-body">
+      <div>
+        <div class="card">
+          <h4>🖼️ Vista frontal</h4>
+          <div id="pn-svg-wrap"></div>
+          <div style="margin-top:8px;font-size:10.5px;color:#6b7d9c">
+            <span style="color:#0284c7">▬</span> pieza abierta ·
+            <span style="color:#7c3aed">▬</span> pieza cerrada (seam) ·
+            <span style="color:#dc2626">●</span> unión eléctrica ·
+            <span style="color:#dc2626">┈</span> cable posterior
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="metrics" id="pn-metrics"></div>
+        <div class="card" style="margin-bottom:10px">
+          <h4>📋 Piezas físicas</h4>
+          <table><thead><tr><th>ID</th><th>Técnica</th><th>Cerrado</th><th style="text-align:right">Long.</th></tr></thead>
+          <tbody id="pn-piezas"></tbody></table>
+        </div>
+        <div class="card">
+          <h4>🔗 Uniones eléctricas</h4>
+          <table><thead><tr><th>U</th><th>Técnica</th><th style="text-align:right">Cable</th><th style="text-align:right">Costo</th></tr></thead>
+          <tbody id="pn-uniones"></tbody></table>
+        </div>
+        <div id="pn-warns"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+async function abrirPlanoNeon(qid) {
+  const ov = document.getElementById('pn-overlay');
+  document.getElementById('pn-tag').textContent = 'cargando…';
+  document.getElementById('pn-svg-wrap').innerHTML = '<div style="padding:60px 0;text-align:center;color:#6b7d9c">Calculando plan…</div>';
+  document.getElementById('pn-metrics').innerHTML = '';
+  document.getElementById('pn-piezas').innerHTML = '';
+  document.getElementById('pn-uniones').innerHTML = '';
+  document.getElementById('pn-warns').className = '';
+  ov.classList.add('open');
+
+  let plan;
+  try {
+    const r = await fetch(`/api/plano-neon/${qid}`);
+    if (!r.ok) throw new Error(await r.text());
+    plan = await r.json();
+  } catch (e) {
+    document.getElementById('pn-svg-wrap').innerHTML =
+      `<div style="padding:40px 20px;color:#dc2626;font-size:13px">
+         Error cargando el plano: ${String(e).slice(0,200)}<br><br>
+         <small>El endpoint /api/plano-neon requiere que la cotización tenga SVG persistido.</small>
+       </div>`;
+    document.getElementById('pn-tag').textContent = 'error';
+    return;
+  }
+
+  const m = plan.metricas || {};
+  document.getElementById('pn-tag').textContent =
+    `${m.num_piezas||0} piezas · ${m.num_uniones||0} uniones · ${m.longitud_neon_total_m||0} m neón · v0`;
+
+  const metricEls = [
+    ['Longitud neón', (m.longitud_neon_total_m||0).toFixed(2) + ' m'],
+    ['Cable total', (m.cable_total_cm||0).toFixed(1) + ' cm'],
+    ['Soldaduras', m.num_soldaduras||0],
+    ['Seam points', m.num_seam_points||0],
+    ['Perforaciones', m.num_perforaciones||0],
+    ['Oculto (target 1.0)', (m.hidden_ratio_global||0).toFixed(2)],
+  ].map(([k,v]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  document.getElementById('pn-metrics').innerHTML = metricEls;
+
+  document.getElementById('pn-piezas').innerHTML = (plan.piezas||[]).map(p =>
+    `<tr>
+       <td><b>${p.id}</b></td>
+       <td style="font-size:10.5px">${p.tecnica_dominante}</td>
+       <td>${p.is_closed?'✓':'—'}</td>
+       <td class="num">${p.longitud_cm.toFixed(1)} cm</td>
+     </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#6b7d9c">Sin piezas detectadas</td></tr>';
+
+  document.getElementById('pn-uniones').innerHTML = (plan.uniones||[]).map(u =>
+    `<tr>
+       <td><b>${u.id}</b></td>
+       <td style="font-size:10.5px">${u.tecnica}</td>
+       <td class="num">${u.cable_cm.toFixed(1)} cm</td>
+       <td class="num">${u.costo.toFixed(1)}</td>
+     </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#6b7d9c">Sin uniones (1 pieza continua)</td></tr>';
+
+  const warns = plan.warnings || [];
+  if (warns.length) {
+    document.getElementById('pn-warns').className = 'on';
+    document.getElementById('pn-warns').innerHTML =
+      `<b>⚠️ Advertencias:</b><ul style="margin:6px 0 0 18px">` +
+      warns.map(w => `<li>${w}</li>`).join('') + `</ul>`;
+  }
+
+  // Render SVG del plan: bbox de cada pieza + terminales + uniones
+  const piezas = plan.piezas || [];
+  const terms  = plan.terminales || [];
+  const unions = plan.uniones || [];
+  const rutas  = plan.rutas_ocultas || [];
+  if (!piezas.length) {
+    document.getElementById('pn-svg-wrap').innerHTML =
+      '<div style="padding:60px 0;text-align:center;color:#6b7d9c">Sin piezas para dibujar</div>';
+    return;
+  }
+
+  // Calcular bbox global (en coords SVG del cliente)
+  const xs = piezas.flatMap(p => [p.bbox_svg.x, p.bbox_svg.x + p.bbox_svg.w]);
+  const ys = piezas.flatMap(p => [p.bbox_svg.y, p.bbox_svg.y + p.bbox_svg.h]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  const y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const pad = Math.max((x1-x0), (y1-y0)) * 0.08;
+  const vbW = (x1 - x0) + pad*2;
+  const vbH = (y1 - y0) + pad*2;
+  const vb  = `${x0-pad} ${y0-pad} ${vbW} ${vbH}`;
+
+  const termMap = Object.fromEntries(terms.map(t => [t.id, t]));
+
+  const piezaShapes = piezas.map(p => {
+    const cls = p.warnings.length ? 'pn-piece warn'
+              : p.is_closed ? 'pn-piece closed' : 'pn-piece';
+    return `<rect class="${cls}" x="${p.bbox_svg.x}" y="${p.bbox_svg.y}"
+             width="${p.bbox_svg.w}" height="${p.bbox_svg.h}" rx="4"/>
+            <text class="pn-piece-lbl" x="${p.bbox_svg.x+3}" y="${p.bbox_svg.y-3}">${p.id}</text>`;
+  }).join('');
+
+  const cables = unions.map(u => {
+    const a = termMap[u.terminal_a], b = termMap[u.terminal_b];
+    if (!a || !b) return '';
+    return `<line class="pn-u-cable" x1="${a.coord_svg[0]}" y1="${a.coord_svg[1]}"
+             x2="${b.coord_svg[0]}" y2="${b.coord_svg[1]}"/>`;
+  }).join('');
+
+  const marcas = unions.map(u => {
+    const a = termMap[u.terminal_a], b = termMap[u.terminal_b];
+    if (!a || !b) return '';
+    const num = u.id.replace('U-','').replace(/^0+/, '') || u.id;
+    const r = Math.max(vbW, vbH) * 0.012;
+    return `<circle class="pn-u-mark" cx="${a.coord_svg[0]}" cy="${a.coord_svg[1]}" r="${r}"/>
+            <text class="pn-u-label" x="${a.coord_svg[0]}" y="${a.coord_svg[1]}">${num}</text>
+            <circle class="pn-u-mark" cx="${b.coord_svg[0]}" cy="${b.coord_svg[1]}" r="${r}"/>
+            <text class="pn-u-label" x="${b.coord_svg[0]}" y="${b.coord_svg[1]}">${num}</text>`;
+  }).join('');
+
+  document.getElementById('pn-svg-wrap').innerHTML =
+    `<svg viewBox="${vb}" xmlns="http://www.w3.org/2000/svg">
+       ${piezaShapes}${cables}${marcas}
+     </svg>`;
+}
+function cerrarPlanoNeon() {
+  document.getElementById('pn-overlay').classList.remove('open');
+}
+document.getElementById('pn-overlay').addEventListener('click', e => {
+  if (e.target.id === 'pn-overlay') cerrarPlanoNeon();
+});
+</script>
 
 </body>
 </html>

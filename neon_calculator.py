@@ -576,6 +576,41 @@ NEON_PERFILES_DEFAULTS: list[dict] = [
     {"id": "gen2-rgb",     "nombre": "Neón 2ª gen · silicona 16mm", "color": "RGB direccionable", "precio_m": 620, "watts_m": 14, "altura_min_cm": 12, "generacion": 2, "activo": True},
 ]
 
+# ── Constantes técnicas por familia (calibradas contra fichas de industria —
+# NO verificadas en taller SGI todavía; marcadas `calibrado_taller=False` en
+# cada perfil hasta cronometrar 3 piezas reales, mismo patrón que ICF).
+#
+# Estos 4 campos gobiernan el PLANEADOR de construcción (neon_plano.py) —
+# no el motor de costos:
+#
+#   cut_step_cm    — cada X cm hay una marca de corte real en la tira. Los
+#                    terminales SVG se proyectan al múltiplo más cercano.
+#   radio_min_cm   — radio de doblez mínimo sin dañar FPCB. Curvaturas más
+#                    cerradas fuerzan V_RELIEF_90 o cambio de perfil.
+#   fpcb_offset_mm — distancia del borde silicona a la pista FPCB interna.
+#                    Si el corte parcial (SILICONE_RELIEF, V_RELIEF_90) puede
+#                    alcanzar la pista → técnica bloqueada, revisión manual.
+#   led_pitch_cm   — espaciado entre LEDs internos. Define la resolución
+#                    máxima del despiece (no tiene sentido cortar más fino).
+#
+# Referencias: Manual §4 (SEGURIDAD), Cuaderno microtécnicas B/D (registro
+# fpcb_clearance), y datasheets estándar Amateras/NeonLux/Signalux 2026.
+_NEON_TECNICOS_POR_FAMILIA: dict[str, dict] = {
+    "mini": {"cut_step_cm": 2.5,  "radio_min_cm": 1.5, "fpcb_offset_mm": 1.8, "led_pitch_cm": 0.80},
+    "std":  {"cut_step_cm": 3.75, "radio_min_cm": 3.0, "fpcb_offset_mm": 2.5, "led_pitch_cm": 1.25},
+    "prem": {"cut_step_cm": 5.0,  "radio_min_cm": 5.0, "fpcb_offset_mm": 3.0, "led_pitch_cm": 1.67},
+    "gen2": {"cut_step_cm": 2.5,  "radio_min_cm": 2.5, "fpcb_offset_mm": 3.5, "led_pitch_cm": 0.83},
+}
+_NEON_TECNICOS_OVERRIDES: dict[str, dict] = {
+    # 2ª gen 16mm RGB es notablemente más grueso — radios y offsets suben
+    "gen2-rgb": {"cut_step_cm": 5.0, "radio_min_cm": 4.0, "fpcb_offset_mm": 4.0, "led_pitch_cm": 1.67},
+}
+for _p in NEON_PERFILES_DEFAULTS:
+    _fam = _p["id"].split("-", 1)[0]
+    _p.update(_NEON_TECNICOS_POR_FAMILIA.get(_fam, _NEON_TECNICOS_POR_FAMILIA["std"]))
+    _p.update(_NEON_TECNICOS_OVERRIDES.get(_p["id"], {}))
+    _p.setdefault("calibrado_taller", False)
+
 
 NEON_PARAMS_DEFAULTS: dict = {
     # Insumos por metro lineal
