@@ -2050,7 +2050,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
       </div>
       <span class="brand__name">SGI Cotizador</span>
-      <span class="brand__v" id="brand-version">v1.27.0-alpha</span>
+      <span class="brand__v" id="brand-version">v1.27.1</span>
     </div>
     <div class="crumbs" id="topbar-crumbs">
       <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
@@ -2140,7 +2140,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.27.0-alpha</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.27.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -3650,19 +3650,24 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
           </div>
         </div>
 
-        <!-- Paso 2: Modo de fabricación -->
+        <!-- Paso 2: Modo de fabricación + Método de fijación (v1.27.1) -->
         <div class="cfg-step">
           <div class="cfg-step-label"><span class="cfg-step-num">2</span>¿Cómo se fabrica la base?</div>
           <div class="cfg-cards" id="cfg-neon-modo-cards">
             <div class="cfg-card active" data-val="lamina" onclick="selectCfgCard(this,'cfg-neon-modo-cards');_cfgNeonOnModoChange()">
               <div class="cfg-card-icon">📄</div>
-              <div class="cfg-card-name">Lámina cortada</div>
-              <div class="cfg-card-desc">Tradicional · base plana con la manguera pegada</div>
+              <div class="cfg-card-name">Lámina + manguera pegada</div>
+              <div class="cfg-card-desc">Base plana · la manguera se pega encima con adhesivo · 1ª generación</div>
+            </div>
+            <div class="cfg-card" data-val="ruteada" onclick="selectCfgCard(this,'cfg-neon-modo-cards');_cfgNeonOnModoChange()">
+              <div class="cfg-card-icon">🔩</div>
+              <div class="cfg-card-name">Lámina ruteada CNC</div>
+              <div class="cfg-card-desc">Base con canal fresado en CNC · manguera empotrada · obligatorio para 2ª gen</div>
             </div>
             <div class="cfg-card" data-val="3d" onclick="selectCfgCard(this,'cfg-neon-modo-cards');_cfgNeonOnModoChange()">
               <div class="cfg-card-icon">🖨️</div>
               <div class="cfg-card-name">3D Signflex</div>
-              <div class="cfg-card-desc">Canal PETG impreso 3D siguiendo el trazo · sin base</div>
+              <div class="cfg-card-desc">Canal PETG impreso 3D siguiendo el trazo · sin base · solo 1ª gen</div>
             </div>
           </div>
         </div>
@@ -3983,6 +3988,11 @@ function setTipo(tipo, btn) {
 // Estado del modo de fabricación del neón (lamina|3d). Se guarda aparte para
 // que setTipo y calcular() puedan consultarlo sin depender del DOM.
 let neonModoActual = "lamina";
+// (v1.27.1) Método de fijación de la manguera al respaldo.
+//   "pegada"  → base plana + adhesivo (1ª gen)
+//   "ruteada" → base con canal CNC + manguera empotrada (obligatorio 2ª gen)
+// Solo aplica cuando neonModoActual === "lamina".
+let neonMetodoFijacion = "pegada";
 
 // ══════════════════ MODAL CONFIGURADOR NEÓN ══════════════════════════════
 // Wizard tipo letras 3D — todas las opciones que afectan el precio en una
@@ -4111,11 +4121,22 @@ async function _cfgNeonSyncDesdeSidebar() {
 function _cfgNeonAplicar() {
   const $ = id => document.getElementById(id);
   const gen  = _cfgCardVal("cfg-neon-gen-cards") || "1";
-  const modo = _cfgCardVal("cfg-neon-modo-cards") || "lamina";
+  const modoWiz = _cfgCardVal("cfg-neon-modo-cards") || "lamina";
   const aprov = _cfgCardVal("cfg-neon-aprov-cards") || "";
 
-  // Modo (lamina|3d) → estado global + toggles UI del sidebar
+  // (v1.27.1) Mapeo del wizard (3 opciones) → 2 vars del sidebar:
+  //   "lamina"  → modo=lamina  + fijacion=pegada
+  //   "ruteada" → modo=lamina  + fijacion=ruteada  (dispara ranurado CNC)
+  //   "3d"      → modo=3d      + fijacion=pegada  (irrelevante, no aplica)
+  let modo = "lamina", metodoFij = "pegada";
+  if (modoWiz === "ruteada")   { modo = "lamina"; metodoFij = "ruteada"; }
+  else if (modoWiz === "3d")   { modo = "3d";     metodoFij = "pegada"; }
+  else                          { modo = "lamina"; metodoFij = "pegada"; }
+  // 2ª gen fuerza ruteada — cinturón + tirantes (motor también lo valida)
+  if (gen === "2") metodoFij = "ruteada";
+
   neonModoActual = modo;
+  neonMetodoFijacion = metodoFij;
   document.querySelectorAll("#neon-modo-btns .tipo-btn").forEach(b => {
     b.classList.toggle("active", b.dataset.neonModo === modo);
   });
@@ -4188,20 +4209,32 @@ function _cfgNeonOnGenChange() {
   const gen = _cfgCardVal("cfg-neon-gen-cards") || "1";
   const aviso = document.getElementById("cfg-neon-gen2-aviso");
 
-  // Bloquear/desbloquear card de modo 3D según la gen
-  const modo3dCard = document.querySelector('#cfg-neon-modo-cards [data-val="3d"]');
-  if (modo3dCard) {
-    const bloquear = (gen === "2");
-    modo3dCard.style.opacity = bloquear ? "0.35" : "";
-    modo3dCard.style.pointerEvents = bloquear ? "none" : "";
-    modo3dCard.title = bloquear ? "3D Signflex solo aplica a 1ª generación" : "";
-    if (bloquear && modo3dCard.classList.contains("active")) {
-      // Si estaba en 3D, forzar a lámina
-      modo3dCard.classList.remove("active");
-      const lamCard = document.querySelector('#cfg-neon-modo-cards [data-val="lamina"]');
-      if (lamCard) lamCard.classList.add("active");
+  // (v1.27.1) 3 tarjetas de fabricación: pegada | ruteada | 3d.
+  // - gen 1 → las 3 disponibles (default: pegada)
+  // - gen 2 → SIEMPRE ruteada (silicona no se pega); pegada y 3d bloqueadas
+  const cardPegada  = document.querySelector('#cfg-neon-modo-cards [data-val="lamina"]');
+  const cardRuteada = document.querySelector('#cfg-neon-modo-cards [data-val="ruteada"]');
+  const cardTresD   = document.querySelector('#cfg-neon-modo-cards [data-val="3d"]');
+  const setBlock = (card, block, title) => {
+    if (!card) return;
+    card.style.opacity = block ? "0.35" : "";
+    card.style.pointerEvents = block ? "none" : "";
+    card.title = block ? title : "";
+  };
+  if (gen === "2") {
+    setBlock(cardPegada,  true, "2ª generación no se pega — va empotrada en canal ruteado");
+    setBlock(cardTresD,   true, "3D Signflex solo aplica a 1ª generación");
+    setBlock(cardRuteada, false, "");
+    // Auto-activar ruteada si no lo estaba
+    if (cardRuteada && !cardRuteada.classList.contains("active")) {
+      [cardPegada, cardTresD].forEach(c => c && c.classList.remove("active"));
+      cardRuteada.classList.add("active");
       _cfgNeonOnModoChange();
     }
+  } else {
+    setBlock(cardPegada,  false, "");
+    setBlock(cardRuteada, false, "");
+    setBlock(cardTresD,   false, "");
   }
 
   // Aviso 2ª gen (visible siempre que gen=2, se completa con estado de la base)
@@ -4270,11 +4303,14 @@ function _cfgNeonOnGenChange() {
 }
 
 function _cfgNeonOnModoChange() {
+  // (v1.27.1) 3 valores: "lamina" (pegada), "ruteada" (CNC), "3d" (Signflex).
+  // "lamina" y "ruteada" ambos requieren el paso de base (paso 5).
   const modo = _cfgCardVal("cfg-neon-modo-cards") || "lamina";
+  const usaBase = (modo === "lamina" || modo === "ruteada");
   const pasoBase = document.getElementById("cfg-neon-paso-base");
   const paso3d   = document.getElementById("cfg-neon-paso-3d");
-  if (pasoBase) pasoBase.style.display = (modo === "lamina") ? "" : "none";
-  if (paso3d)   paso3d.style.display   = (modo === "3d")     ? "" : "none";
+  if (pasoBase) pasoBase.style.display = usaBase   ? "" : "none";
+  if (paso3d)   paso3d.style.display   = (modo === "3d") ? "" : "none";
 
   // Modo 3D fuerza 1ª generación (Signflex es proceso de 1ª gen)
   if (modo === "3d") {
@@ -4291,13 +4327,33 @@ function _cfgNeonOnModoChange() {
       _cfgNeonOnGenChange();
     }
   } else {
-    // Volver a lámina — habilitar card de 2ª gen
+    // Volver a lámina/ruteada — habilitar card de 2ª gen
     const gen2Card = document.querySelector('#cfg-neon-gen-cards [data-val="2"]');
     if (gen2Card) {
       gen2Card.style.opacity = "";
       gen2Card.style.pointerEvents = "";
       gen2Card.title = "";
     }
+  }
+
+  // Modo "ruteada" filtra bases a solo acrílicos (el CNC solo tiene sentido ahí)
+  if (modo === "ruteada") _cfgNeonFiltrarBasesAcrilico(true);
+  else                    _cfgNeonFiltrarBasesAcrilico(false);
+}
+
+function _cfgNeonFiltrarBasesAcrilico(soloAcrilico) {
+  // Marca visualmente las bases no-acrílicas (no las borra, solo las diseña
+  // como "no compatible"). Reusa el mismo patrón que 2ª gen (~línea 4258).
+  const sel = document.getElementById("cfg-neon-base");
+  if (!sel) return;
+  Array.from(sel.options).forEach(o => {
+    const esAcr = /acr/i.test(o.value) || /acr[íi]lico/i.test(o.textContent);
+    o.disabled = soloAcrilico && !esAcr && o.value !== "";
+  });
+  // Si la seleccionada quedó deshabilitada, saltar a la primera compatible
+  if (sel.selectedOptions[0]?.disabled) {
+    const first = Array.from(sel.options).find(o => !o.disabled && o.value);
+    if (first) { sel.value = first.value; sel.dispatchEvent(new Event("change")); }
   }
 }
 
@@ -6839,6 +6895,7 @@ async function calcular() {
         ancho_cm:      parseFloat(document.getElementById("neon-ancho").value)   || 0,
         alto_cm:       parseFloat(document.getElementById("neon-alto").value)    || 0,
         modo_fabricacion: neonModoActual,
+        metodo_fijacion:  neonMetodoFijacion,  // v1.27.1
         base_id:       document.getElementById("neon-base").value    || "acr-3-tr",
         forma_id:      document.getElementById("neon-forma").value   || "rect",
         incluir_soporte:    !!document.getElementById("neon-soporte").checked,
@@ -7170,7 +7227,10 @@ function renderResultNeon(d) {
   const $ = n => (Number(n) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 });
   const t = d.totales, n = d.neon, dim = d.dimensiones;
   const es3D = d.modo_fabricacion === '3d';
-  const modoLabel = es3D ? '🖨️ Impresión 3D · canal PETG' : '📄 Lámina cortada';
+  const esRuteada = d.metodo_fijacion === 'ruteada';
+  const modoLabel = es3D ? '🖨️ Impresión 3D · canal PETG'
+                    : esRuteada ? '🔩 Lámina ruteada CNC · manguera empotrada'
+                                : '📄 Lámina + manguera pegada';
   // Detectar generación desde los insumos (partida "Neón LED · ... silicona")
   const esGen2 = (d.insumos || []).some(x => /silicona|2ª gen/i.test(x.concepto || ""));
   const genLabel = esGen2 ? "⚡ 2ª generación · silicona sobre acrílico ranurado"
@@ -7238,6 +7298,14 @@ function renderResultNeon(d) {
                   border-radius:999px;margin-bottom:8px">
         ${genLabel}
       </div>
+      ${(d.warnings && d.warnings.length) ? `
+      <div style="margin:8px 0 12px;padding:10px 14px;background:#fef3c7;border-left:4px solid #f59e0b;
+                  border-radius:6px;font-size:12px;color:#78350f">
+        <b>⚠️ Ajustes automáticos del motor:</b>
+        <ul style="margin:6px 0 0 18px;padding:0">
+          ${d.warnings.map(w => `<li>${w}</li>`).join('')}
+        </ul>
+      </div>` : ''}
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px;margin-bottom:6px">
         <input id="pdf-cliente" type="text" placeholder="Cliente (opcional)" style="height:30px;font-size:12px">
         <input id="pdf-notas" type="text" placeholder="Notas para los documentos (opcional)" style="height:30px;font-size:12px">

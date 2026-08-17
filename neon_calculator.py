@@ -14,7 +14,6 @@ FastAPI y desde los tests pytest sin fixtures externos.
 """
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -109,6 +108,18 @@ class NeonQuoteResult:
     iva: float = 0.0
     precio_iva: float = 0.0
 
+    # Método de fijación de la manguera al respaldo (v1.27.1)
+    #   "pegada":  base plana + manguera pegada con adhesivo (1ª gen tradicional)
+    #   "ruteada": base con canal fresado CNC + manguera empotrada (obligatorio 2ª gen)
+    # Cuando metodo=="ruteada" el motor aplica ranurado_cnc_mult sobre el corte
+    # externo (ya no depende de gen — un cliente premium puede ruteada con 1ª gen).
+    metodo_fijacion: str = "pegada"
+
+    # Warnings de validación (v1.27.1) — motivos por los que el motor cambió
+    # algo automáticamente, o cosas que el usuario debe revisar antes de vender.
+    warnings: list[str] = field(default_factory=list)
+    fuente_auto_upgraded_desde: str = ""   # nombre de la fuente original si hubo upgrade
+
     # Aliases requeridos por el ciclo de instalación de main._apply_instalacion
     # (por consistencia con los otros tipos que usan precio_venta_sugerido +
     # inst_total = precio_final).
@@ -162,7 +173,16 @@ def cotizar_neon(
     b_mat = (base or {}).get("material") or {"nombre": "Sin base", "precio_m2": 0}
     b_for = (base or {}).get("forma")    or {"nombre": "Rectangular", "factor_area": 1, "corte_m": 0}
     modo_fab = "3d" if (base or {}).get("modo_fabricacion") == "3d" else "lamina"
+    # Método de fijación (v1.27.1). Solo aplica cuando modo=="lamina":
+    #   "pegada" (default) o "ruteada" (CNC — obligatorio para 2ª gen).
+    metodo_fij_in = (base or {}).get("metodo_fijacion") or "pegada"
+    if metodo_fij_in not in ("pegada", "ruteada"):
+        metodo_fij_in = "pegada"
     cfg3d = p.get("fab3d") or NEON_PARAMS_DEFAULTS["fab3d"]
+
+    # Warnings acumulados durante la cotización (para trazabilidad al UI/PDF).
+    warnings: list[str] = []
+    fuente_auto_upgraded_desde = ""
 
     # Fuente: si no viene, toma la primera activa del catálogo, o un fallback mínimo.
     F = fuente
@@ -190,11 +210,44 @@ def cotizar_neon(
     un = max(0, int(_num(uniones, 0)))
     watts_total = sum(t["Lm"] * _num(t["perfil"].get("watts_m"), 0) for t in g_tramos)
 
-    # ── Fuentes de poder (dimensionamiento por watts) ─────────────────────────
-    cap_fuente = _num(F.get("watts"), 0) * _num(p.get("fuente_factor"), 0.8)
-    if cap_fuente > 0:
-        min_fuentes = 1 if L > 0 else 0
-        num_fuentes = max(min_fuentes, math.ceil(watts_total / cap_fuente))
+    # ── Fuentes de poder (dimensionamiento por watts, v1.27.1) ────────────────
+    # Regla nueva: SIEMPRE 1 unidad. Si la fuente seleccionada no aguanta,
+    # auto-upgrade al siguiente dispositivo del MISMO TIPO que sí aguante.
+    # Si ninguno del tipo aguanta, warning explícito (nunca multiplicar unidades).
+    # Motivación: nadie vende un letrero con "10 × Pila 9V" ni "2 × Fuente 100W";
+    # o pones la fuente correcta o le avisas al usuario.
+    factor_seg = _num(p.get("fuente_factor"), 0.8)
+    watts_necesarios = watts_total / factor_seg if factor_seg > 0 else watts_total
+    if L > 0 and watts_necesarios > 0:
+        cap_actual = _num(F.get("watts"), 0)
+        if cap_actual < watts_necesarios:
+            tipo_F = F.get("tipo", "fuente")
+            todas_activas = [c for c in (p.get("fuentes") or [])
+                             if c.get("activo") is not False
+                             and _num(c.get("watts"), 0) >= watts_necesarios]
+            # Preferir mismo tipo; si no hay del tipo que aguante, cualquier tipo.
+            del_tipo = [c for c in todas_activas if c.get("tipo") == tipo_F]
+            candidatas = del_tipo or todas_activas
+            if candidatas:
+                upgrade = min(candidatas, key=lambda c: _num(c.get("watts"), 0))
+                fuente_auto_upgraded_desde = F.get("nombre", "")
+                cambio_de_tipo = upgrade.get("tipo") != tipo_F
+                F = upgrade
+                nota_tipo = f" (cambio de tipo: {tipo_F} → {upgrade.get('tipo')})" if cambio_de_tipo else ""
+                warnings.append(
+                    f"Fuente auto-upgrade: {fuente_auto_upgraded_desde} "
+                    f"({cap_actual:g}W) no cubre {watts_total:.1f}W - "
+                    f"cambiado a {F.get('nombre', '?')} ({_num(F.get('watts'), 0):g}W)"
+                    f"{nota_tipo}"
+                )
+            else:
+                # Ni siquiera el mayor del catálogo aguanta — mantén el actual y avisa.
+                warnings.append(
+                    f"Ningun dispositivo del catalogo cubre {watts_total:.1f}W en "
+                    f"1 unidad (maximo: {max((_num(c.get('watts'),0) for c in (p.get('fuentes') or [])), default=0):g}W). "
+                    f"Considera dividir en circuitos o agregar una fuente mayor al catalogo."
+                )
+        num_fuentes = 1
     else:
         num_fuentes = 0
 
@@ -277,16 +330,31 @@ def cotizar_neon(
             # El costo por m² vive en el material o (fallback) en params.
             corte_m2 = _num(b_mat.get("corte_externo_m2"),
                             _num(p.get("corte_externo_m2_default"), 0))
-            # Neón 2ª generación sobre base acrílico requiere RANURADO en CNC
-            # (el canal donde va la manguera silicona). Cuesta ~2× el corte
-            # perimetral solo. El multiplicador vive en params y aplica solo
-            # cuando el perfil dominante es gen 2 Y la base es acrílico.
+            # RANURADO CNC (v1.27.1) — se cobra el multiplicador ranurado_cnc_mult
+            # cuando `metodo_fijacion=="ruteada"` Y la base es acrílico. Antes
+            # dependía de gen==2; ahora es explícito por metodo — un cliente
+            # 1ª gen premium puede querer ruteada, y 2ª gen puede forzarlo
+            # desde la UI. El motor no valida ese acoplamiento (lo hace el
+            # wizard); acá sólo cobra si el método es "ruteada".
             usa_gen2 = any(int(t["perfil"].get("generacion") or 1) == 2 for t in g_tramos)
             es_acrilico = "acrilico" in (b_mat.get("nombre") or "").lower() \
                           or "acrilico" in (b_mat.get("id") or "").lower() \
                           or "acr" in (b_mat.get("id") or "").lower()
-            if usa_gen2 and es_acrilico:
+            # Si es gen2 y NO se pidió ruteada explícitamente, forzarla (silicona
+            # no se pega, va empotrada) y avisar al usuario.
+            if usa_gen2 and metodo_fij_in != "ruteada":
+                warnings.append(
+                    "2ª generación requiere fijación ruteada CNC; se activó "
+                    "automáticamente (silicona no puede ir pegada)."
+                )
+                metodo_fij_in = "ruteada"
+            if metodo_fij_in == "ruteada" and es_acrilico:
                 corte_m2 = corte_m2 * _num(p.get("ranurado_cnc_mult"), 1.9)
+            elif metodo_fij_in == "ruteada" and not es_acrilico:
+                warnings.append(
+                    "Fijación ruteada seleccionada pero la base no es acrílico — "
+                    "el ruteado CNC solo tiene sentido en acrílico. Revisa la base."
+                )
             importe_corte_externo = _round2(area_m2 * corte_m2)
 
     importe_corte       = 0.0 if modo_fab == "3d" else _round2(perim_m * _num(b_for.get("corte_m"), 0))
@@ -410,8 +478,15 @@ def cotizar_neon(
         if importe_corte_externo > 0:
             corte_m2_val = _num(b_mat.get("corte_externo_m2"),
                                 _num(p.get("corte_externo_m2_default"), 0))
+            # Etiqueta explícita del método — el usuario ve "ruteado CNC" en el
+            # PDF cuando corresponde, no un multiplicador oculto.
+            concepto_corte = (
+                "Ruteado CNC (base ranurada · manguera empotrada)"
+                if metodo_fij_in == "ruteada"
+                else "Corte láser externo (proveedor)"
+            )
             insumos.append({
-                "concepto": "Corte láser externo (proveedor)",
+                "concepto": concepto_corte,
                 "cantidad": area_m2, "unidad": "m²",
                 "unit": corte_m2_val, "importe": importe_corte_externo,
             })
@@ -517,6 +592,10 @@ def cotizar_neon(
         canal_ancho_mm=canal_ancho_mm, canal_alto_mm=canal_alto_mm, canal_pared_mm=canal_pared_mm,
         importe_filamento=importe_filamento, importe_impresion=importe_impresion,
         importe_anclajes=importe_anclajes, importe_puentes=importe_puentes,
+        # Método de fijación + warnings (v1.27.1)
+        metodo_fijacion=metodo_fij_in,
+        warnings=warnings,
+        fuente_auto_upgraded_desde=fuente_auto_upgraded_desde,
         # Compat con _apply_instalacion (precio_final = precio_venta_sugerido + inst_total)
         precio_venta_sugerido=precio_iva,
         precio_final=precio_iva,

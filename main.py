@@ -481,6 +481,11 @@ class NeonRequest(_InstMixin):
     alto_cm: float = 0.0
     # Modo de fabricación
     modo_fabricacion: str = "lamina"   # "lamina" | "3d"
+    # Método de fijación (v1.27.1) — solo aplica cuando modo=="lamina".
+    #   "pegada"  → base plana + manguera pegada con adhesivo (1ª gen tradicional)
+    #   "ruteada" → base con canal fresado CNC + manguera empotrada (obligatorio 2ª gen)
+    # 2ª gen fuerza "ruteada" desde el motor si el request dice "pegada".
+    metodo_fijacion: str = "pegada"
     # Base (modo lámina)
     base_id: str = "acr-3-tr"          # id de NEON_PARAMS.bases
     forma_id: str = "rect"             # id de NEON_PARAMS.formas
@@ -817,6 +822,9 @@ def _neon_result_to_dict(r: NeonQuoteResult, qid: str) -> dict:
         "folio":            meta.get("folio", ""),
         "tipo":             r.tipo,
         "modo_fabricacion": r.modo_fabricacion,
+        "metodo_fijacion":  r.metodo_fijacion,          # v1.27.1
+        "warnings":         r.warnings,                 # v1.27.1
+        "fuente_auto_upgraded_desde": r.fuente_auto_upgraded_desde,  # v1.27.1
         "neon": {
             "lm":            round(r.lm, 2),
             "uniones":       r.uniones,
@@ -917,6 +925,7 @@ async def api_cotizar_neon(req: NeonRequest):
         "material":           base_mat or {"nombre": "Sin base", "precio_m2": 0},
         "forma":              forma    or {"nombre": "Rectangular", "factor_area": 1, "corte_m": 0},
         "modo_fabricacion":   req.modo_fabricacion,
+        "metodo_fijacion":    req.metodo_fijacion,   # v1.27.1
         "incluir_soporte":    req.incluir_soporte,
         "cobrar_desperdicio": req.cobrar_desperdicio,
         "corte_extra":        req.corte_extra,
