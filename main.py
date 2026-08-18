@@ -1030,7 +1030,12 @@ async def api_plano_neon(quote_id: str):
         perfil=perfil,
         escala_cm_por_px=escala,
     )
-    return plan_neon_a_dict(plan)
+    out = plan_neon_a_dict(plan)
+    # v1.27.2: incluir svg_text + viewbox para que el modal frontend pinte el
+    # SVG real del cliente como capa de fondo, en vez de rectángulos abstractos.
+    out["svg_text"] = svg_text
+    out["viewbox"] = {"w": svg_data.viewbox_w, "h": svg_data.viewbox_h}
+    return out
 
 
 # ─── HISTORIAL DE COTIZACIONES ───────────────────────────────────────────────

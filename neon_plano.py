@@ -11,20 +11,19 @@ Basado en:
 Es INDEPENDIENTE del motor de costos (`neon_calculator.py`). Ese cotiza;
 este planifica. Ambos alimentan el endpoint /api/cotizar/neon y los PDFs.
 
-Iteración actual: v0 (skeleton determinista simple)
+Iteración actual: v1-shapely (2026-08-17)
 - 1 pieza por path del SVG (no fusiona letras vecinas en 1 tira)
-- Terminales en extremos de la polilínea (start/end de polyline_px)
-- Paths cerrados → 1 terminal seam en punto más a la derecha
+- Terminales snap a marca de corte válida (múltiplo de cut_step_cm del perfil)
+- Paths cerrados → seam point ÓPTIMO por baja curvatura (no bbox right)
+- Detección de curvaturas apretadas (radio < radio_min_cm del perfil) →
+  agrega evento V_RELIEF_90 al pieza.eventos y warning legible
+- Instrucciones humano-legibles por pieza (Manual §11.1) en pieza.instrucciones
 - Uniones: pares vecinos por proximidad de bbox (cadena lineal, no MST)
-- Sin V_RELIEF_90, sin SILICONE_RELIEF (requieren análisis de curvatura)
 - Cable posterior: polilínea recta terminal→terminal (hidden_ratio=1.0 asumido)
-- Sin snap a cut_step_cm (los terminales quedan donde están geométricamente)
 
-Iteración v1 (siguiente): shapely para radios locales, seam point óptimo,
-snap a marca de corte válida, detección de intersecciones.
-
-Iteración v2: MST real con Kruskal sobre grafo completo de terminales
-compatibles + pesos calibrables de la función de costo.
+Iteración v2 (siguiente): MST real con Kruskal sobre grafo completo de
+terminales compatibles + pesos calibrables de la función de costo + rutas
+posteriores con hidden_ratio real vs. huella proyectada del neón.
 
 Uso desde main.py:
     from neon_plano import construir_plan
@@ -121,6 +120,9 @@ class Pieza:
     eventos: list[dict] = field(default_factory=list)   # doblez/alivio/cruce/junta
     terminales: list[str] = field(default_factory=list)  # ids Terminal
     warnings: list[str] = field(default_factory=list)   # ej. "radio 2.4 < mín 3.0"
+    # v1-shapely (2026-08-17)
+    instrucciones: list[str] = field(default_factory=list)  # texto humano Manual §11.1
+    radio_min_encontrado_cm: float = 0.0  # radio local más apretado detectado (>0 si aplica)
 
 
 @dataclass
@@ -217,6 +219,175 @@ def _funcion_costo(dist_cm: float, visible: bool, agujeros: int,
     return c, razones
 
 
+# ─── HELPERS v1-shapely (2026-08-17) ─────────────────────────────────────────
+
+def _radio_por_3puntos(a: tuple[float, float],
+                       b: tuple[float, float],
+                       c: tuple[float, float]) -> float | None:
+    """Radio del círculo que pasa por 3 puntos (fórmula clásica).
+    None si son colineales (radio infinito, curva plana)."""
+    ax, ay = a; bx, by = b; cx, cy = c
+    area2 = abs((bx - ax) * (cy - ay) - (by - ay) * (cx - ax))
+    if area2 < 1e-6:
+        return None
+    d_ab = math.hypot(bx - ax, by - ay)
+    d_bc = math.hypot(cx - bx, cy - by)
+    d_ca = math.hypot(ax - cx, ay - cy)
+    return (d_ab * d_bc * d_ca) / (2.0 * area2)
+
+
+def _detectar_curvas_apretadas(polyline_subpaths: list,
+                                escala_cm_por_px: float,
+                                radio_min_cm: float,
+                                ventana: int = 2,
+                                angulo_esquina_min_deg: float = 45.0) -> tuple[list[dict], int]:
+    """Recorre la polilínea con ventana ±N puntos y clasifica dónde el radio
+    local cae por debajo del mínimo del perfil.
+
+    Devuelve (eventos, num_puntos_curvatura_baja):
+      - `eventos`: solo los puntos que son ESQUINAS definidas (ángulo entre
+        vectores entrada/salida > `angulo_esquina_min_deg`). Estos SÍ son
+        candidatos a V_RELIEF_90 (cortar V en trasera para forzar la esquina).
+      - `num_puntos_curvatura_baja`: total de puntos con radio < mín (incluye
+        curvas continuas tipo círculo). Si es alto pero eventos está vacío,
+        significa "curva continua muy cerrada — cambia de perfil".
+    """
+    if radio_min_cm <= 0 or escala_cm_por_px <= 0:
+        return [], 0
+    eventos: list[dict] = []
+    total_bajo_min = 0
+    for sp in polyline_subpaths or []:
+        if len(sp) < (2 * ventana + 1):
+            continue
+        # Cooldown para no emitir eventos consecutivos en el mismo doblez.
+        last_i = -999
+        for i in range(ventana, len(sp) - ventana):
+            r_px = _radio_por_3puntos(sp[i - ventana], sp[i], sp[i + ventana])
+            if r_px is None:
+                continue
+            r_cm = r_px * escala_cm_por_px
+            if r_cm >= radio_min_cm:
+                continue
+            total_bajo_min += 1
+            # Ángulo entre vector entrante y saliente
+            v1x = sp[i][0] - sp[i - ventana][0]
+            v1y = sp[i][1] - sp[i - ventana][1]
+            v2x = sp[i + ventana][0] - sp[i][0]
+            v2y = sp[i + ventana][1] - sp[i][1]
+            m1 = math.hypot(v1x, v1y); m2 = math.hypot(v2x, v2y)
+            if m1 <= 0 or m2 <= 0:
+                continue
+            cos_a = max(-1.0, min(1.0, (v1x * v2x + v1y * v2y) / (m1 * m2)))
+            angulo_deg = round(math.degrees(math.acos(cos_a)), 1)
+            # Solo esquinas definidas: ángulo entre vectores > umbral (45° default).
+            # Curvas continuas (círculo, arco suave) tienen ángulo pequeño por
+            # segmento aunque el radio sea chico — esas NO son V_RELIEF_90.
+            if angulo_deg >= angulo_esquina_min_deg and (i - last_i) > ventana * 2:
+                eventos.append({
+                    "tipo": Tecnica.V_RELIEF_90,
+                    "coord_svg": (sp[i][0], sp[i][1]),
+                    "radio_cm": round(r_cm, 2),
+                    "angulo_deg": angulo_deg,
+                })
+                last_i = i
+    return eventos, total_bajo_min
+
+
+def _snap_a_corte_cm(coord_cm: tuple[float, float],
+                     cut_step_cm: float,
+                     origin_cm: tuple[float, float] = (0.0, 0.0)) -> tuple[tuple[float, float], float]:
+    """Redondea coord_cm al múltiplo de cut_step_cm más cercano (desde origin).
+    Devuelve (coord_snapped, offset_cm). Simplificación: snap independiente
+    por eje. En v2, cuando tengamos parametrización por longitud de arco,
+    haremos snap a lo largo del path (más preciso)."""
+    if cut_step_cm <= 0:
+        return coord_cm, 0.0
+    x = origin_cm[0] + round((coord_cm[0] - origin_cm[0]) / cut_step_cm) * cut_step_cm
+    y = origin_cm[1] + round((coord_cm[1] - origin_cm[1]) / cut_step_cm) * cut_step_cm
+    off = _dist(coord_cm, (x, y))
+    return (x, y), off
+
+
+def _seam_point_optimo(polyline_subpaths: list, bbox: dict,
+                       escala_cm_por_px: float,
+                       radio_min_cm: float) -> tuple[float, float]:
+    """Para paths cerrados: elige el punto de la polilínea con MAYOR radio
+    local (curvatura más suave = fácil de soldar y ocultar). Fallback al
+    borde derecho del bbox si no hay polilínea usable."""
+    fallback = (bbox["x"] + bbox["w"], bbox["y"] + bbox["h"] / 2)
+    if not polyline_subpaths:
+        return fallback
+    mejor_r = -1.0
+    mejor_pt = None
+    for sp in polyline_subpaths:
+        if len(sp) < 5:
+            continue
+        for i in range(2, len(sp) - 2):
+            r_px = _radio_por_3puntos(sp[i - 2], sp[i], sp[i + 2])
+            if r_px is None:
+                # Colineal → excelente candidato (recta larga oculta bien la junta)
+                r_px = 1e9
+            if r_px > mejor_r:
+                mejor_r = r_px
+                mejor_pt = sp[i]
+    return mejor_pt if mejor_pt is not None else fallback
+
+
+def _instrucciones_pieza(pieza: Pieza, perfil: dict,
+                         terms_por_id: dict[str, Terminal]) -> list[str]:
+    """Genera texto humano-legible tipo Manual §11.1 para el operario.
+    Cada bullet describe UN paso concreto de fabricación."""
+    lines: list[str] = []
+    perfil_nombre = perfil.get("nombre", "manguera")
+    color = perfil.get("color", "")
+    cut_step = float(perfil.get("cut_step_cm", 0) or 0)
+
+    # Header: material + longitud
+    resumen = f"{perfil_nombre}"
+    if color:
+        resumen += f" {color}"
+    resumen += f" · {pieza.longitud_cm:.1f} cm"
+    if cut_step > 0:
+        # Redondear al corte real
+        n_cortes = round(pieza.longitud_cm / cut_step)
+        long_real = n_cortes * cut_step
+        resumen += f" (corte real: {n_cortes} × {cut_step:g} cm = {long_real:.1f} cm)"
+    lines.append(resumen)
+
+    # Terminales
+    ts = [terms_por_id.get(tid) for tid in pieza.terminales]
+    ts = [t for t in ts if t is not None]
+    if pieza.is_closed:
+        seam = next((t for t in ts if t.tipo == "seam"), None)
+        if seam:
+            xcm = seam.coord_cm[0]; ycm = seam.coord_cm[1]
+            lines.append(f"Path CERRADO · junta artificial (seam) en ({xcm:.1f}, {ycm:.1f}) cm")
+            if seam.cut_offset_cm > 0.1:
+                lines.append(f"  ↳ terminal ajustado {seam.cut_offset_cm:.1f} cm a marca de corte válida")
+    else:
+        start = next((t for t in ts if t.tipo == "start"), None)
+        end = next((t for t in ts if t.tipo == "end"), None)
+        if start:
+            lines.append(f"Iniciar en {start.id} → ({start.coord_cm[0]:.1f}, {start.coord_cm[1]:.1f}) cm")
+        lines.append("Recorrer siguiendo el trazo")
+        if end:
+            lines.append(f"Terminar en {end.id} → ({end.coord_cm[0]:.1f}, {end.coord_cm[1]:.1f}) cm")
+
+    # Eventos técnicos (V_RELIEF_90, etc.)
+    for ev in pieza.eventos:
+        if ev.get("tipo") == Tecnica.V_RELIEF_90:
+            r = ev.get("radio_cm", 0); a = ev.get("angulo_deg", 0)
+            lines.append(
+                f"⚠️ CORTE V EN TRASERA (V_RELIEF_90) — radio local {r:.1f} cm "
+                f"< mín {perfil.get('radio_min_cm', 0):g} cm · ángulo ~{a:.0f}°"
+            )
+
+    # Instrucción de cable oculto (aparece si esta pieza inicia/termina una unión)
+    lines.append("Sacar cable por atrás (perforación en el terminal)")
+
+    return lines
+
+
 # ─── MOTOR PRINCIPAL ─────────────────────────────────────────────────────────
 
 def construir_plan(
@@ -247,14 +418,19 @@ def construir_plan(
         ManufacturingPlan con piezas/terminales/uniones/métricas.
     """
     pesos = pesos or COSTO_PESOS_DEFAULT
-    _ = prefs  # v0 no las usa
+    _ = prefs  # v1 aún no las usa
 
     # Filtrar huecos (contadores de letra, placas de fondo blancas)
     activos = [p for p in (path_infos or []) if not getattr(p, "es_hueco", False)]
 
+    # Constantes del perfil (v1)
+    radio_min_cm = float(perfil.get("radio_min_cm", 0) or 0)
+    cut_step_cm  = float(perfil.get("cut_step_cm", 0) or 0)
+
     plan = ManufacturingPlan(
         perfil_id=perfil.get("id", ""),
         escala_cm_por_px=escala_cm_por_px,
+        version_algoritmo="v1-shapely",
     )
 
     # ── 1. Piezas + terminales ────────────────────────────────────────────────
@@ -284,32 +460,70 @@ def construir_plan(
             tecnica_dominante=Tecnica.CLOSED_SEAM if is_closed else Tecnica.DIRECT_CONTINUOUS,
         )
 
-        # Terminales — paths cerrados llevan 1 seam point, abiertos 2 extremos
+        # ── v1: Detección de esquinas apretadas (V_RELIEF_90) + curvas continuas ─
+        polyline = getattr(pi, "polyline_px", []) or []
+        if radio_min_cm > 0:
+            eventos_curv, puntos_bajo_min = _detectar_curvas_apretadas(
+                polyline, escala_cm_por_px, radio_min_cm,
+                ventana=2, angulo_esquina_min_deg=45.0,
+            )
+            if eventos_curv:
+                pieza.eventos.extend(eventos_curv)
+                pieza.radio_min_encontrado_cm = min(e["radio_cm"] for e in eventos_curv)
+                pieza.warnings.append(
+                    f"{len(eventos_curv)} esquina(s) apretada(s): radio mín "
+                    f"{pieza.radio_min_encontrado_cm:.2f} cm < perfil "
+                    f"{radio_min_cm:.1f} cm — requiere V_RELIEF_90 en cara trasera"
+                )
+            # Curvas continuas (ej: círculo chico) NO son V_RELIEF_90 —
+            # necesitan cambio de perfil o rediseño. Umbral: >5 puntos
+            # bajo mínimo pero sin esquinas detectadas.
+            if puntos_bajo_min > 5 and not eventos_curv:
+                pieza.warnings.append(
+                    f"Curvatura continua < mínimo ({puntos_bajo_min} puntos por debajo). "
+                    f"Cambiar a perfil más flexible (radio_min ≤ requerido) o rediseñar."
+                )
+
+        # Terminales — paths cerrados llevan 1 seam point ÓPTIMO (baja curvatura),
+        # abiertos 2 extremos reales de la polilínea.
+        def _snap_terminal(coord_svg):
+            """Aplica snap a marca de corte válida si el perfil define cut_step_cm."""
+            coord_cm = (coord_svg[0] * escala_cm_por_px,
+                        coord_svg[1] * escala_cm_por_px)
+            if cut_step_cm > 0:
+                snapped_cm, off_cm = _snap_a_corte_cm(coord_cm, cut_step_cm)
+                return coord_svg, coord_cm, snapped_cm, off_cm
+            return coord_svg, coord_cm, coord_cm, 0.0
+
         if is_closed:
-            seam_svg = _bbox_right_midpoint(bbox)
+            seam_svg = _seam_point_optimo(polyline, bbox, escala_cm_por_px, radio_min_cm)
+            c_svg, c_cm, c_snap, off = _snap_terminal(seam_svg)
             t = Terminal(
                 id=f"T-{pieza_id}-seam",
                 pieza_id=pieza_id,
                 tipo="seam",
-                coord_svg=seam_svg,
-                coord_cm=(seam_svg[0] * escala_cm_por_px,
-                          seam_svg[1] * escala_cm_por_px),
+                coord_svg=c_svg,
+                coord_cm=c_snap,
+                cut_valid=(off < 0.2),
+                cut_offset_cm=round(off, 2),
             )
             plan.terminales.append(t)
             pieza.terminales.append(t.id)
         else:
-            start, end = _polyline_endpoints(getattr(pi, "polyline_px", []) or [])
+            start, end = _polyline_endpoints(polyline)
             if start is None:
                 start = _bbox_left_midpoint(bbox)
                 end = _bbox_right_midpoint(bbox)
             for tipo, coord in [("start", start), ("end", end)]:
+                c_svg, c_cm, c_snap, off = _snap_terminal(coord)
                 t = Terminal(
                     id=f"T-{pieza_id}-{tipo}",
                     pieza_id=pieza_id,
                     tipo=tipo,
-                    coord_svg=coord,
-                    coord_cm=(coord[0] * escala_cm_por_px,
-                              coord[1] * escala_cm_por_px),
+                    coord_svg=c_svg,
+                    coord_cm=c_snap,
+                    cut_valid=(off < 0.2),
+                    cut_offset_cm=round(off, 2),
                 )
                 plan.terminales.append(t)
                 pieza.terminales.append(t.id)
@@ -380,6 +594,11 @@ def construir_plan(
             perforaciones=[ta.coord_svg, tb.coord_svg],
         ))
 
+    # ── v1: Instrucciones humano-legibles por pieza (Manual §11.1) ───────────
+    terms_por_id = {t.id: t for t in plan.terminales}
+    for pieza in plan.piezas:
+        pieza.instrucciones = _instrucciones_pieza(pieza, perfil, terms_por_id)
+
     # ── 4. Métricas agregadas ────────────────────────────────────────────────
     long_total_cm = sum(p.longitud_cm for p in plan.piezas)
     cable_total_cm = sum(u.cable_cm for u in plan.uniones)
@@ -390,16 +609,25 @@ def construir_plan(
         if plan.rutas_ocultas else 1.0
     )
 
+    num_v_relief = sum(
+        sum(1 for e in p.eventos if e.get("tipo") == Tecnica.V_RELIEF_90)
+        for p in plan.piezas
+    )
+    num_terminales_ajustados = sum(1 for t in plan.terminales if t.cut_offset_cm > 0.1)
+
     plan.metricas = {
         "num_piezas": len(plan.piezas),
         "num_uniones": len(plan.uniones),
         "num_soldaduras": len(plan.uniones) * 2,   # 2 por unión
         "num_seam_points": num_seam,
         "num_perforaciones": num_perf,
+        "num_v_relief_90": num_v_relief,             # v1
+        "num_terminales_snapped": num_terminales_ajustados,  # v1
         "cable_total_cm": round(cable_total_cm, 1),
         "longitud_neon_total_m": round(long_total_cm / 100, 2),
         "hidden_ratio_global": round(hidden_avg, 2),
     }
+    plan.confianza = 0.75  # v1 con shapely + snap + seam óptimo
 
     return plan
 
