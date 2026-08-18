@@ -150,6 +150,9 @@ class ManufacturingPlan:
     confianza: float = 0.6              # 0-1, sube cuando shapely + calibrado
     version_algoritmo: str = "v0-skeleton"
     debug: dict = field(default_factory=dict)
+    # v1.27.3 · Circuito eléctrico completo — entrada y salida a la fuente
+    terminal_inicio_circuito: str = ""  # id del Terminal que recibe (+) de la fuente
+    terminal_fin_circuito: str = ""     # id del Terminal que retorna (-) a la fuente
 
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -544,33 +547,53 @@ def construir_plan(
                 f"{pieza.id}: pieza más chica que altura_min del perfil"
             )
 
-    # ── 3. Uniones entre piezas vecinas (chain, no MST — eso viene en v2) ─────
-    # Orden piezas por centro-x del bbox. Une consecutivos si están a distancia
-    # razonable. Este es el mismo patrón del mock v2 pero calculado en Python
-    # y con la función de costo del Manual §3.2 evaluada.
+    # ── 3. Uniones entre piezas vecinas + INICIO/FIN del circuito (v1.27.3) ──
+    # Orden piezas por centro-x del bbox (izquierda → derecha).
     piezas_orden = sorted(
         plan.piezas,
         key=lambda p: (_bbox_center(p.bbox_svg)[0], _bbox_center(p.bbox_svg)[1])
     )
     holgura = 1.15  # factor cable real vs distancia geométrica
 
+    # INICIO del circuito: terminal más a la IZQUIERDA de la primera pieza
+    # (por convención — el usuario podrá override en v2). Se reserva para la
+    # fuente y NO se usa en uniones entre piezas.
+    inicio_id = ""
+    fin_id = ""
+    if piezas_orden:
+        pa0 = piezas_orden[0]
+        ts_pa0 = [t for t in plan.terminales if t.pieza_id == pa0.id]
+        if ts_pa0:
+            inicio_t = min(ts_pa0, key=lambda t: t.coord_svg[0])
+            inicio_id = inicio_t.id
+        # FIN del circuito: terminal más a la DERECHA de la última pieza
+        pn = piezas_orden[-1]
+        ts_pn = [t for t in plan.terminales if t.pieza_id == pn.id]
+        # Excluir el inicio si es la misma pieza (caso 1 sola pieza)
+        candidatos_fin = [t for t in ts_pn if t.id != inicio_id]
+        if candidatos_fin:
+            fin_t = max(candidatos_fin, key=lambda t: t.coord_svg[0])
+            fin_id = fin_t.id
+    plan.terminal_inicio_circuito = inicio_id
+    plan.terminal_fin_circuito = fin_id
+
+    # Uniones entre piezas: par de MÍNIMA distancia entre terminales.
+    # NO excluimos INICIO/FIN — en la vida real, si una pieza cerrada tiene
+    # 1 solo seam point, ese punto físicamente RECIBE los 2 cables de la
+    # fuente + el puente a la siguiente pieza (una junta múltiple). En el
+    # render diferenciamos visualmente INICIO (círculo verde) de UNIÓN
+    # (círculo rojo numerado) aunque coincidan en la coordenada.
     for i in range(len(piezas_orden) - 1):
         pa, pb = piezas_orden[i], piezas_orden[i + 1]
-        # Terminal de salida (borde derecho de la izq)
-        ta = _terminal_mas_a(plan, pa, "end", "seam", side="right")
-        tb = _terminal_mas_a(plan, pb, "start", "seam", side="left")
+        ta, tb, d_cm = _par_terminales_mas_cercano(plan, pa, pb)
         if ta is None or tb is None:
             continue
 
-        d_cm = _dist(ta.coord_cm, tb.coord_cm)
         cable_cm = round(d_cm * holgura, 1)
-        # Asume que el cable va por atrás (no visible) mientras el respaldo
-        # cubra los dos terminales. v0 no valida esto — asume visible=False.
-        visible = False
+        visible = False  # asume cable posterior — v2 valida contra huella
         costo, razones = _funcion_costo(
             dist_cm=d_cm, visible=visible,
-            agujeros=2,  # una perforación por terminal (entrada+salida al reverso)
-            cruces=0, riesgo=0.0, pesos=pesos,
+            agujeros=2, cruces=0, riesgo=0.0, pesos=pesos,
         )
 
         union = Union(
@@ -586,11 +609,11 @@ def construir_plan(
         )
         plan.uniones.append(union)
 
-        # Ruta oculta trivial: línea recta terminal→terminal por el reverso
+        # Ruta oculta: línea recta por el reverso (v1 asume hidden_ratio=1.0)
         plan.rutas_ocultas.append(HiddenRoute(
             union_id=union.id,
             puntos_svg=[ta.coord_svg, tb.coord_svg],
-            hidden_ratio=1.0,  # asumido — v1 lo mide contra huella del neón
+            hidden_ratio=1.0,
             perforaciones=[ta.coord_svg, tb.coord_svg],
         ))
 
@@ -651,6 +674,31 @@ def _terminal_mas_a(plan: ManufacturingPlan, pieza: Pieza,
         return max(ts, key=lambda t: t.coord_svg[0])
     else:
         return min(ts, key=lambda t: t.coord_svg[0])
+
+
+def _par_terminales_mas_cercano(
+    plan: ManufacturingPlan, pa: Pieza, pb: Pieza,
+    excluidos: set[str] | None = None,
+) -> tuple[Terminal | None, Terminal | None, float]:
+    """(v1.27.3) Devuelve el par (ta ∈ pa, tb ∈ pb, distancia_cm) de MÍNIMA
+    distancia entre TODOS los terminales de ambas piezas.
+
+    Antes usaba side='right' + side='left' que fallaba en letras con altura
+    dispar o sub-trazos internos. Ahora evalúa las N×M combinaciones.
+    El conjunto `excluidos` sirve para reservar terminales de INICIO/FIN del
+    circuito (esos se conectan a la fuente, no entre piezas)."""
+    exc = excluidos or set()
+    tas = [t for t in plan.terminales if t.pieza_id == pa.id and t.id not in exc]
+    tbs = [t for t in plan.terminales if t.pieza_id == pb.id and t.id not in exc]
+    if not tas or not tbs:
+        return None, None, 0.0
+    mejor = (None, None, float("inf"))
+    for ta in tas:
+        for tb in tbs:
+            d = _dist(ta.coord_cm, tb.coord_cm)
+            if d < mejor[2]:
+                mejor = (ta, tb, d)
+    return mejor
 
 
 # ─── SERIALIZACIÓN ───────────────────────────────────────────────────────────
