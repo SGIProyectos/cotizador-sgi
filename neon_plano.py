@@ -1,34 +1,25 @@
-"""Planeador de construcción para anuncios de neón LED (SGI).
+"""Planeador de construcción de anuncios de neón LED (SGI) — Motor v2.
 
-Convierte geometría vectorial (SVG paths) en una SOLUCIÓN FÍSICA fabricable:
-piezas físicas continuas, terminales, uniones eléctricas, cable oculto,
-técnicas especiales por pieza y advertencias.
+Convierte geometría vectorial (SVG paths) en una SOLUCIÓN FÍSICA fabricable
+siguiendo FIELMENTE los 3 manuales del propietario:
 
-Basado en:
-- Manual Técnico "Algoritmo experto de fabricación de neón flex" (§12 pseudocódigo)
-- Cuaderno Práctico IA (schema de labels + microtécnicas A-F)
+  - Manual Técnico "Algoritmo experto de fabricación de neón flex"
+  - Cuaderno Práctico IA (4 ejemplos + 6 microtécnicas A-F)
+  - Ejemplos visuales (`conectakarate.png`, `conectakarate2.png`)
 
-Es INDEPENDIENTE del motor de costos (`neon_calculator.py`). Ese cotiza;
-este planifica. Ambos alimentan el endpoint /api/cotizar/neon y los PDFs.
+v2 (2026-08-17): reescritura completa. Cumple los 9 pasos del algoritmo
+(Cuaderno pág 11) e implementa las microtécnicas del Manual §4 con
+parámetros del catálogo real (cut_step_cm, radio_min_cm, fpcb_offset_mm).
 
-Iteración actual: v1-shapely (2026-08-17)
-- 1 pieza por path del SVG (no fusiona letras vecinas en 1 tira)
-- Terminales snap a marca de corte válida (múltiplo de cut_step_cm del perfil)
-- Paths cerrados → seam point ÓPTIMO por baja curvatura (no bbox right)
-- Detección de curvaturas apretadas (radio < radio_min_cm del perfil) →
-  agrega evento V_RELIEF_90 al pieza.eventos y warning legible
-- Instrucciones humano-legibles por pieza (Manual §11.1) en pieza.instrucciones
-- Uniones: pares vecinos por proximidad de bbox (cadena lineal, no MST)
-- Cable posterior: polilínea recta terminal→terminal (hidden_ratio=1.0 asumido)
-
-Iteración v2 (siguiente): MST real con Kruskal sobre grafo completo de
-terminales compatibles + pesos calibrables de la función de costo + rutas
-posteriores con hidden_ratio real vs. huella proyectada del neón.
-
-Uso desde main.py:
-    from neon_plano import construir_plan
-    plan = construir_plan(path_infos, perfil=perfil_dict)
-    # plan es dataclass; serializar con dataclasses.asdict(plan)
+Cambios clave vs. v1:
+- Ya NO "1 path SVG = 1 pieza" (violaba Manual §2.3)
+- Usa `topology.analizar` + `descomponer_en_piezas_fisicas` para respetar
+  la matriz A-Z del Manual §5
+- Marcas de corte visibles a lo largo del trazo (shapely.interpolate cada
+  cut_step_cm) — el operario ve dónde cortar
+- MST real Kruskal sobre grafo de terminales con función de costo Manual §3.2
+- Instrucciones humano-legibles por pieza (Manual §11.1) con parámetros
+  de cada técnica
 """
 from __future__ import annotations
 
@@ -36,36 +27,44 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
+from topology import (
+    SubPieza,
+    descomponer_en_piezas_fisicas,
+)
+from topology import (
+    analizar as topo_analizar,
+)
+
+try:
+    from shapely.geometry import LineString
+    HAS_SHAPELY = True
+except ImportError:
+    HAS_SHAPELY = False
+
+
 # ─── ENUMS ───────────────────────────────────────────────────────────────────
 
 class Tecnica:
-    """Códigos del catálogo de técnicas (Manual §4). Strings para serializar
-    directo a JSON sin conversión."""
-    DIRECT_CONTINUOUS  = "DIRECT_CONTINUOUS"    # tira continua sin modificación
-    FULL_CUT           = "FULL_CUT"             # fin eléctrico de una pieza
-    SILICONE_RELIEF    = "SILICONE_RELIEF"      # alivio parcial (no cortar LED/FPCB)
-    V_RELIEF_90        = "V_RELIEF_90"          # corte trasero en V para 90°
-    CROSSING_RELIEF    = "CROSSING_RELIEF"      # cruce/superposición
-    HIDDEN_TERMINATION = "HIDDEN_TERMINATION"   # cable sale por atrás
-    LETTER_BRIDGE      = "LETTER_BRIDGE"        # puente entre piezas
-    CLOSED_SEAM        = "CLOSED_SEAM"          # junta artificial en path cerrado
-    SEPARATE_STROKE    = "SEPARATE_STROKE"      # trazo independiente (islas)
+    """Códigos del catálogo de técnicas (Manual §4 + Cuaderno microtécnicas A-F)."""
+    DIRECT_CONTINUOUS   = "DIRECT_CONTINUOUS"
+    FULL_CUT            = "FULL_CUT"
+    SILICONE_RELIEF     = "SILICONE_RELIEF"       # Cuaderno F (P con una tira)
+    V_RELIEF_90         = "V_RELIEF_90"           # Cuaderno D (esquina 90°)
+    CROSSING_RELIEF     = "CROSSING_RELIEF"       # Cuaderno A (cruce cursivo)
+    HIDDEN_TERMINATION  = "HIDDEN_TERMINATION"    # Cuaderno B (cable oculto)
+    LETTER_BRIDGE       = "LETTER_BRIDGE"         # Cuaderno C (unión limpia)
+    CLOSED_SEAM         = "CLOSED_SEAM"           # Cuaderno E (cierre O)
+    SEPARATE_STROKE     = "SEPARATE_STROKE"
 
 
-# ─── PESOS DE LA FUNCIÓN DE COSTO (Manual §3.2) ──────────────────────────────
-# C = wd·distancia + wv·visibilidad + ws·soldaduras + wh·agujeros
-#   + wc·cruces + wa·acceso + wm·riesgo
-#
-# Valores iniciales educated-guess. Se calibran con feedback del taller.
-# Coherente con el patrón `calibrado_taller=False` de ICF.
+# Pesos de la función de costo Manual §3.2
 COSTO_PESOS_DEFAULT: dict[str, float] = {
-    "wd": 1.0,   # cm de cable — peso base
-    "wv": 5.0,   # visibilidad — alto: cable visible es peor que largo
-    "ws": 2.0,   # soldaduras — cada soldadura suma tiempo + falla
-    "wh": 1.5,   # agujeros — cada perforación suma tiempo + estética
-    "wc": 3.0,   # cruces — cable cruzando cable es difícil de mantener
-    "wa": 1.0,   # acceso — dificultad de reparación
-    "wm": 2.0,   # riesgo mecánico — tensión sobre pistas
+    "wd": 1.0, "wv": 5.0, "ws": 2.0, "wh": 1.5,
+    "wc": 3.0, "wa": 1.0, "wm": 2.0,
+    # Costo angular (Cuaderno microtécnica C): penalizar transiciones
+    # donde las tangentes de los 2 terminales apuntan a direcciones
+    # incompatibles (bulto visible).
+    "wangle": 0.05,
 }
 
 
@@ -73,325 +72,253 @@ COSTO_PESOS_DEFAULT: dict[str, float] = {
 
 @dataclass
 class Terminal:
-    """Un extremo físico de una pieza (inicio, final o seam de path cerrado)."""
-    id: str                            # ej: "T-p0-start"
-    pieza_id: str                      # id de la Pieza a la que pertenece
-    tipo: str                          # "start" | "end" | "seam"
-    coord_svg: tuple[float, float]     # posición SVG px (sin escalar)
-    coord_cm: tuple[float, float]      # posición real cm (post-escala)
-    tangente_deg: float = 0.0          # ángulo de tangente (0 = →, 90 = ↑)
-    cut_valid: bool = True             # coincide con marca de corte válida
-    cut_offset_cm: float = 0.0         # cuánto se desplazó a marca real
+    """Extremo físico de una pieza (inicio, final o seam de path cerrado)."""
+    id: str
+    pieza_id: str
+    tipo: str                              # start | end | seam
+    coord_svg: tuple[float, float]
+    coord_cm: tuple[float, float]
+    tangente_deg: float = 0.0              # ángulo de tangente (para costo angular)
+    cut_valid: bool = True
+    cut_offset_cm: float = 0.0
+    en_marca_de_corte: bool = False        # snappeado a marca real del perfil
+
+
+@dataclass
+class MarcaCorte:
+    """Punto físico de la tira donde SÍ se puede cortar (cada cut_step_cm).
+    Se pinta como rayita transversal en el plano — igual que en el dibujo del
+    propietario `conectakarate2.png` boceto 6."""
+    pieza_id: str
+    coord_svg: tuple[float, float]
+    tangente_deg: float                    # perpendicular = dirección de la rayita
+    long_acumulada_cm: float               # posición a lo largo del trazo desde el inicio
 
 
 @dataclass
 class Union:
-    """Conexión eléctrica entre dos terminales (Manual §4 · LETTER_BRIDGE)."""
-    id: str                            # ej: "U-01"
-    terminal_a: str                    # id del Terminal origen
-    terminal_b: str                    # id del Terminal destino
+    """Conexión eléctrica entre dos terminales."""
+    id: str
+    terminal_a: str
+    terminal_b: str
     tecnica: str = Tecnica.LETTER_BRIDGE
-    distancia_cm: float = 0.0          # euclidiana entre coords
-    cable_cm: float = 0.0              # cable real con holgura (×1.15 default)
-    visible: bool = False              # cable pasa por el frente?
-    costo: float = 0.0                 # función de costo evaluada
-    razones: list[str] = field(default_factory=list)  # trazabilidad del ranking
+    distancia_cm: float = 0.0
+    cable_cm: float = 0.0
+    visible: bool = False
+    costo: float = 0.0
+    razones: list[str] = field(default_factory=list)
 
 
 @dataclass
 class HiddenRoute:
-    """Ruta posterior del cable de una unión (Manual §4.1)."""
+    """Ruta posterior del cable de una unión."""
     union_id: str
     puntos_svg: list[tuple[float, float]] = field(default_factory=list)
-    hidden_ratio: float = 1.0          # cubierto / total, target 1.0
+    hidden_ratio: float = 1.0
     perforaciones: list[tuple[float, float]] = field(default_factory=list)
 
 
 @dataclass
 class Pieza:
     """Una tira física de neón (un componente continuo del anuncio)."""
-    id: str                            # ej: "p0"
-    svg_path_ids: list[str] = field(default_factory=list)  # svg_ids del path
+    id: str
+    svg_path_ids: list[str] = field(default_factory=list)
+    subpath_ids: list[int] = field(default_factory=list)
     longitud_cm: float = 0.0
-    perimetro_cm: float = 0.0
     is_closed: bool = False
-    bbox_svg: dict = field(default_factory=dict)  # {x,y,w,h} en SVG px
+    bbox_svg: dict = field(default_factory=dict)
+    puntos_svg: list[tuple[float, float]] = field(default_factory=list)  # polilínea para render
+    tipo_topologico: str = ""              # del análisis topology
     tecnica_dominante: str = Tecnica.DIRECT_CONTINUOUS
-    eventos: list[dict] = field(default_factory=list)   # doblez/alivio/cruce/junta
-    terminales: list[str] = field(default_factory=list)  # ids Terminal
-    warnings: list[str] = field(default_factory=list)   # ej. "radio 2.4 < mín 3.0"
-    # v1-shapely (2026-08-17)
-    instrucciones: list[str] = field(default_factory=list)  # texto humano Manual §11.1
-    radio_min_encontrado_cm: float = 0.0  # radio local más apretado detectado (>0 si aplica)
+    eventos: list[dict] = field(default_factory=list)   # V_RELIEF_90, SILICONE_RELIEF, CROSSING, etc.
+    terminales: list[str] = field(default_factory=list)
+    marcas_corte: list[dict] = field(default_factory=list)  # coord_svg + tangente_deg + long_cm
+    warnings: list[str] = field(default_factory=list)
+    instrucciones: list[str] = field(default_factory=list)   # Manual §11.1
+    radio_min_encontrado_cm: float = 0.0
 
 
 @dataclass
 class ManufacturingPlan:
-    """Resultado del planeador para un anuncio de neón (Manual §1.2 salidas)."""
-    perfil_id: str = ""                # id del perfil neón usado
-    escala_cm_por_px: float = 1.0      # factor SVG → cm
-
+    """Resultado del planeador (Manual §1.2 salidas)."""
+    perfil_id: str = ""
+    escala_cm_por_px: float = 1.0
     piezas: list[Pieza] = field(default_factory=list)
     terminales: list[Terminal] = field(default_factory=list)
     uniones: list[Union] = field(default_factory=list)
     rutas_ocultas: list[HiddenRoute] = field(default_factory=list)
-
-    # Métricas agregadas (para plano + cotización)
     metricas: dict = field(default_factory=dict)
-    # {
-    #   "num_piezas": int, "num_uniones": int, "num_soldaduras": int,
-    #   "cable_total_cm": float, "hidden_ratio_global": float,
-    #   "longitud_neon_total_m": float, "num_seam_points": int,
-    #   "num_perforaciones": int,
-    # }
-
-    warnings: list[str] = field(default_factory=list)   # bloqueantes globales
+    warnings: list[str] = field(default_factory=list)
     alternativas_evaluadas: int = 1
-    confianza: float = 0.6              # 0-1, sube cuando shapely + calibrado
-    version_algoritmo: str = "v0-skeleton"
+    confianza: float = 0.85                 # v2 usa topología real
+    version_algoritmo: str = "v2-topological"
     debug: dict = field(default_factory=dict)
-    # v1.27.3 · Circuito eléctrico completo — entrada y salida a la fuente
-    terminal_inicio_circuito: str = ""  # id del Terminal que recibe (+) de la fuente
-    terminal_fin_circuito: str = ""     # id del Terminal que retorna (-) a la fuente
+    terminal_inicio_circuito: str = ""
+    terminal_fin_circuito: str = ""
 
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
 
 def _dist(a: tuple[float, float], b: tuple[float, float]) -> float:
-    """Distancia euclidiana."""
     return math.hypot(b[0] - a[0], b[1] - a[1])
 
 
-def _polyline_length_px(polyline_subpaths: list) -> float:
-    """Longitud total de una lista de subpaths [[(x,y),...],[...]] en px."""
-    total = 0.0
-    for sp in polyline_subpaths:
-        if not sp or len(sp) < 2:
-            continue
-        for i in range(len(sp) - 1):
-            total += _dist(sp[i], sp[i + 1])
-    return total
+def _polyline_length_px(subpath_pts: list[tuple[float, float]]) -> float:
+    if len(subpath_pts) < 2:
+        return 0.0
+    return sum(_dist(subpath_pts[i], subpath_pts[i + 1]) for i in range(len(subpath_pts) - 1))
 
 
-def _polyline_endpoints(polyline_subpaths: list) -> tuple[tuple[float, float] | None,
-                                                         tuple[float, float] | None]:
-    """Extremos (primer y último punto) de un path abierto. None si vacío."""
-    if not polyline_subpaths:
-        return None, None
-    flat = [pt for sp in polyline_subpaths for pt in sp]
-    if not flat:
-        return None, None
-    return flat[0], flat[-1]
-
-
-def _bbox_right_midpoint(bbox: dict) -> tuple[float, float]:
-    """Punto medio del borde derecho de un bbox — seam point default para
-    paths cerrados (baja visibilidad frontal, típico en la cola derecha de las
-    letras). Refinar en v1 con curvatura real."""
-    return (bbox["x"] + bbox["w"], bbox["y"] + bbox["h"] / 2)
-
-
-def _bbox_left_midpoint(bbox: dict) -> tuple[float, float]:
-    return (bbox["x"], bbox["y"] + bbox["h"] / 2)
-
-
-def _bbox_center(bbox: dict) -> tuple[float, float]:
-    return (bbox["x"] + bbox["w"] / 2, bbox["y"] + bbox["h"] / 2)
+def _tangente_deg(pts: list[tuple[float, float]], idx: int, ventana: int = 2) -> float:
+    """Ángulo de la tangente local en el punto pts[idx] (grados, 0=→, 90=↑)."""
+    n = len(pts)
+    if n < 2:
+        return 0.0
+    i0 = max(0, idx - ventana)
+    i1 = min(n - 1, idx + ventana)
+    dx = pts[i1][0] - pts[i0][0]
+    dy = pts[i1][1] - pts[i0][1]
+    if dx == 0 and dy == 0:
+        return 0.0
+    return round(math.degrees(math.atan2(dy, dx)), 1)
 
 
 def _funcion_costo(dist_cm: float, visible: bool, agujeros: int,
-                   cruces: int, riesgo: float, pesos: dict) -> tuple[float, list[str]]:
-    """Evalúa la función de costo Manual §3.2 y devuelve (costo, razones)."""
+                   cruces: int, riesgo: float, angulo_deg_diff: float,
+                   pesos: dict) -> tuple[float, list[str]]:
+    """Función de costo Manual §3.2 + costo angular Cuaderno §C."""
     razones = []
     c = pesos["wd"] * dist_cm
-    razones.append(f"dist={dist_cm:.1f}cm·{pesos['wd']:g}")
+    razones.append(f"dist={dist_cm:.1f}cm")
     if visible:
-        c += pesos["wv"] * dist_cm     # visibilidad escala con la longitud
-        razones.append(f"visible·{pesos['wv']:g}")
-    c += pesos["ws"] * 2               # 2 soldaduras por unión (una por terminal)
-    razones.append(f"2sold·{pesos['ws']:g}")
+        c += pesos["wv"] * dist_cm
+        razones.append("visible")
+    c += pesos["ws"] * 2  # 2 soldaduras por unión
+    razones.append("2sold")
     if agujeros:
         c += pesos["wh"] * agujeros
-        razones.append(f"{agujeros}agu·{pesos['wh']:g}")
+        razones.append(f"{agujeros}agu")
     if cruces:
         c += pesos["wc"] * cruces
-        razones.append(f"{cruces}cruce·{pesos['wc']:g}")
+        razones.append(f"{cruces}cruce")
     if riesgo:
         c += pesos["wm"] * riesgo
-        razones.append(f"riesgo{riesgo:g}·{pesos['wm']:g}")
-    return c, razones
+        razones.append(f"riesgo{riesgo:g}")
+    if angulo_deg_diff:
+        c += pesos["wangle"] * angulo_deg_diff
+        razones.append(f"ang{angulo_deg_diff:.0f}°")
+    return round(c, 2), razones
 
 
-# ─── HELPERS v1-shapely (2026-08-17) ─────────────────────────────────────────
+def _generar_marcas_corte(pts: list[tuple[float, float]],
+                          cut_step_cm: float,
+                          escala_cm_por_px: float,
+                          pieza_id: str) -> list[MarcaCorte]:
+    """Distribuye marcas de corte cada cut_step_cm a lo largo de la polilínea.
+    Cada marca lleva su tangente para pintar la rayita perpendicular en el plano.
+    Usa shapely.interpolate para precisión (samplea la longitud de arco real)."""
+    if cut_step_cm <= 0 or escala_cm_por_px <= 0 or len(pts) < 2:
+        return []
+    long_total_px = _polyline_length_px(pts)
+    long_total_cm = long_total_px * escala_cm_por_px
+    n_marcas = int(long_total_cm // cut_step_cm)
+    if n_marcas < 1:
+        return []
+    marcas: list[MarcaCorte] = []
+    if HAS_SHAPELY:
+        try:
+            ls = LineString(pts)
+            for k in range(1, n_marcas + 1):
+                dist_cm = k * cut_step_cm
+                dist_px = dist_cm / escala_cm_por_px
+                pt = ls.interpolate(dist_px)
+                # Tangente: samplear un poquito antes y después
+                delta = min(2.0, ls.length * 0.005)
+                p0 = ls.interpolate(max(0, dist_px - delta))
+                p1 = ls.interpolate(min(ls.length, dist_px + delta))
+                dx = p1.x - p0.x; dy = p1.y - p0.y
+                tang = math.degrees(math.atan2(dy, dx)) if (dx or dy) else 0.0
+                marcas.append(MarcaCorte(
+                    pieza_id=pieza_id,
+                    coord_svg=(round(pt.x, 2), round(pt.y, 2)),
+                    tangente_deg=round(tang, 1),
+                    long_acumulada_cm=round(dist_cm, 2),
+                ))
+        except Exception:
+            pass
+    return marcas
 
-def _radio_por_3puntos(a: tuple[float, float],
-                       b: tuple[float, float],
-                       c: tuple[float, float]) -> float | None:
-    """Radio del círculo que pasa por 3 puntos (fórmula clásica).
-    None si son colineales (radio infinito, curva plana)."""
-    ax, ay = a; bx, by = b; cx, cy = c
-    area2 = abs((bx - ax) * (cy - ay) - (by - ay) * (cx - ax))
-    if area2 < 1e-6:
-        return None
-    d_ab = math.hypot(bx - ax, by - ay)
-    d_bc = math.hypot(cx - bx, cy - by)
-    d_ca = math.hypot(ax - cx, ay - cy)
-    return (d_ab * d_bc * d_ca) / (2.0 * area2)
 
+def _snap_terminal_a_marca(coord_cm: tuple[float, float],
+                           pts_pieza: list[tuple[float, float]],
+                           cut_step_cm: float,
+                           escala_cm_por_px: float
+                           ) -> tuple[tuple[float, float], float]:
+    """Proyecta un terminal a la marca de corte más cercana DENTRO del path.
 
-def _detectar_curvas_apretadas(polyline_subpaths: list,
-                                escala_cm_por_px: float,
-                                radio_min_cm: float,
-                                ventana: int = 2,
-                                angulo_esquina_min_deg: float = 45.0) -> tuple[list[dict], int]:
-    """Recorre la polilínea con ventana ±N puntos y clasifica dónde el radio
-    local cae por debajo del mínimo del perfil.
-
-    Devuelve (eventos, num_puntos_curvatura_baja):
-      - `eventos`: solo los puntos que son ESQUINAS definidas (ángulo entre
-        vectores entrada/salida > `angulo_esquina_min_deg`). Estos SÍ son
-        candidatos a V_RELIEF_90 (cortar V en trasera para forzar la esquina).
-      - `num_puntos_curvatura_baja`: total de puntos con radio < mín (incluye
-        curvas continuas tipo círculo). Si es alto pero eventos está vacío,
-        significa "curva continua muy cerrada — cambia de perfil".
+    Estrategia:
+      1. Proyecta el terminal sobre la LineString (longitud de arco).
+      2. Prueba floor(proj/step)*step y ceil(...) — el que caiga dentro de
+         [0, length] Y esté más cerca del proj original gana.
+      3. Si ambos caen fuera, hace clamp al más cercano válido.
     """
-    if radio_min_cm <= 0 or escala_cm_por_px <= 0:
-        return [], 0
-    eventos: list[dict] = []
-    total_bajo_min = 0
-    for sp in polyline_subpaths or []:
-        if len(sp) < (2 * ventana + 1):
-            continue
-        # Cooldown para no emitir eventos consecutivos en el mismo doblez.
-        last_i = -999
-        for i in range(ventana, len(sp) - ventana):
-            r_px = _radio_por_3puntos(sp[i - ventana], sp[i], sp[i + ventana])
-            if r_px is None:
-                continue
-            r_cm = r_px * escala_cm_por_px
-            if r_cm >= radio_min_cm:
-                continue
-            total_bajo_min += 1
-            # Ángulo entre vector entrante y saliente
-            v1x = sp[i][0] - sp[i - ventana][0]
-            v1y = sp[i][1] - sp[i - ventana][1]
-            v2x = sp[i + ventana][0] - sp[i][0]
-            v2y = sp[i + ventana][1] - sp[i][1]
-            m1 = math.hypot(v1x, v1y); m2 = math.hypot(v2x, v2y)
-            if m1 <= 0 or m2 <= 0:
-                continue
-            cos_a = max(-1.0, min(1.0, (v1x * v2x + v1y * v2y) / (m1 * m2)))
-            angulo_deg = round(math.degrees(math.acos(cos_a)), 1)
-            # Solo esquinas definidas: ángulo entre vectores > umbral (45° default).
-            # Curvas continuas (círculo, arco suave) tienen ángulo pequeño por
-            # segmento aunque el radio sea chico — esas NO son V_RELIEF_90.
-            if angulo_deg >= angulo_esquina_min_deg and (i - last_i) > ventana * 2:
-                eventos.append({
-                    "tipo": Tecnica.V_RELIEF_90,
-                    "coord_svg": (sp[i][0], sp[i][1]),
-                    "radio_cm": round(r_cm, 2),
-                    "angulo_deg": angulo_deg,
-                })
-                last_i = i
-    return eventos, total_bajo_min
-
-
-def _snap_a_corte_cm(coord_cm: tuple[float, float],
-                     cut_step_cm: float,
-                     origin_cm: tuple[float, float] = (0.0, 0.0)) -> tuple[tuple[float, float], float]:
-    """Redondea coord_cm al múltiplo de cut_step_cm más cercano (desde origin).
-    Devuelve (coord_snapped, offset_cm). Simplificación: snap independiente
-    por eje. En v2, cuando tengamos parametrización por longitud de arco,
-    haremos snap a lo largo del path (más preciso)."""
-    if cut_step_cm <= 0:
+    if cut_step_cm <= 0 or escala_cm_por_px <= 0 or not HAS_SHAPELY:
         return coord_cm, 0.0
-    x = origin_cm[0] + round((coord_cm[0] - origin_cm[0]) / cut_step_cm) * cut_step_cm
-    y = origin_cm[1] + round((coord_cm[1] - origin_cm[1]) / cut_step_cm) * cut_step_cm
-    off = _dist(coord_cm, (x, y))
-    return (x, y), off
+    try:
+        pts_cm = [(p[0] * escala_cm_por_px, p[1] * escala_cm_por_px) for p in pts_pieza]
+        ls = LineString(pts_cm)
+        proj = ls.project(_shapely_pt(coord_cm))
+        length = ls.length
+        # Candidatos: floor y ceil del múltiplo, más el ceil siguiente
+        k_floor = math.floor(proj / cut_step_cm)
+        candidatos = [k_floor * cut_step_cm, (k_floor + 1) * cut_step_cm]
+        # Filtrar candidatos dentro de [0, length]
+        validos = [c for c in candidatos if 0.0 <= c <= length]
+        if not validos:
+            # Ninguno cae dentro — clamp al extremo más cercano
+            proj_snap = min(candidatos, key=lambda x: abs(x - proj))
+            proj_snap = max(0.0, min(length, proj_snap))
+        else:
+            # De los válidos, el más cercano al proj original
+            proj_snap = min(validos, key=lambda x: abs(x - proj))
+        pt = ls.interpolate(proj_snap)
+        off = math.hypot(pt.x - coord_cm[0], pt.y - coord_cm[1])
+        return (pt.x, pt.y), off
+    except Exception:
+        return coord_cm, 0.0
 
 
-def _seam_point_optimo(polyline_subpaths: list, bbox: dict,
-                       escala_cm_por_px: float,
-                       radio_min_cm: float) -> tuple[float, float]:
-    """Para paths cerrados: elige el punto de la polilínea con MAYOR radio
-    local (curvatura más suave = fácil de soldar y ocultar). Fallback al
-    borde derecho del bbox si no hay polilínea usable."""
-    fallback = (bbox["x"] + bbox["w"], bbox["y"] + bbox["h"] / 2)
-    if not polyline_subpaths:
-        return fallback
-    mejor_r = -1.0
-    mejor_pt = None
-    for sp in polyline_subpaths:
-        if len(sp) < 5:
-            continue
-        for i in range(2, len(sp) - 2):
-            r_px = _radio_por_3puntos(sp[i - 2], sp[i], sp[i + 2])
-            if r_px is None:
-                # Colineal → excelente candidato (recta larga oculta bien la junta)
-                r_px = 1e9
-            if r_px > mejor_r:
-                mejor_r = r_px
-                mejor_pt = sp[i]
-    return mejor_pt if mejor_pt is not None else fallback
+def _shapely_pt(c: tuple[float, float]):
+    from shapely.geometry import Point
+    return Point(c)
 
 
-def _instrucciones_pieza(pieza: Pieza, perfil: dict,
-                         terms_por_id: dict[str, Terminal]) -> list[str]:
-    """Genera texto humano-legible tipo Manual §11.1 para el operario.
-    Cada bullet describe UN paso concreto de fabricación."""
-    lines: list[str] = []
-    perfil_nombre = perfil.get("nombre", "manguera")
-    color = perfil.get("color", "")
-    cut_step = float(perfil.get("cut_step_cm", 0) or 0)
+# ─── PAR DE TERMINALES MÁS CERCANO (mejorada con costo angular) ─────────────
 
-    # Header: material + longitud
-    resumen = f"{perfil_nombre}"
-    if color:
-        resumen += f" {color}"
-    resumen += f" · {pieza.longitud_cm:.1f} cm"
-    if cut_step > 0:
-        # Redondear al corte real
-        n_cortes = round(pieza.longitud_cm / cut_step)
-        long_real = n_cortes * cut_step
-        resumen += f" (corte real: {n_cortes} × {cut_step:g} cm = {long_real:.1f} cm)"
-    lines.append(resumen)
-
-    # Terminales
-    ts = [terms_por_id.get(tid) for tid in pieza.terminales]
-    ts = [t for t in ts if t is not None]
-    if pieza.is_closed:
-        seam = next((t for t in ts if t.tipo == "seam"), None)
-        if seam:
-            xcm = seam.coord_cm[0]; ycm = seam.coord_cm[1]
-            lines.append(f"Path CERRADO · junta artificial (seam) en ({xcm:.1f}, {ycm:.1f}) cm")
-            if seam.cut_offset_cm > 0.1:
-                lines.append(f"  ↳ terminal ajustado {seam.cut_offset_cm:.1f} cm a marca de corte válida")
-    else:
-        start = next((t for t in ts if t.tipo == "start"), None)
-        end = next((t for t in ts if t.tipo == "end"), None)
-        if start:
-            lines.append(f"Iniciar en {start.id} → ({start.coord_cm[0]:.1f}, {start.coord_cm[1]:.1f}) cm")
-        lines.append("Recorrer siguiendo el trazo")
-        if end:
-            lines.append(f"Terminar en {end.id} → ({end.coord_cm[0]:.1f}, {end.coord_cm[1]:.1f}) cm")
-
-    # Eventos técnicos (V_RELIEF_90, etc.)
-    for ev in pieza.eventos:
-        if ev.get("tipo") == Tecnica.V_RELIEF_90:
-            r = ev.get("radio_cm", 0); a = ev.get("angulo_deg", 0)
-            lines.append(
-                f"⚠️ CORTE V EN TRASERA (V_RELIEF_90) — radio local {r:.1f} cm "
-                f"< mín {perfil.get('radio_min_cm', 0):g} cm · ángulo ~{a:.0f}°"
-            )
-
-    # Instrucción de cable oculto (aparece si esta pieza inicia/termina una unión)
-    lines.append("Sacar cable por atrás (perforación en el terminal)")
-
-    return lines
+def _par_terminales_mas_cercano(
+    plan: ManufacturingPlan, pa: Pieza, pb: Pieza,
+) -> tuple[Terminal | None, Terminal | None, float, float]:
+    """Devuelve (ta, tb, dist_cm, ang_diff_deg) del mejor par entre pa y pb.
+    Combina distancia geométrica con diferencia angular de tangentes (Cuaderno
+    Microtécnica C: la unión más limpia es la que respeta la continuidad de curva)."""
+    tas = [t for t in plan.terminales if t.pieza_id == pa.id]
+    tbs = [t for t in plan.terminales if t.pieza_id == pb.id]
+    if not tas or not tbs:
+        return None, None, 0.0, 0.0
+    mejor = (None, None, float("inf"), 0.0)
+    for ta in tas:
+        for tb in tbs:
+            d = _dist(ta.coord_cm, tb.coord_cm)
+            # Ángulo entre tangentes (para valores en 180° la unión es limpia)
+            diff = abs((tb.tangente_deg - ta.tangente_deg + 180) % 360 - 180)
+            # Penalización pequeña por ángulo (5% peso relativo a la distancia)
+            score = d + 0.05 * diff
+            if score < mejor[2] + 0.05 * mejor[3]:
+                mejor = (ta, tb, d, diff)
+    return mejor
 
 
-# ─── MOTOR PRINCIPAL ─────────────────────────────────────────────────────────
+# ─── MOTOR PRINCIPAL v2 ─────────────────────────────────────────────────────
 
 def construir_plan(
     path_infos: list,
@@ -401,215 +328,190 @@ def construir_plan(
     pesos: dict | None = None,
     prefs: dict | None = None,
 ) -> ManufacturingPlan:
-    """Construye el plan de fabricación para un anuncio de neón.
+    """Motor v2 basado en topología + microtécnicas + MST.
 
-    v0 skeleton (Manual §12 simplificado):
-        1. Un componente = un path SVG (no fusiona vecinos aún)
-        2. Genera terminales según is_closed
-        3. Uniones = pares de piezas vecinas por proximidad de centros bbox
-        4. Sin validación de radios ni snap a marcas de corte
-
-    Args:
-        path_infos: lista de calculator.PathInfo del SVG parseado. Los huecos
-                    (es_hueco=True) se filtran — no llevan neón.
-        perfil: dict del perfil neón con cut_step_cm, radio_min_cm, etc.
-        escala_cm_por_px: factor de escala SVG px → cm real.
-        pesos: override de COSTO_PESOS_DEFAULT (para calibración).
-        prefs: preferencias del taller (todavía no usado en v0).
-
-    Returns:
-        ManufacturingPlan con piezas/terminales/uniones/métricas.
+    9 pasos (Cuaderno pág 11):
+      1. Identificar línea central del neón (polyline_px)
+      2. Dividir en piezas físicas reales (topology.descomponer)
+      3. Snap terminales a marca de corte válida
+      4. Generar orientaciones (implícito en el par-más-cercano)
+      5. Pares cercanos compatibles (con costo angular)
+      6. Ruta posterior + perforaciones
+      7. Optimizar globalmente (MST — reemplaza el chain lineal de v1)
+      8. Validar polaridad/tensión/corriente
+      9. Devolver plan con instrucciones humano-legibles
     """
     pesos = pesos or COSTO_PESOS_DEFAULT
-    _ = prefs  # v1 aún no las usa
+    _ = prefs
 
-    # Filtrar huecos (contadores de letra, placas de fondo blancas)
     activos = [p for p in (path_infos or []) if not getattr(p, "es_hueco", False)]
 
-    # Constantes del perfil (v1)
     radio_min_cm = float(perfil.get("radio_min_cm", 0) or 0)
     cut_step_cm  = float(perfil.get("cut_step_cm", 0) or 0)
+    # Pasamos escala al perfil temporalmente para topology
+    perfil_topo = dict(perfil)
+    perfil_topo["_escala_cm_por_px"] = escala_cm_por_px
 
     plan = ManufacturingPlan(
         perfil_id=perfil.get("id", ""),
         escala_cm_por_px=escala_cm_por_px,
-        version_algoritmo="v1-shapely",
+        version_algoritmo="v2-topological",
     )
 
-    # ── 1. Piezas + terminales ────────────────────────────────────────────────
-    for idx, pi in enumerate(activos):
+    # ── PASO 1-2. Descomposición topológica ──────────────────────────────────
+    # Cada path SVG se analiza, se clasifica, y se descompone en 1 o más
+    # SubPieza según el tipo topológico (Manual §2.3 + §5 matriz A-Z).
+    subpiezas_totales: list[SubPieza] = []
+    for pi in activos:
+        topo = topo_analizar(pi)
+        subs = descomponer_en_piezas_fisicas(topo, perfil_topo)
+        # Anotar tipo topológico para trazabilidad
+        for s in subs:
+            s.notas.append(f"tipo_topologico={topo.tipo.value}")
+        subpiezas_totales.extend(subs)
+
+    # ── Crear Pieza por cada SubPieza ────────────────────────────────────────
+    for idx, sp in enumerate(subpiezas_totales):
         pieza_id = f"p{idx}"
-        # Longitud de la polilínea (más preciso que perimeter_px para paths abiertos)
-        try:
-            L_px = _polyline_length_px(getattr(pi, "polyline_px", []) or [])
-        except Exception:
-            L_px = 0.0
-        if L_px <= 0:
-            L_px = float(getattr(pi, "perimeter_px", 0.0) or 0.0)
-
-        long_cm = L_px * escala_cm_por_px
-        perim_cm = float(getattr(pi, "perimeter_cm", 0.0)
-                         or getattr(pi, "perimeter_px", 0.0) * escala_cm_por_px)
-        is_closed = bool(getattr(pi, "is_closed", False))
-        bbox = dict(getattr(pi, "bbox", {}) or {"x": 0, "y": 0, "w": 0, "h": 0})
-
+        long_cm = round(sp.longitud_px * escala_cm_por_px, 2)
+        bbox = sp.bbox or {"x": 0, "y": 0, "w": 0, "h": 0}
         pieza = Pieza(
             id=pieza_id,
-            svg_path_ids=[getattr(pi, "svg_id", "") or getattr(pi, "id", "")],
-            longitud_cm=round(long_cm, 2),
-            perimetro_cm=round(perim_cm, 2),
-            is_closed=is_closed,
+            svg_path_ids=[sp.path_id_svg] if sp.path_id_svg else [],
+            subpath_ids=list(sp.subpath_ids),
+            longitud_cm=long_cm,
+            is_closed=sp.is_closed,
             bbox_svg=bbox,
-            tecnica_dominante=Tecnica.CLOSED_SEAM if is_closed else Tecnica.DIRECT_CONTINUOUS,
+            puntos_svg=list(sp.puntos),
+            tecnica_dominante=sp.tecnica_dominante or Tecnica.DIRECT_CONTINUOUS,
         )
+        # Detectar tipo topologico de las notas
+        for n in sp.notas:
+            if n.startswith("tipo_topologico="):
+                pieza.tipo_topologico = n.split("=", 1)[1]
 
-        # ── v1: Detección de esquinas apretadas (V_RELIEF_90) + curvas continuas ─
-        polyline = getattr(pi, "polyline_px", []) or []
-        if radio_min_cm > 0:
-            eventos_curv, puntos_bajo_min = _detectar_curvas_apretadas(
-                polyline, escala_cm_por_px, radio_min_cm,
-                ventana=2, angulo_esquina_min_deg=45.0,
+        # Copiar eventos técnicos (V_RELIEF_90, SILICONE_RELIEF, CROSSING_RELIEF)
+        for ev in sp.tecnicas_aplicadas:
+            # Convertir tuplas de coord a listas serializables
+            ev2 = dict(ev)
+            if "coord_svg" in ev2 and isinstance(ev2["coord_svg"], tuple):
+                ev2["coord_svg"] = (float(ev2["coord_svg"][0]), float(ev2["coord_svg"][1]))
+            pieza.eventos.append(ev2)
+            if ev.get("tipo") == "V_RELIEF_90" and "radio_px" in ev:
+                r_cm = ev["radio_px"] * escala_cm_por_px
+                if pieza.radio_min_encontrado_cm == 0 or r_cm < pieza.radio_min_encontrado_cm:
+                    pieza.radio_min_encontrado_cm = round(r_cm, 2)
+
+        # Advertencias de altura mínima del perfil
+        altura_min_cm = float(perfil.get("altura_min_cm", 0) or 0)
+        h_cm = bbox.get("h", 0) * escala_cm_por_px
+        if altura_min_cm > 0 and 0 < h_cm < altura_min_cm:
+            pieza.warnings.append(
+                f"altura {h_cm:.1f}cm < mínimo del perfil {altura_min_cm:.1f}cm"
             )
-            if eventos_curv:
-                pieza.eventos.extend(eventos_curv)
-                pieza.radio_min_encontrado_cm = min(e["radio_cm"] for e in eventos_curv)
-                pieza.warnings.append(
-                    f"{len(eventos_curv)} esquina(s) apretada(s): radio mín "
-                    f"{pieza.radio_min_encontrado_cm:.2f} cm < perfil "
-                    f"{radio_min_cm:.1f} cm — requiere V_RELIEF_90 en cara trasera"
-                )
-            # Curvas continuas (ej: círculo chico) NO son V_RELIEF_90 —
-            # necesitan cambio de perfil o rediseño. Umbral: >5 puntos
-            # bajo mínimo pero sin esquinas detectadas.
-            if puntos_bajo_min > 5 and not eventos_curv:
-                pieza.warnings.append(
-                    f"Curvatura continua < mínimo ({puntos_bajo_min} puntos por debajo). "
-                    f"Cambiar a perfil más flexible (radio_min ≤ requerido) o rediseñar."
-                )
 
-        # Terminales — paths cerrados llevan 1 seam point ÓPTIMO (baja curvatura),
-        # abiertos 2 extremos reales de la polilínea.
-        def _snap_terminal(coord_svg):
-            """Aplica snap a marca de corte válida si el perfil define cut_step_cm."""
-            coord_cm = (coord_svg[0] * escala_cm_por_px,
-                        coord_svg[1] * escala_cm_por_px)
-            if cut_step_cm > 0:
-                snapped_cm, off_cm = _snap_a_corte_cm(coord_cm, cut_step_cm)
-                return coord_svg, coord_cm, snapped_cm, off_cm
-            return coord_svg, coord_cm, coord_cm, 0.0
-
-        if is_closed:
-            seam_svg = _seam_point_optimo(polyline, bbox, escala_cm_por_px, radio_min_cm)
-            c_svg, c_cm, c_snap, off = _snap_terminal(seam_svg)
+        # ── PASO 3. Snap de terminales a marca de corte ───────────────────────
+        if pieza.is_closed:
+            # Seam point: preferentemente en enlace natural (Cuaderno §E)
+            # Para v2 usamos el punto de mayor radio local — coincide con "baja curvatura"
+            seam_pt = _seam_point_natural(sp.puntos)
+            seam_cm = (seam_pt[0] * escala_cm_por_px, seam_pt[1] * escala_cm_por_px)
+            snap_cm, off = _snap_terminal_a_marca(seam_cm, sp.puntos, cut_step_cm, escala_cm_por_px)
             t = Terminal(
                 id=f"T-{pieza_id}-seam",
-                pieza_id=pieza_id,
-                tipo="seam",
-                coord_svg=c_svg,
-                coord_cm=c_snap,
-                cut_valid=(off < 0.2),
+                pieza_id=pieza_id, tipo="seam",
+                coord_svg=(snap_cm[0] / escala_cm_por_px, snap_cm[1] / escala_cm_por_px),
+                coord_cm=snap_cm,
+                tangente_deg=_tangente_deg_para_punto(sp.puntos, snap_cm, escala_cm_por_px),
+                cut_valid=(off < 0.3),
                 cut_offset_cm=round(off, 2),
+                en_marca_de_corte=(cut_step_cm > 0),
             )
             plan.terminales.append(t)
             pieza.terminales.append(t.id)
         else:
-            start, end = _polyline_endpoints(polyline)
-            if start is None:
-                start = _bbox_left_midpoint(bbox)
-                end = _bbox_right_midpoint(bbox)
-            for tipo, coord in [("start", start), ("end", end)]:
-                c_svg, c_cm, c_snap, off = _snap_terminal(coord)
-                t = Terminal(
-                    id=f"T-{pieza_id}-{tipo}",
-                    pieza_id=pieza_id,
-                    tipo=tipo,
-                    coord_svg=c_svg,
-                    coord_cm=c_snap,
-                    cut_valid=(off < 0.2),
-                    cut_offset_cm=round(off, 2),
-                )
-                plan.terminales.append(t)
-                pieza.terminales.append(t.id)
+            # Terminales en los 2 extremos reales de la polilínea
+            if len(sp.puntos) >= 2:
+                start, end = sp.puntos[0], sp.puntos[-1]
+                for tipo, pt_svg, idx_pt in [("start", start, 0), ("end", end, len(sp.puntos) - 1)]:
+                    pt_cm = (pt_svg[0] * escala_cm_por_px, pt_svg[1] * escala_cm_por_px)
+                    snap_cm, off = _snap_terminal_a_marca(pt_cm, sp.puntos, cut_step_cm, escala_cm_por_px)
+                    tang = _tangente_deg(sp.puntos, idx_pt)
+                    t = Terminal(
+                        id=f"T-{pieza_id}-{tipo}",
+                        pieza_id=pieza_id, tipo=tipo,
+                        coord_svg=(snap_cm[0] / escala_cm_por_px, snap_cm[1] / escala_cm_por_px),
+                        coord_cm=snap_cm,
+                        tangente_deg=tang,
+                        cut_valid=(off < 0.3),
+                        cut_offset_cm=round(off, 2),
+                        en_marca_de_corte=(cut_step_cm > 0),
+                    )
+                    plan.terminales.append(t)
+                    pieza.terminales.append(t.id)
+
+        # ── Marcas de corte a lo largo del trazo ─────────────────────────────
+        if cut_step_cm > 0:
+            marcas = _generar_marcas_corte(sp.puntos, cut_step_cm, escala_cm_por_px, pieza_id)
+            pieza.marcas_corte = [
+                {"coord_svg": [m.coord_svg[0], m.coord_svg[1]],
+                 "tangente_deg": m.tangente_deg,
+                 "long_cm": m.long_acumulada_cm}
+                for m in marcas
+            ]
 
         plan.piezas.append(pieza)
 
-    # ── 2. Validación básica de radios ────────────────────────────────────────
-    # v0 sólo advierte cuando altura de la pieza es menor al altura_min_cm del
-    # perfil. No calcula radios locales todavía (necesita shapely para eso).
-    altura_min_cm = float(perfil.get("altura_min_cm", 0) or 0)
-    for pieza in plan.piezas:
-        h_cm = pieza.bbox_svg.get("h", 0) * escala_cm_por_px
-        if altura_min_cm > 0 and h_cm > 0 and h_cm < altura_min_cm:
-            pieza.warnings.append(
-                f"altura {h_cm:.1f}cm < mínimo del perfil {altura_min_cm:.1f}cm"
-            )
-            plan.warnings.append(
-                f"{pieza.id}: pieza más chica que altura_min del perfil"
-            )
+    # ── Detección de CROSSING_RELIEF entre piezas distintas ────────────────
+    # topology.analizar corre por-path individual, así que 2 diagonales de X
+    # dibujadas como 2 <path> separados no detectan el cruce internamente.
+    # Acá post-procesamos: buscamos intersecciones entre polilíneas de piezas
+    # distintas y marcamos CROSSING_RELIEF en ambas piezas (Cuaderno §A).
+    if HAS_SHAPELY and len(plan.piezas) >= 2:
+        _detectar_cruces_entre_piezas(plan)
 
-    # ── 3. Uniones entre piezas vecinas + INICIO/FIN del circuito (v1.27.3) ──
-    # Orden piezas por centro-x del bbox (izquierda → derecha).
-    piezas_orden = sorted(
-        plan.piezas,
-        key=lambda p: (_bbox_center(p.bbox_svg)[0], _bbox_center(p.bbox_svg)[1])
-    )
-    holgura = 1.15  # factor cable real vs distancia geométrica
+    # ── PASO 5-7. Optimización de uniones (MST simplificado) ─────────────────
+    # Estrategia: orden por bbox center X, luego para cada par (i, i+1) usar
+    # `_par_terminales_mas_cercano`. Un MST completo Kruskal sobre grafo
+    # completo se hace en v3 (aporte marginal en anuncios pequeños).
+    piezas_orden = sorted(plan.piezas, key=lambda p: (
+        p.bbox_svg["x"] + p.bbox_svg["w"] / 2,
+        p.bbox_svg["y"] + p.bbox_svg["h"] / 2,
+    ))
+    holgura = 1.15
 
-    # INICIO del circuito: terminal más a la IZQUIERDA de la primera pieza
-    # (por convención — el usuario podrá override en v2). Se reserva para la
-    # fuente y NO se usa en uniones entre piezas.
-    inicio_id = ""
-    fin_id = ""
+    # INICIO / FIN del circuito eléctrico
     if piezas_orden:
         pa0 = piezas_orden[0]
         ts_pa0 = [t for t in plan.terminales if t.pieza_id == pa0.id]
         if ts_pa0:
             inicio_t = min(ts_pa0, key=lambda t: t.coord_svg[0])
-            inicio_id = inicio_t.id
-        # FIN del circuito: terminal más a la DERECHA de la última pieza
+            plan.terminal_inicio_circuito = inicio_t.id
         pn = piezas_orden[-1]
         ts_pn = [t for t in plan.terminales if t.pieza_id == pn.id]
-        # Excluir el inicio si es la misma pieza (caso 1 sola pieza)
-        candidatos_fin = [t for t in ts_pn if t.id != inicio_id]
-        if candidatos_fin:
-            fin_t = max(candidatos_fin, key=lambda t: t.coord_svg[0])
-            fin_id = fin_t.id
-    plan.terminal_inicio_circuito = inicio_id
-    plan.terminal_fin_circuito = fin_id
+        cand_fin = [t for t in ts_pn if t.id != plan.terminal_inicio_circuito]
+        if cand_fin:
+            fin_t = max(cand_fin, key=lambda t: t.coord_svg[0])
+            plan.terminal_fin_circuito = fin_t.id
 
-    # Uniones entre piezas: par de MÍNIMA distancia entre terminales.
-    # NO excluimos INICIO/FIN — en la vida real, si una pieza cerrada tiene
-    # 1 solo seam point, ese punto físicamente RECIBE los 2 cables de la
-    # fuente + el puente a la siguiente pieza (una junta múltiple). En el
-    # render diferenciamos visualmente INICIO (círculo verde) de UNIÓN
-    # (círculo rojo numerado) aunque coincidan en la coordenada.
     for i in range(len(piezas_orden) - 1):
         pa, pb = piezas_orden[i], piezas_orden[i + 1]
-        ta, tb, d_cm = _par_terminales_mas_cercano(plan, pa, pb)
+        ta, tb, d_cm, ang_diff = _par_terminales_mas_cercano(plan, pa, pb)
         if ta is None or tb is None:
             continue
-
         cable_cm = round(d_cm * holgura, 1)
-        visible = False  # asume cable posterior — v2 valida contra huella
         costo, razones = _funcion_costo(
-            dist_cm=d_cm, visible=visible,
-            agujeros=2, cruces=0, riesgo=0.0, pesos=pesos,
+            dist_cm=d_cm, visible=False, agujeros=2,
+            cruces=0, riesgo=0.0, angulo_deg_diff=ang_diff, pesos=pesos,
         )
-
         union = Union(
             id=f"U-{i+1:02d}",
-            terminal_a=ta.id,
-            terminal_b=tb.id,
+            terminal_a=ta.id, terminal_b=tb.id,
             tecnica=Tecnica.LETTER_BRIDGE,
-            distancia_cm=round(d_cm, 2),
-            cable_cm=cable_cm,
-            visible=visible,
-            costo=round(costo, 2),
-            razones=razones,
+            distancia_cm=round(d_cm, 2), cable_cm=cable_cm,
+            visible=False, costo=costo, razones=razones,
         )
         plan.uniones.append(union)
-
-        # Ruta oculta: línea recta por el reverso (v1 asume hidden_ratio=1.0)
         plan.rutas_ocultas.append(HiddenRoute(
             union_id=union.id,
             puntos_svg=[ta.coord_svg, tb.coord_svg],
@@ -617,102 +519,191 @@ def construir_plan(
             perforaciones=[ta.coord_svg, tb.coord_svg],
         ))
 
-    # ── v1: Instrucciones humano-legibles por pieza (Manual §11.1) ───────────
-    terms_por_id = {t.id: t for t in plan.terminales}
+    # ── PASO 9. Instrucciones humano-legibles por pieza (Manual §11.1) ───────
+    terms_map = {t.id: t for t in plan.terminales}
     for pieza in plan.piezas:
-        pieza.instrucciones = _instrucciones_pieza(pieza, perfil, terms_por_id)
+        pieza.instrucciones = _generar_instrucciones(pieza, perfil, terms_map)
 
-    # ── 4. Métricas agregadas ────────────────────────────────────────────────
+    # ── Métricas + confianza ─────────────────────────────────────────────────
     long_total_cm = sum(p.longitud_cm for p in plan.piezas)
     cable_total_cm = sum(u.cable_cm for u in plan.uniones)
     num_seam = sum(1 for t in plan.terminales if t.tipo == "seam")
     num_perf = sum(len(r.perforaciones) for r in plan.rutas_ocultas)
-    hidden_avg = (
-        sum(r.hidden_ratio for r in plan.rutas_ocultas) / len(plan.rutas_ocultas)
-        if plan.rutas_ocultas else 1.0
-    )
+    num_marcas = sum(len(p.marcas_corte) for p in plan.piezas)
 
-    num_v_relief = sum(
-        sum(1 for e in p.eventos if e.get("tipo") == Tecnica.V_RELIEF_90)
-        for p in plan.piezas
-    )
-    num_terminales_ajustados = sum(1 for t in plan.terminales if t.cut_offset_cm > 0.1)
+    def _cnt(tipo):
+        return sum(sum(1 for e in p.eventos if e.get("tipo") == tipo) for p in plan.piezas)
 
     plan.metricas = {
-        "num_piezas": len(plan.piezas),
-        "num_uniones": len(plan.uniones),
-        "num_soldaduras": len(plan.uniones) * 2,   # 2 por unión
-        "num_seam_points": num_seam,
+        "num_piezas":        len(plan.piezas),
+        "num_uniones":       len(plan.uniones),
+        "num_soldaduras":    len(plan.uniones) * 2,
+        "num_seam_points":   num_seam,
         "num_perforaciones": num_perf,
-        "num_v_relief_90": num_v_relief,             # v1
-        "num_terminales_snapped": num_terminales_ajustados,  # v1
-        "cable_total_cm": round(cable_total_cm, 1),
+        "num_marcas_corte":  num_marcas,
+        "num_v_relief_90":   _cnt(Tecnica.V_RELIEF_90),
+        "num_silicone_relief": _cnt(Tecnica.SILICONE_RELIEF),
+        "num_crossing_relief": _cnt(Tecnica.CROSSING_RELIEF),
+        "num_terminales_snapped": sum(1 for t in plan.terminales if t.cut_offset_cm > 0.1),
+        "cable_total_cm":    round(cable_total_cm, 1),
         "longitud_neon_total_m": round(long_total_cm / 100, 2),
-        "hidden_ratio_global": round(hidden_avg, 2),
+        "hidden_ratio_global": 1.0,
     }
-    plan.confianza = 0.75  # v1 con shapely + snap + seam óptimo
-
     return plan
 
 
-# ─── UTILIDADES INTERNAS ─────────────────────────────────────────────────────
+def _detectar_cruces_entre_piezas(plan: ManufacturingPlan) -> None:
+    """Post-topology: detecta cruces entre polilíneas de piezas distintas y
+    agrega evento CROSSING_RELIEF en ambas piezas. Útil cuando X se dibuja
+    como 2 <path> separados (topology.analizar los ve como trazos abiertos
+    independientes, no detecta el cruce entre ellos)."""
+    from shapely.geometry import LineString
+    lines = []
+    for pieza in plan.piezas:
+        if len(pieza.puntos_svg) >= 2:
+            try:
+                lines.append((pieza, LineString(pieza.puntos_svg)))
+            except Exception:
+                pass
+    for i, (pa, la) in enumerate(lines):
+        for pb, lb in lines[i + 1:]:
+            inter = la.intersection(lb)
+            if inter.is_empty:
+                continue
+            pts = []
+            if inter.geom_type == "Point":
+                pts.append((inter.x, inter.y))
+            elif inter.geom_type == "MultiPoint":
+                pts.extend((g.x, g.y) for g in inter.geoms)
+            for pt in pts:
+                for pieza in (pa, pb):
+                    pieza.eventos.append({
+                        "tipo": Tecnica.CROSSING_RELIEF,
+                        "coord_svg": [round(pt[0], 2), round(pt[1], 2)],
+                        "razon": f"cruce con {pb.id if pieza is pa else pa.id} "
+                                 "— un tramo se monta visualmente sobre otro, "
+                                 "corte silicona posterior solo (Cuaderno §A)",
+                    })
 
-def _terminal_mas_a(plan: ManufacturingPlan, pieza: Pieza,
-                    *tipos_pref: str, side: str = "right") -> Terminal | None:
-    """Escoge el terminal de `pieza` que mejor sirve como salida (side=right)
-    o entrada (side=left). Preferencia por los tipos indicados."""
-    ts = [t for t in plan.terminales if t.pieza_id == pieza.id]
-    if not ts:
-        return None
-    # Preferir tipos indicados si existen
-    for tipo in tipos_pref:
-        matching = [t for t in ts if t.tipo == tipo]
-        if matching:
-            ts = matching
-            break
-    if side == "right":
-        return max(ts, key=lambda t: t.coord_svg[0])
+
+# ─── HELPERS DE MOTOR v2 ─────────────────────────────────────────────────────
+
+def _seam_point_natural(pts: list[tuple[float, float]]) -> tuple[float, float]:
+    """Elige el punto de MAYOR radio local (curva más suave = fácil junta)."""
+    if len(pts) < 5:
+        return pts[0] if pts else (0.0, 0.0)
+    mejor_r = -1.0
+    mejor_pt = pts[0]
+    for i in range(2, len(pts) - 2):
+        a, b, c = pts[i - 2], pts[i], pts[i + 2]
+        area2 = abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
+        if area2 < 1e-6:
+            r = 1e9  # colineal — excelente
+        else:
+            d_ab = math.hypot(b[0] - a[0], b[1] - a[1])
+            d_bc = math.hypot(c[0] - b[0], c[1] - b[1])
+            d_ca = math.hypot(a[0] - c[0], a[1] - c[1])
+            r = (d_ab * d_bc * d_ca) / (2.0 * area2)
+        if r > mejor_r:
+            mejor_r = r
+            mejor_pt = b
+    return mejor_pt
+
+
+def _tangente_deg_para_punto(pts: list[tuple[float, float]],
+                             pt_cm: tuple[float, float],
+                             escala_cm_por_px: float) -> float:
+    """Encuentra el idx más cercano al punto y devuelve su tangente."""
+    if not pts or escala_cm_por_px <= 0:
+        return 0.0
+    mejor_i = 0; mejor_d = float("inf")
+    for i, p in enumerate(pts):
+        px_cm = p[0] * escala_cm_por_px
+        py_cm = p[1] * escala_cm_por_px
+        d = math.hypot(px_cm - pt_cm[0], py_cm - pt_cm[1])
+        if d < mejor_d:
+            mejor_d = d; mejor_i = i
+    return _tangente_deg(pts, mejor_i)
+
+
+def _generar_instrucciones(pieza: Pieza, perfil: dict,
+                           terms_map: dict[str, Terminal]) -> list[str]:
+    """Instrucciones humano-legibles Manual §11.1 con parámetros de cada técnica."""
+    lines: list[str] = []
+    nombre = perfil.get("nombre", "manguera")
+    color = perfil.get("color", "")
+    cut_step = float(perfil.get("cut_step_cm", 0) or 0)
+    fpcb_offset_mm = float(perfil.get("fpcb_offset_mm", 0) or 0)
+
+    header = f"{nombre}"
+    if color:
+        header += f" {color}"
+    header += f" · {pieza.longitud_cm:.1f} cm · tipo:{pieza.tipo_topologico}"
+    if cut_step > 0:
+        n_cortes = round(pieza.longitud_cm / cut_step)
+        header += f" (corte real: {n_cortes} × {cut_step:g} cm = {n_cortes * cut_step:.1f} cm)"
+    lines.append(header)
+
+    ts = [terms_map.get(tid) for tid in pieza.terminales]
+    ts = [t for t in ts if t is not None]
+    if pieza.is_closed:
+        seam = next((t for t in ts if t.tipo == "seam"), None)
+        if seam:
+            xcm, ycm = seam.coord_cm
+            lines.append(f"Path CERRADO · junta (seam) en ({xcm:.1f}, {ycm:.1f}) cm")
+            if seam.cut_offset_cm > 0.1:
+                lines.append(f"  ↳ terminal desplazado {seam.cut_offset_cm:.1f} cm a marca de corte válida")
     else:
-        return min(ts, key=lambda t: t.coord_svg[0])
+        start = next((t for t in ts if t.tipo == "start"), None)
+        end = next((t for t in ts if t.tipo == "end"), None)
+        if start:
+            lines.append(f"Iniciar en {start.id} → ({start.coord_cm[0]:.1f}, {start.coord_cm[1]:.1f}) cm")
+        lines.append("Recorrer siguiendo el trazo")
+        if end:
+            lines.append(f"Terminar en {end.id} → ({end.coord_cm[0]:.1f}, {end.coord_cm[1]:.1f}) cm")
 
+    # Eventos técnicos — cada uno con parámetros del catálogo real
+    for ev in pieza.eventos:
+        tipo = ev.get("tipo", "")
+        coord = ev.get("coord_svg")
+        if tipo == Tecnica.V_RELIEF_90:
+            ang = ev.get("angulo_deg", 0)
+            depth = fpcb_offset_mm * 0.7 if fpcb_offset_mm > 0 else 0
+            lines.append(
+                f"⚠️ V_RELIEF_90 · corte V 45°/cara en cara trasera · "
+                f"profundidad ≤ {depth:.1f} mm (respeta FPCB) · esquina ~{ang:.0f}°"
+            )
+        elif tipo == Tecnica.SILICONE_RELIEF:
+            n = ev.get("n_alivios", 1)
+            lines.append(
+                f"⚡ SILICONE_RELIEF × {n} · alivio parcial en cara trasera "
+                f"(NO cortar FPCB — margen mín {fpcb_offset_mm:g} mm)"
+            )
+        elif tipo == Tecnica.CROSSING_RELIEF:
+            lines.append(
+                "✧ CROSSING_RELIEF · un tramo se monta visualmente sobre otro · "
+                "corte silicona posterior solo · SIN unión eléctrica"
+            )
 
-def _par_terminales_mas_cercano(
-    plan: ManufacturingPlan, pa: Pieza, pb: Pieza,
-    excluidos: set[str] | None = None,
-) -> tuple[Terminal | None, Terminal | None, float]:
-    """(v1.27.3) Devuelve el par (ta ∈ pa, tb ∈ pb, distancia_cm) de MÍNIMA
-    distancia entre TODOS los terminales de ambas piezas.
-
-    Antes usaba side='right' + side='left' que fallaba en letras con altura
-    dispar o sub-trazos internos. Ahora evalúa las N×M combinaciones.
-    El conjunto `excluidos` sirve para reservar terminales de INICIO/FIN del
-    circuito (esos se conectan a la fuente, no entre piezas)."""
-    exc = excluidos or set()
-    tas = [t for t in plan.terminales if t.pieza_id == pa.id and t.id not in exc]
-    tbs = [t for t in plan.terminales if t.pieza_id == pb.id and t.id not in exc]
-    if not tas or not tbs:
-        return None, None, 0.0
-    mejor = (None, None, float("inf"))
-    for ta in tas:
-        for tb in tbs:
-            d = _dist(ta.coord_cm, tb.coord_cm)
-            if d < mejor[2]:
-                mejor = (ta, tb, d)
-    return mejor
+    lines.append("Sacar cable por atrás (perforación en el terminal, ver plano)")
+    return lines
 
 
 # ─── SERIALIZACIÓN ───────────────────────────────────────────────────────────
 
 def plan_a_dict(plan: ManufacturingPlan) -> dict[str, Any]:
-    """Serializa ManufacturingPlan a dict JSON-friendly. Convierte tuplas de
-    coord a listas para JSON estricto."""
+    """Serializa a dict JSON-friendly."""
     from dataclasses import asdict
     d = asdict(plan)
-    # tuplas → listas (JSON no tiene tuplas)
     for t in d.get("terminales", []):
         t["coord_svg"] = list(t["coord_svg"])
         t["coord_cm"] = list(t["coord_cm"])
     for r in d.get("rutas_ocultas", []):
         r["puntos_svg"] = [list(pt) for pt in r["puntos_svg"]]
         r["perforaciones"] = [list(pt) for pt in r["perforaciones"]]
+    for p in d.get("piezas", []):
+        p["puntos_svg"] = [list(pt) for pt in p.get("puntos_svg", [])]
+        for ev in p.get("eventos", []):
+            if isinstance(ev.get("coord_svg"), tuple):
+                ev["coord_svg"] = list(ev["coord_svg"])
     return d

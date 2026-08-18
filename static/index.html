@@ -2050,7 +2050,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
       </div>
       <span class="brand__name">SGI Cotizador</span>
-      <span class="brand__v" id="brand-version">v1.27.3</span>
+      <span class="brand__v" id="brand-version">v1.28.0</span>
     </div>
     <div class="crumbs" id="topbar-crumbs">
       <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
@@ -2140,7 +2140,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.27.3</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.28.0</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -3650,7 +3650,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
           </div>
         </div>
 
-        <!-- Paso 2: Modo de fabricación + Método de fijación (v1.27.3) -->
+        <!-- Paso 2: Modo de fabricación + Método de fijación (v1.28.0) -->
         <div class="cfg-step">
           <div class="cfg-step-label"><span class="cfg-step-num">2</span>¿Cómo se fabrica la base?</div>
           <div class="cfg-cards" id="cfg-neon-modo-cards">
@@ -3988,7 +3988,7 @@ function setTipo(tipo, btn) {
 // Estado del modo de fabricación del neón (lamina|3d). Se guarda aparte para
 // que setTipo y calcular() puedan consultarlo sin depender del DOM.
 let neonModoActual = "lamina";
-// (v1.27.3) Método de fijación de la manguera al respaldo.
+// (v1.28.0) Método de fijación de la manguera al respaldo.
 //   "pegada"  → base plana + adhesivo (1ª gen)
 //   "ruteada" → base con canal CNC + manguera empotrada (obligatorio 2ª gen)
 // Solo aplica cuando neonModoActual === "lamina".
@@ -4124,7 +4124,7 @@ function _cfgNeonAplicar() {
   const modoWiz = _cfgCardVal("cfg-neon-modo-cards") || "lamina";
   const aprov = _cfgCardVal("cfg-neon-aprov-cards") || "";
 
-  // (v1.27.3) Mapeo del wizard (3 opciones) → 2 vars del sidebar:
+  // (v1.28.0) Mapeo del wizard (3 opciones) → 2 vars del sidebar:
   //   "lamina"  → modo=lamina  + fijacion=pegada
   //   "ruteada" → modo=lamina  + fijacion=ruteada  (dispara ranurado CNC)
   //   "3d"      → modo=3d      + fijacion=pegada  (irrelevante, no aplica)
@@ -4209,7 +4209,7 @@ function _cfgNeonOnGenChange() {
   const gen = _cfgCardVal("cfg-neon-gen-cards") || "1";
   const aviso = document.getElementById("cfg-neon-gen2-aviso");
 
-  // (v1.27.3) 3 tarjetas de fabricación: pegada | ruteada | 3d.
+  // (v1.28.0) 3 tarjetas de fabricación: pegada | ruteada | 3d.
   // - gen 1 → las 3 disponibles (default: pegada)
   // - gen 2 → SIEMPRE ruteada (silicona no se pega); pegada y 3d bloqueadas
   const cardPegada  = document.querySelector('#cfg-neon-modo-cards [data-val="lamina"]');
@@ -4303,7 +4303,7 @@ function _cfgNeonOnGenChange() {
 }
 
 function _cfgNeonOnModoChange() {
-  // (v1.27.3) 3 valores: "lamina" (pegada), "ruteada" (CNC), "3d" (Signflex).
+  // (v1.28.0) 3 valores: "lamina" (pegada), "ruteada" (CNC), "3d" (Signflex).
   // "lamina" y "ruteada" ambos requieren el paso de base (paso 5).
   const modo = _cfgCardVal("cfg-neon-modo-cards") || "lamina";
   const usaBase = (modo === "lamina" || modo === "ruteada");
@@ -6895,7 +6895,7 @@ async function calcular() {
         ancho_cm:      parseFloat(document.getElementById("neon-ancho").value)   || 0,
         alto_cm:       parseFloat(document.getElementById("neon-alto").value)    || 0,
         modo_fabricacion: neonModoActual,
-        metodo_fijacion:  neonMetodoFijacion,  // v1.27.3
+        metodo_fijacion:  neonMetodoFijacion,  // v1.28.0
         base_id:       document.getElementById("neon-base").value    || "acr-3-tr",
         forma_id:      document.getElementById("neon-forma").value   || "rect",
         incluir_soporte:    !!document.getElementById("neon-soporte").checked,
@@ -15409,7 +15409,17 @@ window.v3d_snapshot = function(targetW = 2200, opts = {}) {
   .pn-highlight{fill:none;stroke-width:2.5;opacity:.95}
   /* Evento V_RELIEF_90 — triángulo ámbar de aviso */
   .pn-vrelief{fill:#f59e0b;stroke:#78350f;stroke-width:1}
-  .pn-vrelief-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;fill:#78350f;font-weight:700;text-anchor:middle}
+  .pn-vrelief-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;fill:#78350f;font-weight:700;text-anchor:middle;dominant-baseline:central;pointer-events:none}
+  .pn-vrelief-ang{font-family:'JetBrains Mono',monospace;font-size:8px;fill:#78350f;font-weight:600}
+  /* Cable como stubs cortos (no vía horizontal común) */
+  .pn-cable-stub{stroke:#dc2626;stroke-width:1.5;stroke-dasharray:2 1.5;fill:none;opacity:.9;stroke-linecap:round}
+  /* Doble círculo de soldadura */
+  .pn-u-ring{fill:none;stroke:#dc2626;stroke-width:1.2}
+  /* Marcas de corte a lo largo del trazo */
+  .pn-marca-corte{stroke-width:1;opacity:.7}
+  /* Cruce sin unión eléctrica (Cuaderno §A) */
+  .pn-cross-mark{stroke:#0891b2;stroke-width:1.5}
+  .pn-cross-ring{fill:none;stroke:#0891b2;stroke-width:1;stroke-dasharray:1 1}
   /* INICIO / FIN circuito (entrada/salida a fuente) */
   .pn-io-in {fill:#16a34a;stroke:#052e16;stroke-width:1.5}
   .pn-io-out{fill:#0891b2;stroke:#083344;stroke-width:1.5}
@@ -15444,14 +15454,15 @@ window.v3d_snapshot = function(targetW = 2200, opts = {}) {
         <div class="card">
           <h4>🖼️ Vista frontal</h4>
           <div id="pn-svg-wrap"></div>
-          <div style="margin-top:8px;font-size:10.5px;color:#6b7d9c;line-height:1.6">
-            <span style="color:#16a34a">●</span> IN entrada de fuente ·
-            <span style="color:#0891b2">●</span> OUT salida a fuente ·
-            <span style="color:#dc2626">●</span> unión numerada (soldadura) ·
-            <span style="color:#dc2626">┈</span> cable POSTERIOR acodado ·
-            <span style="color:#f59e0b">▲</span> V-Relief 90° ·
-            <span style="color:#94a3b8">┈┈</span> marco de la base
-            <br><b>Todo el cable va por la cara posterior del acrílico — sin cable visible entre letras.</b>
+          <div style="margin-top:8px;font-size:10.5px;color:#6b7d9c;line-height:1.7">
+            <span style="color:#16a34a">●</span> <b>IN</b> entrada de fuente ·
+            <span style="color:#0891b2">●</span> <b>OUT</b> salida a fuente ·
+            <span style="color:#dc2626">◎</span> soldadura numerada (doble círculo) ·
+            <span style="color:#dc2626">┈</span> stub de cable posterior ·
+            <span style="color:#f59e0b">▲V</span> corte V trasero 90° ·
+            <span style="color:#0891b2">✕</span> cruce SIN unión eléctrica
+            <br><span>│ = <b>marca de corte de la tira</b> (cada X cm según catálogo del perfil — solo se corta ahí)</span>
+            <br><b>El trazo con grosor representa la manguera física. Todo el cable va por la cara posterior — sin cable visible entre letras.</b>
           </div>
         </div>
       </div>
@@ -15597,50 +15608,91 @@ async function abrirPlanoNeon(qid) {
   const vbX = vbParts[0]||0, vbY = vbParts[1]||0;
   const vbW2 = vbParts[2]||400, vbH2 = vbParts[3]||200;
   const scaleRef = Math.max(vbW2, vbH2);
-  const rCirc = scaleRef * 0.012;
+  const rCirc = scaleRef * 0.011;
+  const rCircOut = rCirc * 1.8;   // doble círculo — círculo exterior más grande
   const rTri  = scaleRef * 0.015;
   const rIO   = scaleRef * 0.017;
-  // Escala cm por unidad SVG (para pintar cotas)
   const escala = plan.escala_cm_por_px || 0;
+  const stubLen = scaleRef * 0.03;    // longitud del stub vertical de cable
+  const strokeManguera = scaleRef * 0.018;  // grosor visual de la manguera
+  const marcaLen = scaleRef * 0.014;  // longitud de rayita transversal
 
-  // Y de la "vía posterior" — donde corren los cables por atrás.
-  // Se coloca DEBAJO del bbox agregado de todas las piezas, con margen.
-  const bbAllY1 = Math.max(...piezas.map(p => p.bbox_svg.y + p.bbox_svg.h));
-  const viaY = bbAllY1 + scaleRef * 0.045;
-
-  // ── Cable posterior ACODADO — baja de terminal → horizontal en viaY → sube ──
+  // ── Cable como par de stubs verticales cortos + horizontal chico ─────────
+  // Boceto 6 del propietario: cada soldadura tiene una LÍNEA CORTA vertical
+  // que baja (el cable sale por atrás en ese punto). No hay vía horizontal
+  // común. Las dos soldaduras de una misma unión comparten cable — se dibuja
+  // una línea horizontal chica ENTRE los dos stubs para mostrar la conexión.
   const cables = unions.map(u => {
     const a = termMap[u.terminal_a], b = termMap[u.terminal_b];
     if (!a || !b) return '';
     const ax = a.coord_svg[0], ay = a.coord_svg[1];
     const bx = b.coord_svg[0], by = b.coord_svg[1];
-    return `<polyline class="pn-u-cable" points="${ax},${ay} ${ax},${viaY} ${bx},${viaY} ${bx},${by}"/>`;
+    // Y común de conexión (debajo del promedio de los 2 terminales)
+    const cy = Math.max(ay, by) + stubLen;
+    return `<line class="pn-cable-stub" x1="${ax}" y1="${ay}" x2="${ax}" y2="${cy}"/>
+            <line class="pn-cable-stub" x1="${bx}" y1="${by}" x2="${bx}" y2="${cy}"/>
+            <line class="pn-cable-stub" x1="${ax}" y1="${cy}" x2="${bx}" y2="${cy}"/>`;
   }).join('');
 
-  // Cota de distancia (en cm) al costado de cada cable
+  // Cota de distancia (en cm) sobre el tramo horizontal chico
   const cotasUnion = unions.map(u => {
     const a = termMap[u.terminal_a], b = termMap[u.terminal_b];
     if (!a || !b) return '';
+    const ay = a.coord_svg[1], by = b.coord_svg[1];
+    const cy = Math.max(ay, by) + stubLen;
     const mx = (a.coord_svg[0] + b.coord_svg[0]) / 2;
-    return `<text class="pn-dist-txt" x="${mx}" y="${viaY + scaleRef*0.025}">${u.distancia_cm.toFixed(1)} cm</text>`;
+    return `<text class="pn-dist-txt" x="${mx}" y="${cy + scaleRef*0.02}">${u.distancia_cm.toFixed(1)} cm</text>`;
   }).join('');
 
+  // V_RELIEF_90 — triángulo ámbar en cada esquina que requiere corte V trasero
   const vreliefs = piezas.flatMap(p => (p.eventos || [])
     .filter(e => e.tipo === 'V_RELIEF_90')
     .map(e => {
       const x = e.coord_svg[0], y = e.coord_svg[1];
+      const ang = e.angulo_deg || 90;
       return `<polygon class="pn-vrelief" points="${x},${y-rTri} ${x-rTri*0.9},${y+rTri*0.6} ${x+rTri*0.9},${y+rTri*0.6}"/>
-              <text class="pn-vrelief-lbl" x="${x}" y="${y+rTri*0.35}">!</text>`;
+              <text class="pn-vrelief-lbl" x="${x}" y="${y+rTri*0.35}">V</text>
+              <text class="pn-vrelief-ang" x="${x + rTri*1.4}" y="${y + rTri*0.3}">${Math.round(ang)}°</text>`;
     })).join('');
 
+  // CROSSING_RELIEF (Cuaderno §A) — símbolo ✧ donde 2 piezas se cruzan sin unión eléctrica
+  const crossings = piezas.flatMap(p => (p.eventos || [])
+    .filter(e => e.tipo === 'CROSSING_RELIEF')
+    .map(e => {
+      const x = e.coord_svg[0], y = e.coord_svg[1];
+      const s = rTri * 0.7;
+      return `<line class="pn-cross-mark" x1="${x-s}" y1="${y-s}" x2="${x+s}" y2="${y+s}"/>
+              <line class="pn-cross-mark" x1="${x-s}" y1="${y+s}" x2="${x+s}" y2="${y-s}"/>
+              <circle class="pn-cross-ring" cx="${x}" cy="${y}" r="${s*1.4}"/>`;
+    })).join('');
+  // deduplicar (ambas piezas emiten el mismo evento en el mismo punto)
+  const crossingsUnicos = Array.from(new Set(crossings.split('</circle>').filter(Boolean)))
+                              .map(s => s + '</circle>').join('');
+
+  // DOBLE círculo en cada soldadura (Cuaderno + boceto del propietario)
   const marcas = unions.map(u => {
     const a = termMap[u.terminal_a], b = termMap[u.terminal_b];
     if (!a || !b) return '';
     const num = u.id.replace('U-','').replace(/^0+/, '') || u.id;
-    return `<circle class="pn-u-mark" cx="${a.coord_svg[0]}" cy="${a.coord_svg[1]}" r="${rCirc}"/>
-            <text class="pn-u-label" x="${a.coord_svg[0]}" y="${a.coord_svg[1]}">${num}</text>
-            <circle class="pn-u-mark" cx="${b.coord_svg[0]}" cy="${b.coord_svg[1]}" r="${rCirc}"/>
-            <text class="pn-u-label" x="${b.coord_svg[0]}" y="${b.coord_svg[1]}">${num}</text>`;
+    const drawDoble = (x, y) =>
+      `<circle class="pn-u-ring" cx="${x}" cy="${y}" r="${rCircOut}"/>
+       <circle class="pn-u-mark" cx="${x}" cy="${y}" r="${rCirc}"/>
+       <text class="pn-u-label" x="${x}" y="${y}">${num}</text>`;
+    return drawDoble(a.coord_svg[0], a.coord_svg[1]) + drawDoble(b.coord_svg[0], b.coord_svg[1]);
+  }).join('');
+
+  // MARCAS DE CORTE — rayitas transversales al trazo cada cut_step_cm
+  // Cada marca del motor v2 viene con {coord_svg, tangente_deg, long_cm}
+  const marcasCorte = piezas.flatMap((p, i) => {
+    const col = PN_COLORS[i % PN_COLORS.length];
+    return (p.marcas_corte || []).map(m => {
+      const x = m.coord_svg[0], y = m.coord_svg[1];
+      // Perpendicular a la tangente (rotar 90°)
+      const rad = (m.tangente_deg + 90) * Math.PI / 180;
+      const dx = Math.cos(rad) * marcaLen / 2;
+      const dy = Math.sin(rad) * marcaLen / 2;
+      return `<line class="pn-marca-corte" x1="${x-dx}" y1="${y-dy}" x2="${x+dx}" y2="${y+dy}" stroke="${col}"/>`;
+    });
   }).join('');
 
   // Etiquetas por pieza (id + color, arriba del bbox)
@@ -15706,24 +15758,26 @@ async function abrirPlanoNeon(qid) {
     `<svg viewBox="${vbNew}" xmlns="http://www.w3.org/2000/svg">
        ${baseFrame}
        <g class="pn-client-svg">${innerClient}</g>
-       ${cables}${cotasUnion}${vreliefs}${marcas}${labels}${inicioFinSvg}
+       ${marcasCorte}${cables}${cotasUnion}${crossingsUnicos}${vreliefs}${marcas}${labels}${inicioFinSvg}
      </svg>`;
 
-  // Segunda pasada: colorear cada path del SVG del cliente según pieza asignada
-  // (por svg_id — matcheamos svg_path_ids de la pieza contra id/inkscape:label del path)
+  // Segunda pasada: colorear cada path del SVG del cliente según pieza + GROSOR
+  // de manguera para que se vea como tira física, no vector.
   const wrapSvg = $('pn-svg-wrap').querySelector('svg > g.pn-client-svg');
   if (wrapSvg) {
     piezas.forEach((p, i) => {
       const col = PN_COLORS[i % PN_COLORS.length];
       (p.svg_path_ids || []).forEach(pid => {
         if (!pid) return;
-        // Buscar por id exacto o por atributo inkscape:label
         const el = wrapSvg.querySelector(`[id="${CSS.escape(pid)}"]`);
         if (el) {
           el.style.stroke = col;
-          el.style.strokeWidth = '3';
-          el.style.opacity = '1';
-          el.style.filter = 'drop-shadow(0 0 2px ' + col + '77)';
+          el.style.strokeWidth = strokeManguera + 'px';
+          el.style.strokeLinecap = 'round';
+          el.style.strokeLinejoin = 'round';
+          el.style.fill = 'none';
+          el.style.opacity = '0.85';
+          el.style.filter = `drop-shadow(0 0 ${strokeManguera*0.3}px ${col}66)`;
         }
       });
     });
