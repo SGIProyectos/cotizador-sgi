@@ -2050,7 +2050,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 9.5 6 1.6l4.5 7.9H8.2L6 5.7 3.8 9.5H1.5Z" fill="#FFB224"/></svg>
       </div>
       <span class="brand__name">SGI Cotizador</span>
-      <span class="brand__v" id="brand-version">v1.28.0</span>
+      <span class="brand__v" id="brand-version">v1.28.1</span>
     </div>
     <div class="crumbs" id="topbar-crumbs">
       <span>Cotizaciones</span><span class="sep">/</span><b id="topbar-cliente">Nueva</b>
@@ -2140,7 +2140,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
   <aside class="sidebar">
     <div class="sidebar-header">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.28.0</small></h1>
+        <h1 onclick="homeAbrir()" style="cursor:pointer" title="Volver a la pantalla de inicio">⬡ SGI Cotizador<small>v1.28.1</small></h1>
         <div style="display:flex;gap:6px">
           <button class="btn-pill" onclick="volverAPos()" title="Volver al sistema POS" style="background:#2A3441;border-color:#3A4557">
             ← POS
@@ -3650,7 +3650,7 @@ body.neon-mode-viewer.tool-color  #svg-preview-box svg{cursor:copy}
           </div>
         </div>
 
-        <!-- Paso 2: Modo de fabricación + Método de fijación (v1.28.0) -->
+        <!-- Paso 2: Modo de fabricación + Método de fijación (v1.28.1) -->
         <div class="cfg-step">
           <div class="cfg-step-label"><span class="cfg-step-num">2</span>¿Cómo se fabrica la base?</div>
           <div class="cfg-cards" id="cfg-neon-modo-cards">
@@ -3988,7 +3988,7 @@ function setTipo(tipo, btn) {
 // Estado del modo de fabricación del neón (lamina|3d). Se guarda aparte para
 // que setTipo y calcular() puedan consultarlo sin depender del DOM.
 let neonModoActual = "lamina";
-// (v1.28.0) Método de fijación de la manguera al respaldo.
+// (v1.28.1) Método de fijación de la manguera al respaldo.
 //   "pegada"  → base plana + adhesivo (1ª gen)
 //   "ruteada" → base con canal CNC + manguera empotrada (obligatorio 2ª gen)
 // Solo aplica cuando neonModoActual === "lamina".
@@ -4124,7 +4124,7 @@ function _cfgNeonAplicar() {
   const modoWiz = _cfgCardVal("cfg-neon-modo-cards") || "lamina";
   const aprov = _cfgCardVal("cfg-neon-aprov-cards") || "";
 
-  // (v1.28.0) Mapeo del wizard (3 opciones) → 2 vars del sidebar:
+  // (v1.28.1) Mapeo del wizard (3 opciones) → 2 vars del sidebar:
   //   "lamina"  → modo=lamina  + fijacion=pegada
   //   "ruteada" → modo=lamina  + fijacion=ruteada  (dispara ranurado CNC)
   //   "3d"      → modo=3d      + fijacion=pegada  (irrelevante, no aplica)
@@ -4209,7 +4209,7 @@ function _cfgNeonOnGenChange() {
   const gen = _cfgCardVal("cfg-neon-gen-cards") || "1";
   const aviso = document.getElementById("cfg-neon-gen2-aviso");
 
-  // (v1.28.0) 3 tarjetas de fabricación: pegada | ruteada | 3d.
+  // (v1.28.1) 3 tarjetas de fabricación: pegada | ruteada | 3d.
   // - gen 1 → las 3 disponibles (default: pegada)
   // - gen 2 → SIEMPRE ruteada (silicona no se pega); pegada y 3d bloqueadas
   const cardPegada  = document.querySelector('#cfg-neon-modo-cards [data-val="lamina"]');
@@ -4303,7 +4303,7 @@ function _cfgNeonOnGenChange() {
 }
 
 function _cfgNeonOnModoChange() {
-  // (v1.28.0) 3 valores: "lamina" (pegada), "ruteada" (CNC), "3d" (Signflex).
+  // (v1.28.1) 3 valores: "lamina" (pegada), "ruteada" (CNC), "3d" (Signflex).
   // "lamina" y "ruteada" ambos requieren el paso de base (paso 5).
   const modo = _cfgCardVal("cfg-neon-modo-cards") || "lamina";
   const usaBase = (modo === "lamina" || modo === "ruteada");
@@ -6895,7 +6895,7 @@ async function calcular() {
         ancho_cm:      parseFloat(document.getElementById("neon-ancho").value)   || 0,
         alto_cm:       parseFloat(document.getElementById("neon-alto").value)    || 0,
         modo_fabricacion: neonModoActual,
-        metodo_fijacion:  neonMetodoFijacion,  // v1.28.0
+        metodo_fijacion:  neonMetodoFijacion,  // v1.28.1
         base_id:       document.getElementById("neon-base").value    || "acr-3-tr",
         forma_id:      document.getElementById("neon-forma").value   || "rect",
         incluir_soporte:    !!document.getElementById("neon-soporte").checked,
@@ -11147,6 +11147,7 @@ function _v3dAutoRender(data) {
       args.neonPerfilNombre = perfil?.nombre || "";
       args.neonPerfilColor  = perfil?.color  || "Blanco cálido";
       args.neonModoFab      = neonModoActual || "lamina";
+      args.neonMetodoFijacion = neonMetodoFijacion || "pegada";  // v1.28.1
     }
     window.v3d_render(args);
   } catch(e) { console.warn("Vista 3D:", e); }
@@ -13357,14 +13358,87 @@ function _neonHaloTexture(baseHex) {
   return tex;
 }
 
+// v1.28.1 — Base de acrílico con canales fresados de verdad.
+// Genera un ExtrudeGeometry con shape rectangular y HOLES siguiendo el trazo
+// del neón (offset perpendicular = radio del canal). El hueco es geometría
+// real, no shading fake — la manguera va DENTRO del hueco.
+function _neonBaseRuteadaGeometry({ paths, sf, cx, cy, baseW, baseH, radioCanal, depth }) {
+  const baseShape = new THREE.Shape();
+  baseShape.moveTo(-baseW/2, -baseH/2);
+  baseShape.lineTo( baseW/2, -baseH/2);
+  baseShape.lineTo( baseW/2,  baseH/2);
+  baseShape.lineTo(-baseW/2,  baseH/2);
+  baseShape.lineTo(-baseW/2, -baseH/2);
+
+  let holes = 0;
+  for (const svgPath of paths) {
+    for (const sp of svgPath.subPaths || []) {
+      if (typeof sp.getPoints !== 'function') continue;
+      const raw = sp.getPoints(30);
+      if (!raw || raw.length < 2) continue;
+      // Convertir a coords del anuncio (mismo transform que las capas neón)
+      // NOTA: parse_svg invierte Y. Coincide con _neonSampleSubpath.
+      const pts = raw.map(p => ({
+        x: (p.x - cx) * sf,
+        y: -(p.y - cy) * sf,
+      }));
+      const holeShape = _neonTrazoAPoligono(pts, radioCanal);
+      if (holeShape) {
+        baseShape.holes.push(holeShape);
+        holes++;
+      }
+    }
+  }
+  if (holes === 0) {
+    throw new Error('sin trazos válidos para ranurado');
+  }
+  return new THREE.ExtrudeGeometry(baseShape, {
+    depth: depth,
+    bevelEnabled: true,
+    bevelThickness: depth * 0.08,
+    bevelSize: depth * 0.04,
+    bevelSegments: 2,
+    steps: 1,
+  });
+}
+
+// Expande un trazo abierto (polilínea) a un polígono cerrado con offset
+// perpendicular = radio. Sirve como HOLE en la base ExtrudeGeometry.
+function _neonTrazoAPoligono(pts, radio) {
+  if (!pts || pts.length < 2) return null;
+  const derecha = [], izquierda = [];
+  for (let i = 0; i < pts.length; i++) {
+    let tx, ty;
+    if (i === 0) { tx = pts[1].x - pts[0].x; ty = pts[1].y - pts[0].y; }
+    else if (i === pts.length - 1) { tx = pts[i].x - pts[i-1].x; ty = pts[i].y - pts[i-1].y; }
+    else { tx = pts[i+1].x - pts[i-1].x; ty = pts[i+1].y - pts[i-1].y; }
+    const len = Math.hypot(tx, ty) || 1;
+    tx /= len; ty /= len;
+    // Perpendicular (rotar 90°)
+    const px = -ty, py = tx;
+    derecha.push({ x: pts[i].x + px * radio, y: pts[i].y + py * radio });
+    izquierda.push({ x: pts[i].x - px * radio, y: pts[i].y - py * radio });
+  }
+  const holeShape = new THREE.Shape();
+  holeShape.moveTo(derecha[0].x, derecha[0].y);
+  for (let i = 1; i < derecha.length; i++) holeShape.lineTo(derecha[i].x, derecha[i].y);
+  for (let i = izquierda.length - 1; i >= 0; i--) holeShape.lineTo(izquierda[i].x, izquierda[i].y);
+  holeShape.lineTo(derecha[0].x, derecha[0].y);
+  return holeShape;
+}
+
 function _buildNeon(svgText, sf, args) {
   const grp = new THREE.Group();
   const perfilName  = args.neonPerfilNombre  || '';
   const perfilColor = args.neonPerfilColor   || 'Blanco cálido';
   const modoFab     = args.neonModoFab       || 'lamina';
+  const metodoFij   = args.neonMetodoFijacion || 'pegada';   // v1.28.1
   const color       = _neonColorHex3D(perfilName, perfilColor);
   // 2ª generación = silicona translúcida sobre acrílico ranurado
   const es2G = /silicona|2ª gen|2a gen/i.test(perfilName);
+  // Ruteada = base con canal fresado CNC + manguera empotrada
+  // (siempre para 2ª gen; opcional para 1ª gen premium)
+  const esRuteada = (modoFab === 'lamina') && (es2G || metodoFij === 'ruteada');
 
   // State global con capas separables para explode: base + ranuras + leds + gomas
   window._v3dNeon = {
@@ -13403,25 +13477,56 @@ function _buildNeon(svgText, sf, args) {
   wallMesh.position.set(0, 0, -1.5);
   grp.add(wallMesh);
 
+  // Radio de la manguera según ancho del perfil (necesario ya para calcular el canal)
+  let radioCm = 0.6;
+  if (/mini|6mm/i.test(perfilName)) radioCm = 0.35;
+  if (/premium|16mm|silicona 16mm/i.test(perfilName)) radioCm = 0.9;
+  window._v3dNeon.radioCm = radioCm;
+
   // ── Base (lámina acrílica o canal PETG oscuro) ──
+  // v1.28.1: si esRuteada → ExtrudeGeometry con HOLES REALES siguiendo el trazo.
+  //          La excavación es geometría, no shading fake — la manguera va DENTRO.
   let baseThick;
   if (modoFab === 'lamina') {
     const baseW = Math.max(wCm * 1.08, 12);
     const baseH = Math.max(hCm * 1.08, 12);
-    // 2ª gen: base MÁS gruesa (para alojar el ranurado profundo) y menos
-    // translúcida para que se vean bien los canales trabajados.
-    baseThick = es2G ? 0.6 : 0.3;
-    const baseGeo = new THREE.BoxGeometry(baseW, baseH, baseThick);
+    baseThick = esRuteada ? 0.6 : 0.3;
+    let baseGeo;
+    let baseHechaConHoles = false;
+    if (esRuteada) {
+      // Intentar construir la base con canales fresados de verdad.
+      try {
+        baseGeo = _neonBaseRuteadaGeometry({
+          paths, sf, cx, cy, baseW, baseH,
+          radioCanal: radioCm * 1.15,  // canal ligeramente > manguera
+          depth: baseThick,
+        });
+        baseHechaConHoles = true;
+      } catch (e) {
+        console.warn('base ruteada CSG falló, fallback a shading', e);
+        baseGeo = new THREE.BoxGeometry(baseW, baseH, baseThick);
+      }
+    } else {
+      baseGeo = new THREE.BoxGeometry(baseW, baseH, baseThick);
+    }
     const baseMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: es2G ? 0.55 : 0.32,   // 2ª gen: más opaco, se ve el material
-      roughness: 0.1, metalness: 0.15,
+      color: 0xffffff, transparent: true,
+      opacity: esRuteada ? 0.62 : 0.32,
+      roughness: 0.10, metalness: 0.15,
+      side: THREE.DoubleSide,   // para ver las paredes internas del canal
     });
     const baseMesh = new THREE.Mesh(baseGeo, baseMat);
-    baseMesh.position.set(0, 0, -baseThick / 2);
+    // ExtrudeGeometry extruye en +Z desde Z=0. Movemos la base para que la
+    // superficie FRONTAL quede en Z=0 (la manguera se posiciona relativa a Z=0).
+    if (baseHechaConHoles) {
+      baseMesh.position.set(0, 0, -baseThick);
+    } else {
+      baseMesh.position.set(0, 0, -baseThick / 2);
+    }
     grp.add(baseMesh);
     window._v3dNeon.baseMesh = baseMesh;
+    window._v3dNeon.baseRuteada = baseHechaConHoles;
+    window._v3dNeon.baseThick   = baseThick;
   } else {
     const baseW = Math.max(wCm * 1.03, 8);
     const baseH = Math.max(hCm * 1.03, 8);
@@ -13434,13 +13539,9 @@ function _buildNeon(svgText, sf, args) {
     baseMesh.position.set(0, 0, -baseThick / 2);
     grp.add(baseMesh);
     window._v3dNeon.baseMesh = baseMesh;
+    window._v3dNeon.baseRuteada = false;
+    window._v3dNeon.baseThick   = baseThick;
   }
-
-  // Radio de la manguera según ancho del perfil
-  let radioCm = 0.6;
-  if (/mini|6mm/i.test(perfilName)) radioCm = 0.35;
-  if (/premium|16mm|silicona 16mm/i.test(perfilName)) radioCm = 0.9;
-  window._v3dNeon.radioCm = radioCm;
 
   // ═══ 3 CAPAS que se separan al explotar ═══
   //
@@ -13475,44 +13576,61 @@ function _buildNeon(svgText, sf, args) {
     transparent: es2G, opacity: es2G ? 0.55 : 1.0,
   });
 
-  const zFront = radioCm + 0.15;
+  // Posiciones Z de cada capa según método:
+  //   PEGADA (1ª gen tradicional): manguera y LED FLOTAN encima de la base
+  //     (zFront positivo, todo asoma).
+  //   RUTEADA (2ª gen o 1ª gen premium): base tiene canal fresado real →
+  //     tira LED va empotrada DENTRO del canal (Z negativo), silicona al ras.
+  const zFront   = esRuteada ? -baseThick * 0.10 : radioCm + 0.15;
+  const zLED     = esRuteada ? -baseThick * 0.50 : zFront;
+  const zSilFake = esRuteada ? -baseThick * 0.10 : zFront;
+
   let trazosOk = 0;
   for (const svgPath of paths) {
     for (const sp of svgPath.subPaths || []) {
       const pts = _neonSampleSubpath(sp, sf, cx, cy, zFront, 100);
       if (pts.length < 2) continue;
       try {
-        const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
         const segs = Math.max(pts.length * 4, 80);
 
-        // ─ Capa 1: ranura profunda en la base (2 tubos concéntricos)
-        //   El bisel exterior queda a la altura de la superficie de la base
-        //   (Z ligeramente positivo para que sobresalga del acrílico). El
-        //   fondo del canal queda hundido dentro de la base (Z negativo).
-        const biselRadio = radioCm * (es2G ? 1.30 : 0.95);
-        const fondoRadio = radioCm * (es2G ? 1.05 : 0.75);
-        const biselZ = 0.02;                                 // apenas sobresale
-        const fondoZ = -baseThick * (es2G ? 0.45 : 0.20);    // hundido
-        // Bisel (anillo del contorno del canal — se ve marcado desde el frente)
-        const biselPts = pts.map(p => new THREE.Vector3(p.x, p.y, biselZ));
-        const biselCurve = new THREE.CatmullRomCurve3(biselPts, false, 'catmullrom', 0.5);
-        const biselGeo = new THREE.TubeGeometry(biselCurve, segs, biselRadio, 12, false);
-        const bisel = new THREE.Mesh(biselGeo, ranuraBiselMat);
-        grp.add(bisel); window._v3dNeon.ranuras.push(bisel);
-        // Fondo del canal (más oscuro, dentro del bisel — sombra del ranurado)
-        const fondoPts = pts.map(p => new THREE.Vector3(p.x, p.y, fondoZ));
-        const fondoCurve = new THREE.CatmullRomCurve3(fondoPts, false, 'catmullrom', 0.5);
-        const fondoGeo = new THREE.TubeGeometry(fondoCurve, segs, fondoRadio, 12, false);
-        const fondo = new THREE.Mesh(fondoGeo, ranuraFondoMat);
-        grp.add(fondo); window._v3dNeon.ranuras.push(fondo);
+        // ─ Capa 1 (solo PEGADA): bisel + fondo simulado con TubeGeometry.
+        //   Cuando esRuteada, la ranura ES la base con holes reales — no
+        //   necesitamos tubos concéntricos falsos.
+        if (!esRuteada) {
+          const biselRadio = radioCm * 0.95;
+          const fondoRadio = radioCm * 0.75;
+          const biselZ = 0.02;
+          const fondoZ = -baseThick * 0.20;
+          const biselPts = pts.map(p => new THREE.Vector3(p.x, p.y, biselZ));
+          const biselCurve = new THREE.CatmullRomCurve3(biselPts, false, 'catmullrom', 0.5);
+          const biselGeo = new THREE.TubeGeometry(biselCurve, segs, biselRadio, 12, false);
+          const bisel = new THREE.Mesh(biselGeo, ranuraBiselMat);
+          grp.add(bisel); window._v3dNeon.ranuras.push(bisel);
+          const fondoPts = pts.map(p => new THREE.Vector3(p.x, p.y, fondoZ));
+          const fondoCurve = new THREE.CatmullRomCurve3(fondoPts, false, 'catmullrom', 0.5);
+          const fondoGeo = new THREE.TubeGeometry(fondoCurve, segs, fondoRadio, 12, false);
+          const fondo = new THREE.Mesh(fondoGeo, ranuraFondoMat);
+          grp.add(fondo); window._v3dNeon.ranuras.push(fondo);
+        }
 
-        // ─ Capa 2: tira LED interior (radio pequeño, muy emissive)
-        const ledGeo = new THREE.TubeGeometry(curve, segs, radioCm * 0.35, 10, false);
+        // ─ Capa 2: TIRA LED (empotrada en el canal si es ruteada).
+        //   Se genera curva a la altura zLED.
+        const ledPts = pts.map(p => new THREE.Vector3(p.x, p.y, zLED));
+        const ledCurve = new THREE.CatmullRomCurve3(ledPts, false, 'catmullrom', 0.5);
+        // En ruteada la tira es una CINTA plana (ancha, poca altura) que
+        // encaja en el fondo del canal — no un tubo redondo.
+        const ledGeo = esRuteada
+          ? new THREE.TubeGeometry(ledCurve, segs, radioCm * 0.55, 6, false)
+          : new THREE.TubeGeometry(ledCurve, segs, radioCm * 0.35, 10, false);
         const led = new THREE.Mesh(ledGeo, ledMat);
         grp.add(led); window._v3dNeon.leds.push(led);
 
-        // ─ Capa 3: goma / funda del color del neón (envuelve al LED)
-        const tubeGeo = new THREE.TubeGeometry(curve, segs, radioCm, 16, false);
+        // ─ Capa 3: SILICONA / GOMA envolvente.
+        //   Ruteada: semicilindro AL RAS (apenas asoma sobre la superficie).
+        //   Pegada:  cilindro completo encima de la base.
+        const tubePts = pts.map(p => new THREE.Vector3(p.x, p.y, zSilFake));
+        const tubeCurve = new THREE.CatmullRomCurve3(tubePts, false, 'catmullrom', 0.5);
+        const tubeGeo = new THREE.TubeGeometry(tubeCurve, segs, radioCm, 16, false);
         const tube = new THREE.Mesh(tubeGeo, tubeMat);
         grp.add(tube); window._v3dNeon.tubes.push(tube);
 
